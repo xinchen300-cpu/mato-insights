@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default async function Home() {
@@ -24,6 +25,9 @@ export default async function Home() {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground">{user?.email}</span>
+          <Link href="/settings" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+            Settings
+          </Link>
           <form action="/auth/signout" method="post">
             <Button type="submit" variant="outline" size="sm">
               Sign out
