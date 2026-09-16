@@ -58,7 +58,7 @@ export function RevenueChart({ data }: { data: DailyRevenue[] }) {
           tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
         />
         <Tooltip
-          formatter={(value: number) => formatEuro(value)}
+          formatter={(value) => formatEuro(Number(value))}
           labelFormatter={(label) => formatDay(label as string)}
           contentStyle={{
             background: "var(--popover)",
