@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentOrgId } from "@/lib/org";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -9,30 +11,41 @@ export default async function Home() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: membership } = await supabase
-    .from("memberships")
-    .select("role, organizations(name)")
-    .single();
-
-  const orgName = (membership?.organizations as unknown as { name: string } | null)?.name;
+  const orgId = await getCurrentOrgId();
+  let orgName: string | null = null;
+  if (orgId) {
+    const admin = createAdminClient();
+    const { data: org } = await admin
+      .from("organizations")
+      .select("name")
+      .eq("id", orgId)
+      .maybeSingle();
+    orgName = org?.name ?? null;
+  }
 
   return (
     <div className="min-h-svh bg-muted/30">
       <header className="flex items-center justify-between border-b bg-background px-6 py-4">
         <div>
           <p className="text-sm font-semibold">Vendly</p>
-          <p className="text-xs text-muted-foreground">{orgName ?? "Your organization"}</p>
+          <p className="text-xs text-muted-foreground">{orgName ?? "No organization yet"}</p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">{user?.email}</span>
+          {user && <span className="text-sm text-muted-foreground">{user.email}</span>}
           <Link href="/settings" className={buttonVariants({ variant: "ghost", size: "sm" })}>
             Settings
           </Link>
-          <form action="/auth/signout" method="post">
-            <Button type="submit" variant="outline" size="sm">
-              Sign out
-            </Button>
-          </form>
+          {user ? (
+            <form action="/auth/signout" method="post">
+              <Button type="submit" variant="outline" size="sm">
+                Sign out
+              </Button>
+            </form>
+          ) : (
+            <Link href="/login" className={buttonVariants({ variant: "outline", size: "sm" })}>
+              Sign in
+            </Link>
+          )}
         </div>
       </header>
 
@@ -43,8 +56,8 @@ export default async function Home() {
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
             <p>
-              Auth, your organization, and the database are wired up. The Payter
-              connection and the real dashboard come next.
+              The database is wired up. Connect Payter in Settings, then the real
+              dashboard comes next.
             </p>
           </CardContent>
         </Card>

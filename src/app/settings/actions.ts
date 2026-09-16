@@ -1,24 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentOrgId } from "@/lib/org";
 import { syncOrganizationPayterData } from "@/lib/payter/sync";
 
 async function currentOrgId() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-
-  const { data: membership } = await supabase
-    .from("memberships")
-    .select("org_id")
-    .single();
-  if (!membership) throw new Error("No organization found for this user");
-
-  return membership.org_id as string;
+  const orgId = await getCurrentOrgId();
+  if (!orgId) throw new Error("No organization found");
+  return orgId;
 }
 
 export async function connectPayter(formData: FormData) {

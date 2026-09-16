@@ -1,4 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
+import Link from "next/link";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentOrgId } from "@/lib/org";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,29 +14,24 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { connectPayter } from "./actions";
 import { SyncNowButton } from "./sync-now-button";
-import Link from "next/link";
 
 export default async function SettingsPage() {
-  const supabase = await createClient();
+  const orgId = await getCurrentOrgId();
+  const admin = createAdminClient();
 
-  const { data: membership } = await supabase
-    .from("memberships")
-    .select("org_id")
-    .single();
-
-  const { data: credentials } = membership
-    ? await supabase
+  const { data: credentials } = orgId
+    ? await admin
         .from("payter_credentials")
         .select("last_synced_at, last_watermark")
-        .eq("org_id", membership.org_id)
+        .eq("org_id", orgId)
         .maybeSingle()
     : { data: null };
 
-  const { data: syncLogs } = membership
-    ? await supabase
+  const { data: syncLogs } = orgId
+    ? await admin
         .from("sync_logs")
         .select("started_at, finished_at, status, transactions_synced, error")
-        .eq("org_id", membership.org_id)
+        .eq("org_id", orgId)
         .order("started_at", { ascending: false })
         .limit(5)
     : { data: [] };
@@ -67,7 +64,11 @@ export default async function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            {isConnected ? (
+            {!orgId ? (
+              <p className="text-sm text-muted-foreground">
+                No organization exists yet — sign up once to create one.
+              </p>
+            ) : isConnected ? (
               <div className="flex flex-col gap-3">
                 <p className="text-sm text-muted-foreground">
                   Last synced:{" "}

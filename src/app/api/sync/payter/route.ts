@@ -1,27 +1,15 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgId } from "@/lib/org";
 import { syncOrganizationPayterData } from "@/lib/payter/sync";
 
-// Manual "sync now" — requires a logged-in member of the org being synced.
+// Manual "sync now" for the current (or, pre-auth, the only) organization.
 export async function POST() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const orgId = await getCurrentOrgId();
 
-  if (!user) {
-    return new NextResponse("Unauthorized", { status: 401 });
+  if (!orgId) {
+    return new NextResponse("No organization found", { status: 404 });
   }
 
-  const { data: membership } = await supabase
-    .from("memberships")
-    .select("org_id")
-    .single();
-
-  if (!membership) {
-    return new NextResponse("No organization found for this user", { status: 404 });
-  }
-
-  const result = await syncOrganizationPayterData(membership.org_id);
+  const result = await syncOrganizationPayterData(orgId);
   return NextResponse.json(result);
 }
