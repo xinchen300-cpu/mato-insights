@@ -19,6 +19,7 @@ import { mediaUrl } from "@/lib/media";
 import { getCurrentOrgId } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { connectPayter, deleteTemplate } from "./actions";
+import { CostForm } from "./cost-form";
 import { ShelfLifePresets } from "./shelf-life-presets";
 import { SyncNowButton } from "./sync-now-button";
 
@@ -32,7 +33,7 @@ export default async function SettingsPage() {
   const orgId = await getCurrentOrgId();
   const admin = createAdminClient();
 
-  const [{ data: credentials }, { data: syncLogs }, templates, businesses, machines, presets] = orgId
+  const [{ data: credentials }, { data: syncLogs }, templates, businesses, machines, presets, { data: org }] = orgId
     ? await Promise.all([
         admin.from("payter_credentials").select("last_synced_at").eq("org_id", orgId).maybeSingle(),
         admin
@@ -45,8 +46,9 @@ export default async function SettingsPage() {
         getBusinesses(orgId),
         getMachines(orgId),
         getShelfLifePresets(orgId),
+        admin.from("organizations").select("cost_per_hour, cost_per_km").eq("id", orgId).maybeSingle(),
       ])
-    : [{ data: null }, { data: [] }, [], [], [], []];
+    : [{ data: null }, { data: [] }, [], [], [], [], { data: null }];
   const machineIds = businessMachineIds(machines);
 
   const ownTemplates = templates.filter((t) => t.org_id);
@@ -127,6 +129,10 @@ export default async function SettingsPage() {
               })}
             </ul>
           )}
+        </Panel>
+
+        <Panel title={m.settings.costTitle} hint={m.settings.costHint}>
+          <CostForm perHour={Number(org?.cost_per_hour ?? 25)} perKm={Number(org?.cost_per_km ?? 0.42)} />
         </Panel>
 
         <Panel title={m.settings.shelfLifeTitle} hint={m.settings.shelfLifeHint}>

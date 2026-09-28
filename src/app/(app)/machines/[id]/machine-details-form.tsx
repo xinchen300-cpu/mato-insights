@@ -24,6 +24,7 @@ export function MachineDetailsForm({ machine, businesses }: { machine: Machine; 
   const [businessId, setBusinessId] = useState(machine.business_id ?? "");
   const [sharedBusinessId, setSharedBusinessId] = useState(machine.shared_business_id ?? "");
   const [dataSince, setDataSince] = useState(machine.data_since ?? "");
+  const [km, setKm] = useState(machine.km_round_trip === null ? "" : String(machine.km_round_trip));
   const [newBusiness, setNewBusiness] = useState("");
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [isPending, startTransition] = useTransition();
@@ -42,6 +43,7 @@ export function MachineDetailsForm({ machine, businesses }: { machine: Machine; 
           newBusinessName: businessId === NEW_BUSINESS ? newBusiness : undefined,
           sharedBusinessId: shared && sharedBusinessId ? sharedBusinessId : null,
           dataSince: dataSince || null,
+          kmRoundTrip: km.trim() === "" ? null : Number(km.replace(",", ".")),
         });
         setStatus("saved");
         if (businessId === NEW_BUSINESS) setBusinessId("");
@@ -160,6 +162,18 @@ export function MachineDetailsForm({ machine, businesses }: { machine: Machine; 
           className="w-fit"
         />
         <p className="text-xs text-muted-foreground">{m.machines.dataSinceHint}</p>
+      </div>
+
+      <div className="grid gap-2">
+        <Label htmlFor="machine-km">{m.machines.kmRoundTrip}</Label>
+        <Input
+          id="machine-km"
+          value={km}
+          onChange={(e) => setKm(e.target.value.replace(/[^0-9.,]/g, ""))}
+          inputMode="decimal"
+          className="w-32"
+        />
+        <p className="text-xs text-muted-foreground">{m.machines.kmRoundTripHint}</p>
       </div>
       <div className="flex items-center gap-3 sm:col-span-2">
         <Button onClick={save} disabled={isPending || !name.trim() || sharedIncomplete}>

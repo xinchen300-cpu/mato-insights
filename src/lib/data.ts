@@ -59,7 +59,7 @@ export async function getStatsReport(orgId: string, filters: StatsFilters): Prom
 
 // One literal: Supabase types the result by parsing this string.
 const MACHINE_COLUMNS =
-  "id, name, type, payter_serial_number, business_id, shared_business_id, data_since, last_connected_at, last_disconnected_at, terminal_model, terminal_network, terminal_flags, businesses!machines_business_id_fkey(name, logo_path)";
+  "id, name, type, payter_serial_number, business_id, shared_business_id, data_since, km_round_trip, last_connected_at, last_disconnected_at, terminal_model, terminal_network, terminal_flags, businesses!machines_business_id_fkey(name, logo_path)";
 
 export async function getMachines(orgId: string): Promise<Machine[]> {
   const { businessId } = await getScope();
@@ -101,6 +101,7 @@ type MachineRow = {
   business_id: string | null;
   shared_business_id: string | null;
   data_since: string | null;
+  km_round_trip: number | string | null;
   last_connected_at: string | null;
   last_disconnected_at: string | null;
   terminal_model: string | null;
@@ -121,6 +122,7 @@ function toMachine(row: MachineRow): Machine {
     business_name: business?.name ?? null,
     business_logo_path: business?.logo_path ?? null,
     data_since: row.data_since,
+    km_round_trip: row.km_round_trip === null ? null : Number(row.km_round_trip),
     last_connected_at: row.last_connected_at,
     last_disconnected_at: row.last_disconnected_at,
     terminal_model: row.terminal_model,

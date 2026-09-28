@@ -27,6 +27,7 @@ export async function updateMachineDetails(
     /** The second business of a shared machine; null for a machine of one business. */
     sharedBusinessId: string | null;
     dataSince: string | null;
+  kmRoundTrip: number | null;
   },
 ) {
   const orgId = await requireOrgId();
@@ -58,6 +59,7 @@ export async function updateMachineDetails(
       business_id: businessId,
       shared_business_id: sharedBusinessId,
       data_since: input.dataSince,
+      km_round_trip: input.kmRoundTrip,
     })
     .eq("id", machineId)
     .eq("org_id", orgId);

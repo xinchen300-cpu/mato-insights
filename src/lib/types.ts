@@ -35,6 +35,7 @@ export type Machine = {
   business_name: string | null;
   business_logo_path: string | null;
   data_since: string | null;
+  km_round_trip: number | null;
   /** From Payter: its standing connection's last connect and disconnect. */
   last_connected_at: string | null;
   last_disconnected_at: string | null;

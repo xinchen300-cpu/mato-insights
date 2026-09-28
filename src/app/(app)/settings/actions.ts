@@ -70,3 +70,18 @@ export async function deleteShelfLifePreset(id: string) {
   if (error) throw new Error(error.message);
   revalidatePath("/", "layout");
 }
+
+/** Hourly rate and price per kilometre, used to price a run. */
+export async function saveRunCost(perHour: number, perKm: number) {
+  const orgId = await requireOrgId();
+  const clean = (n: number, max: number) => (Number.isFinite(n) && n >= 0 && n <= max ? n : null);
+  const hour = clean(perHour, 500);
+  const km = clean(perKm, 20);
+  if (hour === null || km === null) return;
+
+  await createAdminClient()
+    .from("organizations")
+    .update({ cost_per_hour: hour, cost_per_km: km })
+    .eq("id", orgId);
+  revalidatePath("/", "layout");
+}

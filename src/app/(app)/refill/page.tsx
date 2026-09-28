@@ -6,6 +6,7 @@ import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getMachines, getMachineStock, getRefillSheets, getShortages } from "@/lib/data";
 import { requireOrgId } from "@/lib/org";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { fillLevel, needsAttention } from "@/lib/stock";
 import { MachinePicker } from "./machine-picker";
 
@@ -17,12 +18,32 @@ export async function generateMetadata() {
 export default async function RefillPage() {
   const { m, f } = await getI18n();
   const orgId = await requireOrgId();
-  const [machines, stock, sheets, shortages] = await Promise.all([
+  const [machines, stock, sheets, shortages, { data: org }] = await Promise.all([
     getMachines(orgId),
     getMachineStock(orgId),
     getRefillSheets(orgId),
     getShortages(orgId),
+    createAdminClient().from("organizations").select("cost_per_hour, cost_per_km").eq("id", orgId).maybeSingle(),
   ]);
+
+  const perHour = Number(org?.cost_per_hour ?? 25);
+  const perKm = Number(org?.cost_per_km ?? 0.42);
+
+  // Measured, not guessed: how long a visit to this machine took on earlier
+  // runs. A run over several machines is split evenly across them.
+  const measured = new Map<string, { minutes: number; runs: number }>();
+  for (const sheet of sheets) {
+    if (!sheet.started_at || !sheet.completed_at || sheet.machine_ids.length === 0) continue;
+    const total = (new Date(sheet.completed_at).getTime() - new Date(sheet.started_at).getTime()) / 60000;
+    if (total <= 0 || total > 480) continue;
+    const share = total / sheet.machine_ids.length;
+    for (const id of sheet.machine_ids) {
+      const entry = measured.get(id) ?? { minutes: 0, runs: 0 };
+      entry.minutes += share;
+      entry.runs += 1;
+      measured.set(id, entry);
+    }
+  }
 
   // How often a product came up short, and how many pieces in total.
   const shortByProduct = new Map<string, { name: string; times: number; units: number }>();
@@ -35,12 +56,14 @@ export default async function RefillPage() {
   }
   const shortList = [...shortByProduct.values()].sort((a, b) => b.units - a.units);
 
-  const perMachine = new Map<string, { low: number; toAdd: number }>();
+  const perMachine = new Map<string, { low: number; toAdd: number; value: number }>();
   for (const s of stock) {
     if (!s.product_id) continue;
-    const entry = perMachine.get(s.machine_id) ?? { low: 0, toAdd: 0 };
+    const entry = perMachine.get(s.machine_id) ?? { low: 0, toAdd: 0, value: 0 };
     if (needsAttention(fillLevel(s.stock, s.capacity))) entry.low += 1;
-    entry.toAdd += s.capacity - (s.stock ?? 0);
+    const missing = s.capacity - (s.stock ?? 0);
+    entry.toAdd += missing;
+    entry.value += missing * (s.price ?? 0);
     perMachine.set(s.machine_id, entry);
   }
 
@@ -48,11 +71,27 @@ export default async function RefillPage() {
     .filter((mc) => perMachine.has(mc.id))
     .map((mc) => {
       const p = perMachine.get(mc.id)!;
+      const time = measured.get(mc.id);
+      // Only a number we can stand behind: measured time and a distance the
+      // operator filled in. Without either, no amount is shown.
+      const cost =
+        mc.km_round_trip !== null || time
+          ? (mc.km_round_trip ?? 0) * perKm + (time ? (time.minutes / time.runs / 60) * perHour : 0)
+          : null;
       return {
         id: mc.id,
         name: mc.name,
         low: p.low > 0,
-        hint: p.low > 0 ? fmt(m.overview.slotsLow, { count: p.low }) : fmt(m.refill.items, { count: p.toAdd }),
+        hint:
+          cost !== null && p.value > 0
+            ? fmt(m.refill.worthHint, {
+                items: p.toAdd,
+                value: f.euro(p.value),
+                cost: f.euro(cost),
+              })
+            : p.low > 0
+              ? fmt(m.overview.slotsLow, { count: p.low })
+              : fmt(m.refill.items, { count: p.toAdd }),
       };
     });
 
