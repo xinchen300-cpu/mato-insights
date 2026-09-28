@@ -133,7 +133,19 @@ export type RefillSheet = {
   notes: string | null;
   lines: RefillLine[];
   created_at: string;
+  /** When the filler opened the sheet; the run's clock starts here. */
+  started_at: string | null;
   completed_at: string | null;
+  filled_by: string | null;
+  km: number | null;
+};
+
+/** What a fridge could not supply on a run, per product. */
+export type Shortage = {
+  product_id: string | null;
+  product_name: string | null;
+  qty: number;
+  noted_at: string;
 };
 
 export type RefillEvent = {

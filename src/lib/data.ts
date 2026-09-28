@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getScope } from "@/lib/org";
 import type {
+  Shortage,
   Business,
   BusinessFreshness,
   ExpiryAlert,
@@ -387,7 +388,7 @@ export async function getLayoutTemplates(orgId: string): Promise<LayoutTemplate[
 export async function getRefillSheets(orgId: string): Promise<RefillSheet[]> {
   const { data } = await createAdminClient()
     .from("refill_sheets")
-    .select("id, share_token, machine_ids, notes, lines, created_at, completed_at")
+    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km")
     .eq("org_id", orgId)
     .order("created_at", { ascending: false })
     .limit(10);
@@ -397,7 +398,7 @@ export async function getRefillSheets(orgId: string): Promise<RefillSheet[]> {
 export async function getRefillSheet(orgId: string, id: string): Promise<RefillSheet | null> {
   const { data } = await createAdminClient()
     .from("refill_sheets")
-    .select("id, share_token, machine_ids, notes, lines, created_at, completed_at")
+    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km")
     .eq("org_id", orgId)
     .eq("id", id)
     .maybeSingle();
@@ -409,7 +410,7 @@ export async function getRefillSheetByToken(token: string): Promise<RefillSheet 
   if (!/^[A-Za-z0-9_-]{20,}$/.test(token)) return null;
   const { data } = await createAdminClient()
     .from("refill_sheets")
-    .select("id, share_token, machine_ids, notes, lines, created_at, completed_at")
+    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km")
     .eq("share_token", token)
     .maybeSingle();
   return (data as RefillSheet) ?? null;
@@ -422,4 +423,25 @@ export async function getLastSyncedAt(orgId: string): Promise<string | null> {
     .eq("org_id", orgId)
     .maybeSingle();
   return data?.last_synced_at ?? null;
+}
+
+/** What the fridge came up short on, newest first, over the last 60 days. */
+export async function getShortages(orgId: string, days = 60): Promise<Shortage[]> {
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const { data } = await createAdminClient()
+    .from("run_shortages")
+    .select("qty, noted_at, product_id, products(name)")
+    .eq("org_id", orgId)
+    .gte("noted_at", since)
+    .order("noted_at", { ascending: false });
+
+  return (data ?? []).map((row) => {
+    const product = row.products as unknown as { name: string } | null;
+    return {
+      product_id: row.product_id,
+      product_name: product?.name ?? null,
+      qty: row.qty,
+      noted_at: row.noted_at,
+    };
+  });
 }

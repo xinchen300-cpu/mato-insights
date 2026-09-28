@@ -5,12 +5,20 @@ import { getRefillSheetByToken } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Public: authorised by the unguessable share token, not by a login.
+/** The filler opening the sheet starts the clock, once. */
+export async function startRun(token: string) {
+  await createAdminClient().rpc("start_run", { sheet_token: token });
+}
+
 export async function completeSheet(
   token: string,
   adjustments: Record<string, number>,
   expiries: Record<string, string> = {},
   filler = "",
   checks: Record<string, boolean> = {},
+  km: number | null = null,
+  shortages: { product_id: string | null; qty: number }[] = [],
+  expiryChecked = false,
 ) {
   const sheet = await getRefillSheetByToken(token);
   if (!sheet) return { status: "not_found" as const };
@@ -32,6 +40,9 @@ export async function completeSheet(
     expiries: dates,
     filler_name: filler.trim().slice(0, 80),
     check_state: ticked,
+    driven_km: Number.isFinite(km) && (km as number) >= 0 ? km : null,
+    shortages: shortages.filter((s) => Number.isInteger(s.qty) && s.qty > 0 && s.qty <= 999),
+    expiry_checked: expiryChecked,
   });
   if (error) {
     return { status: error.message.includes("already completed") ? ("already_done" as const) : ("error" as const) };

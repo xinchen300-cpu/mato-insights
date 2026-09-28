@@ -3,6 +3,7 @@ import { LanguageToggle } from "@/components/shell/language-toggle";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getRefillSheetByToken } from "@/lib/data";
+import { startRun } from "./actions";
 import { FillerView } from "./filler-view";
 
 export async function generateMetadata() {
@@ -15,6 +16,9 @@ export default async function SharedRefillSheetPage({ params }: { params: Promis
   const { token } = await params;
   const { m, f } = await getI18n();
   const sheet = await getRefillSheetByToken(token);
+  // Opening the sheet is the start of the run; the call does nothing on a
+  // sheet that is already running or closed.
+  if (sheet && !sheet.completed_at) await startRun(token);
 
   return (
     <div className="mx-auto min-h-svh max-w-2xl px-4 pt-5">

@@ -37,6 +37,10 @@ export function FillerView({
   const [filler, setFiller] = useState("");
   const [checks, setChecks] = useState<Record<string, boolean>>({});
   const [nameMissing, setNameMissing] = useState(false);
+  const [short, setShort] = useState<Record<string, number>>({});
+  const [expiry, setExpiry] = useState<"none" | "found" | null>(null);
+  const [expiryMissing, setExpiryMissing] = useState(false);
+  const [km, setKm] = useState("");
   const [isPending, startTransition] = useTransition();
 
   // Ticks survive a reload or a dropped connection in the storage room.
@@ -47,15 +51,16 @@ export function FillerView({
       if (saved.amounts && typeof saved.amounts === "object") setAmounts(saved.amounts);
       if (saved.dates && typeof saved.dates === "object") setDates(saved.dates);
       if (saved.checks && typeof saved.checks === "object") setChecks(saved.checks);
+      if (saved.short && typeof saved.short === "object") setShort(saved.short);
       setFiller(localStorage.getItem(FILLER_KEY) ?? "");
     } catch {}
   }, [storageKey]);
 
   useEffect(() => {
     try {
-      localStorage.setItem(storageKey, JSON.stringify({ ticked: [...ticked], amounts, dates, checks }));
+      localStorage.setItem(storageKey, JSON.stringify({ ticked: [...ticked], amounts, dates, checks, short }));
     } catch {}
-  }, [storageKey, ticked, amounts, dates, checks]);
+  }, [storageKey, ticked, amounts, dates, checks, short]);
 
   function toggle(key: string) {
     setTicked((t) => {
@@ -67,6 +72,10 @@ export function FillerView({
   }
 
   function confirm() {
+    if (expiry === null) {
+      setExpiryMissing(true);
+      return;
+    }
     if (!filler.trim()) {
       setNameMissing(true);
       return;
@@ -83,7 +92,18 @@ export function FillerView({
       lines.map((l) => [lineKey(l), dates[lineKey(l)] ?? suggestedDate(l)]).filter(([, date]) => date),
     ) as Record<string, string>;
     startTransition(async () => {
-      const result = await completeSheet(token, adjustments, expiries, filler, checks);
+      const result = await completeSheet(
+        token,
+        adjustments,
+        expiries,
+        filler,
+        checks,
+        km.trim() === "" ? null : Number(km.replace(",", ".")),
+        Object.entries(short)
+          .filter(([, qty]) => qty > 0)
+          .map(([product_id, qty]) => ({ product_id, qty })),
+        expiry !== null,
+      );
       if (result.status === "done" || result.status === "already_done") {
         try {
           localStorage.removeItem(storageKey);
@@ -135,6 +155,7 @@ export function FillerView({
 
       <section>
         <h2 className="text-xl">{m.refill.combined}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{m.refill.shortHint}</p>
         <ul className="mt-3 flex flex-col divide-y border bg-card">
           {combined.map((row) => (
             <li key={row.productId} className="flex items-center gap-3 px-4 py-3">
@@ -142,8 +163,31 @@ export function FillerView({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={mediaUrl(row.photoPath)!} alt="" className="size-8 object-contain" />
               )}
-              <span className="flex-1">{row.name}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate">{row.name}</span>
+                {(short[row.productId] ?? 0) > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShort((sh) => ({ ...sh, [row.productId]: 0 }))}
+                    className="text-xs font-semibold text-negative underline underline-offset-2"
+                  >
+                    {fmt(m.refill.shortCount, { count: short[row.productId] })} &middot; {m.refill.shortClear}
+                  </button>
+                )}
+              </span>
               <span className="tabular font-heading text-lg font-semibold">{row.quantity}</span>
+              <button
+                type="button"
+                onClick={() =>
+                  setShort((sh) => ({
+                    ...sh,
+                    [row.productId]: Math.min(row.quantity, (sh[row.productId] ?? 0) + 1),
+                  }))
+                }
+                className="shrink-0 border px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:border-negative hover:text-negative"
+              >
+                {m.refill.shortAdd}
+              </button>
             </li>
           ))}
         </ul>
@@ -225,6 +269,45 @@ export function FillerView({
         );
       })}
 
+      <section className={cn("border bg-card p-4", expiryMissing && "border-negative")}>
+        <h2 className="text-xl">{m.refill.expiryTitle}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{m.refill.expiryHint}</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {(["none", "found"] as const).map((choice) => (
+            <button
+              key={choice}
+              type="button"
+              aria-pressed={expiry === choice}
+              onClick={() => {
+                setExpiry(choice);
+                setExpiryMissing(false);
+              }}
+              className={cn(
+                "flex items-center gap-2.5 border px-4 py-3 text-left text-[15px] font-semibold",
+                expiry === choice
+                  ? choice === "none"
+                    ? "border-positive bg-positive/10"
+                    : "border-negative bg-negative/10"
+                  : "bg-card",
+              )}
+            >
+              <span
+                className={cn(
+                  "grid size-5 shrink-0 place-items-center rounded-full border",
+                  expiry === choice && (choice === "none" ? "border-positive" : "border-negative"),
+                )}
+              >
+                {expiry === choice && (
+                  <span className={cn("size-2.5 rounded-full", choice === "none" ? "bg-positive" : "bg-negative")} />
+                )}
+              </span>
+              {choice === "none" ? m.refill.expiryNone : m.refill.expiryFound}
+            </button>
+          ))}
+        </div>
+        {expiryMissing && <p className="mt-2 text-sm text-negative">{m.refill.expiryRequired}</p>}
+      </section>
+
       <section className="border bg-card p-4">
         <h2 className="text-xl">{m.refill.checklistTitle}</h2>
         <ul className="mt-3 flex flex-col divide-y">
@@ -249,6 +332,17 @@ export function FillerView({
             </li>
           ))}
         </ul>
+
+        <label className="mt-4 block">
+          <span className="text-[15px] font-semibold">{m.refill.kmLabel}</span>
+          <input
+            value={km}
+            onChange={(e) => setKm(e.target.value.replace(/[^0-9.,]/g, ""))}
+            inputMode="decimal"
+            className="mt-1.5 w-32 border bg-card px-3 py-2 text-base outline-none focus-visible:border-ring"
+          />
+          <span className="mt-1 block text-xs text-muted-foreground">{m.refill.kmHint}</span>
+        </label>
 
         <label className="mt-4 block">
           <span className="text-[15px] font-semibold">{m.refill.filler}</span>
