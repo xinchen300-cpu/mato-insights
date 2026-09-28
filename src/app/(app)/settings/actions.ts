@@ -1,0 +1,72 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentOrgId } from "@/lib/org";
+import { triggerPayterSync } from "@/lib/sync";
+
+async function requireOrgId() {
+  const orgId = await getCurrentOrgId();
+  if (!orgId) throw new Error("No organization found");
+  return orgId;
+}
+
+export async function connectPayter(formData: FormData) {
+  const orgId = await requireOrgId();
+
+  const username = String(formData.get("username") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+  const domain = String(formData.get("domain") ?? "").trim();
+  if (!username || !password || !domain) throw new Error("Username, password and domain are required");
+
+  const { error } = await createAdminClient().rpc("set_payter_credentials", {
+    target_org: orgId,
+    p_username: username,
+    p_password: password,
+    p_domain: domain,
+  });
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/settings");
+}
+
+export async function syncNow() {
+  const orgId = await requireOrgId();
+  const result = await triggerPayterSync(orgId);
+  revalidatePath("/", "layout");
+  return result;
+}
+
+export async function deleteTemplate(templateId: string) {
+  const orgId = await requireOrgId();
+  // Built-in templates have no org and can't be deleted.
+  await createAdminClient().from("layout_templates").delete().eq("id", templateId).eq("org_id", orgId);
+  revalidatePath("/settings");
+}
+
+export async function saveShelfLifePreset(formData: FormData) {
+  const orgId = await requireOrgId();
+  const id = String(formData.get("id") ?? "") || null;
+  const name = String(formData.get("name") ?? "").trim();
+  const days = Number(String(formData.get("days") ?? "").trim());
+  if (!name || !Number.isInteger(days) || days <= 0) throw new Error("A name and a number of days are required");
+
+  const admin = createAdminClient();
+  const { error } = id
+    ? await admin.from("shelf_life_presets").update({ name, days }).eq("id", id).eq("org_id", orgId)
+    : await admin.from("shelf_life_presets").insert({ org_id: orgId, name, days });
+  if (error) throw new Error(error.message);
+  revalidatePath("/", "layout");
+}
+
+/** Products in this category fall back to no shelf life until they get another. */
+export async function deleteShelfLifePreset(id: string) {
+  const orgId = await requireOrgId();
+  const { error } = await createAdminClient()
+    .from("shelf_life_presets")
+    .delete()
+    .eq("id", id)
+    .eq("org_id", orgId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/", "layout");
+}

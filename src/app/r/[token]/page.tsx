@@ -1,0 +1,42 @@
+import { VendlyWordmark } from "@/components/brand/vendly-mark";
+import { LanguageToggle } from "@/components/shell/language-toggle";
+import { fmt } from "@/i18n/format";
+import { getI18n } from "@/i18n/server";
+import { getRefillSheetByToken } from "@/lib/data";
+import { FillerView } from "./filler-view";
+
+export async function generateMetadata() {
+  const { m } = await getI18n();
+  return { title: m.refill.sheetTitle, robots: { index: false, follow: false } };
+}
+
+// The filler's view: no login, just the unguessable link.
+export default async function SharedRefillSheetPage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
+  const { m, f } = await getI18n();
+  const sheet = await getRefillSheetByToken(token);
+
+  return (
+    <div className="mx-auto min-h-svh max-w-2xl px-4 pt-5">
+      <header className="mb-6 flex items-center justify-between gap-3">
+        <VendlyWordmark />
+        <LanguageToggle />
+      </header>
+
+      {!sheet ? (
+        <p className="border bg-card p-8 text-center text-muted-foreground">{m.refill.notFound}</p>
+      ) : (
+        <>
+          <p className="eyebrow">{fmt(m.refill.createdAt, { date: f.dateTime(sheet.created_at) })}</p>
+          <h1 className="mb-6 mt-1 text-3xl">{m.refill.sheetTitle}</h1>
+          <FillerView
+            token={sheet.share_token}
+            lines={sheet.lines}
+            notes={sheet.notes}
+            completed={Boolean(sheet.completed_at)}
+          />
+        </>
+      )}
+    </div>
+  );
+}
