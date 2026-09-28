@@ -96,6 +96,18 @@ export const nl: Messages = {
     tooEarly: "De maand is pas {days} dagen oud: de cijfers schommelen dan nog sterk. Kijk naar trends over een paar weken, niet over dagen.",
     sharedLead: "{first} en {second} verkochten deze maand ongeveer even goed — te dicht bij elkaar om er één de beste te noemen.",
   },
+  producers: {
+    title: "Producenten",
+    subtitle: "Wie maakt wat. Een tekort of iets dat over datum gaat, is nieuws voor hen.",
+    name: "Naam",
+    email: "E-mail",
+    phone: "Telefoon",
+    add: "Producent toevoegen",
+    none: "Geen producent",
+    empty: "Nog geen producenten.",
+    products: "{count} producten",
+    shortLast60: "{count}x te kort in 60 dagen",
+  },
   machines: {
     title: "Automaten",
     subtitle: "Elke Payter-terminal, met de voorraad in één oogopslag.",

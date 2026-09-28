@@ -96,6 +96,18 @@ export const en = {
     tooEarly: "The month is only {days} days old, so its numbers still swing a lot. Judge trends over a few weeks, not days.",
     sharedLead: "{first} and {second} sold about equally well this month — too close to call one the best.",
   },
+  producers: {
+    title: "Producers",
+    subtitle: "Who makes what. A shortage or a batch going off is their news.",
+    name: "Name",
+    email: "Email",
+    phone: "Phone",
+    add: "Add producer",
+    none: "No producer",
+    empty: "No producers yet.",
+    products: "{count} products",
+    shortLast60: "{count}x short in 60 days",
+  },
   machines: {
     title: "Machines",
     subtitle: "Every Payter terminal, with its stock at a glance.",

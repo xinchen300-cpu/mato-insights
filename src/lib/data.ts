@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getScope } from "@/lib/org";
 import type {
+  Producer,
   Shortage,
   Business,
   BusinessFreshness,
@@ -199,7 +200,7 @@ export async function getLastSales(orgId: string): Promise<Map<string, string | 
 }
 
 export const PRODUCT_COLUMNS =
-  "id, name, price, photo_path, archived, business_id, shelf_life_days, shelf_life_preset_id";
+  "id, name, price, photo_path, archived, business_id, shelf_life_days, shelf_life_preset_id, producer_id";
 
 export async function getProducts(orgId: string, { includeArchived = false } = {}): Promise<Product[]> {
   const { businessId } = await getScope();
@@ -446,4 +447,14 @@ export async function getShortages(orgId: string, days = 60): Promise<Shortage[]
       noted_at: row.noted_at,
     };
   });
+}
+
+/** Who makes the food, so a shortage or a batch going off has an address. */
+export async function getProducers(orgId: string): Promise<Producer[]> {
+  const { data } = await createAdminClient()
+    .from("producers")
+    .select("id, name, email, phone, notes")
+    .eq("org_id", orgId)
+    .order("name");
+  return (data ?? []) as Producer[];
 }

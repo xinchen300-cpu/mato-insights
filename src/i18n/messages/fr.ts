@@ -96,6 +96,18 @@ export const fr: Messages = {
     tooEarly: "Le mois n'a que {days} jours : les chiffres varient encore beaucoup. Regardez les tendances sur quelques semaines, pas sur quelques jours.",
     sharedLead: "{first} et {second} se sont à peu près aussi bien vendus ce mois-ci — trop proches pour désigner le meilleur.",
   },
+  producers: {
+    title: "Producteurs",
+    subtitle: "Qui fabrique quoi. Un manque ou un lot périmé les concerne.",
+    name: "Nom",
+    email: "E-mail",
+    phone: "Téléphone",
+    add: "Ajouter un producteur",
+    none: "Aucun producteur",
+    empty: "Pas encore de producteurs.",
+    products: "{count} produits",
+    shortLast60: "{count}x manquant en 60 jours",
+  },
   machines: {
     title: "Distributeurs",
     subtitle: "Chaque terminal Payter, avec son stock en un coup d'œil.",

@@ -75,6 +75,7 @@ export type Product = {
   /** Days the product keeps after filling; falls back to its category. */
   shelf_life_days: number | null;
   shelf_life_preset_id: string | null;
+  producer_id: string | null;
 };
 
 export type Business = {
@@ -141,6 +142,14 @@ export type RefillSheet = {
   km: number | null;
   /** Pieces per product the filler has taken from the fridge so far. */
   box: Record<string, number>;
+};
+
+export type Producer = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  notes: string | null;
 };
 
 /** What a fridge could not supply on a run, per product. */
