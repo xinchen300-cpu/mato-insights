@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getScope } from "@/lib/org";
 import type {
   Business,
   BusinessFreshness,
@@ -33,13 +34,22 @@ export type StatsFilters = {
 };
 
 export async function getStatsReport(orgId: string, filters: StatsFilters): Promise<StatsReport> {
+  // A membership tied to one business narrows every report to it, whatever the
+  // page asked for — the filter is enforced here, not at the call site.
+  const { businessId } = await getScope();
+  const businesses = businessId
+    ? filters.businesses?.length
+      ? filters.businesses.filter((id) => id === businessId)
+      : [businessId]
+    : filters.businesses;
+
   const { data, error } = await createAdminClient().rpc("stats_report", {
     target_org: orgId,
     period: filters.period,
     custom_from: filters.from ?? null,
     custom_to: filters.to ?? null,
     machine_filter: filters.machines?.length ? filters.machines : null,
-    business_filter: filters.businesses?.length ? filters.businesses : null,
+    business_filter: businesses?.length ? businesses : null,
     product_filter: filters.products?.length ? filters.products : null,
   });
   if (error) throw new Error(error.message);
@@ -51,17 +61,21 @@ const MACHINE_COLUMNS =
   "id, name, type, payter_serial_number, business_id, shared_business_id, data_since, last_connected_at, last_disconnected_at, terminal_model, terminal_network, terminal_flags, businesses!machines_business_id_fkey(name, logo_path)";
 
 export async function getMachines(orgId: string): Promise<Machine[]> {
-  const { data, error } = await createAdminClient()
+  const { businessId } = await getScope();
+  let query = createAdminClient()
     .from("machines")
     .select(MACHINE_COLUMNS)
     .eq("org_id", orgId)
-    .eq("excluded", false)
-    .order("name");
+    .eq("excluded", false);
+  // A shared machine belongs to its second business just as much.
+  if (businessId) query = query.or(`business_id.eq.${businessId},shared_business_id.eq.${businessId}`);
+  const { data, error } = await query.order("name");
   if (error) throw new Error(error.message);
   return (data ?? []).map(toMachine);
 }
 
 export async function getMachine(orgId: string, id: string): Promise<Machine | null> {
+  const { businessId } = await getScope();
   const { data } = await createAdminClient()
     .from("machines")
     .select(MACHINE_COLUMNS)
@@ -69,7 +83,13 @@ export async function getMachine(orgId: string, id: string): Promise<Machine | n
     .eq("excluded", false)
     .eq("id", id)
     .maybeSingle();
-  return data ? toMachine(data) : null;
+  if (!data) return null;
+  const machine = toMachine(data);
+  // Guessing a machine id must not open someone else's machine.
+  if (businessId && machine.business_id !== businessId && machine.shared_business_id !== businessId) {
+    return null;
+  }
+  return machine;
 }
 
 type MachineRow = {
@@ -179,11 +199,13 @@ export const PRODUCT_COLUMNS =
   "id, name, price, photo_path, archived, business_id, shelf_life_days, shelf_life_preset_id";
 
 export async function getProducts(orgId: string, { includeArchived = false } = {}): Promise<Product[]> {
+  const { businessId } = await getScope();
   let query = createAdminClient()
     .from("products")
     .select(PRODUCT_COLUMNS)
     .eq("org_id", orgId)
     .order("name");
+  if (businessId) query = query.eq("business_id", businessId);
   if (!includeArchived) query = query.eq("archived", false);
   const { data, error } = await query;
   if (error) throw new Error(error.message);
@@ -258,11 +280,13 @@ export async function getRecentSales(orgId: string, businessId: string): Promise
 }
 
 export async function getBusinesses(orgId: string): Promise<Business[]> {
-  const { data, error } = await createAdminClient()
+  const { businessId } = await getScope();
+  let query = createAdminClient()
     .from("businesses")
     .select(BUSINESS_COLUMNS)
-    .eq("org_id", orgId)
-    .order("name");
+    .eq("org_id", orgId);
+  if (businessId) query = query.eq("id", businessId);
+  const { data, error } = await query.order("name");
   if (error) throw new Error(error.message);
   return data ?? [];
 }
