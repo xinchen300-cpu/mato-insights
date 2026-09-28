@@ -4,10 +4,12 @@ import { EmptyState, PageHeader, Panel } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getMachines, getMachineStock, getRefillSheets, getShortages } from "@/lib/data";
+import { getMachines, getMachineStock, getRefillSheets, getShortages, getStatsReport } from "@/lib/data";
 import { requireOrgId } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fillLevel, needsAttention } from "@/lib/stock";
+import { DISPLAY_TIME_ZONE } from "@/i18n/format";
+import { lastFullWeeks } from "@/lib/stats";
 import { MachinePicker } from "./machine-picker";
 
 export async function generateMetadata() {
@@ -18,13 +20,17 @@ export async function generateMetadata() {
 export default async function RefillPage() {
   const { m, f } = await getI18n();
   const orgId = await requireOrgId();
-  const [machines, stock, sheets, shortages, { data: org }] = await Promise.all([
+  const [machines, stock, sheets, shortages, { data: org }, weeks] = await Promise.all([
     getMachines(orgId),
     getMachineStock(orgId),
     getRefillSheets(orgId),
     getShortages(orgId),
     createAdminClient().from("organizations").select("cost_per_hour, cost_per_km").eq("id", orgId).maybeSingle(),
+    getStatsReport(orgId, { period: "custom", ...lastFullWeeks(4, DISPLAY_TIME_ZONE) }),
   ]);
+
+  // Whole weeks only, so a half week does not drag the average down.
+  const perDay = new Map(weeks.by_machine.map((row) => [row.machine_id, row.units / 28]));
 
   const perHour = Number(org?.cost_per_hour ?? 25);
   const perKm = Number(org?.cost_per_km ?? 0.42);
@@ -56,14 +62,15 @@ export default async function RefillPage() {
   }
   const shortList = [...shortByProduct.values()].sort((a, b) => b.units - a.units);
 
-  const perMachine = new Map<string, { low: number; toAdd: number; value: number }>();
+  const perMachine = new Map<string, { low: number; toAdd: number; value: number; filled: number }>();
   for (const s of stock) {
     if (!s.product_id) continue;
-    const entry = perMachine.get(s.machine_id) ?? { low: 0, toAdd: 0, value: 0 };
+    const entry = perMachine.get(s.machine_id) ?? { low: 0, toAdd: 0, value: 0, filled: 0 };
     if (needsAttention(fillLevel(s.stock, s.capacity))) entry.low += 1;
     const missing = s.capacity - (s.stock ?? 0);
     entry.toAdd += missing;
     entry.value += missing * (s.price ?? 0);
+    entry.filled += s.stock ?? 0;
     perMachine.set(s.machine_id, entry);
   }
 
@@ -78,6 +85,13 @@ export default async function RefillPage() {
         mc.km_round_trip !== null || time
           ? (mc.km_round_trip ?? 0) * perKm + (time ? (time.minutes / time.runs / 60) * perHour : 0)
           : null;
+      // What the machine will be short of in a week, at the pace it has been
+      // selling: the answer to "go now, or Thursday?".
+      const rate = perDay.get(mc.id) ?? 0;
+      const capacity = p.toAdd + p.filled;
+      const weekAhead = Math.min(capacity, Math.round(p.toAdd + rate * 7));
+      const perPiece = p.toAdd > 0 ? p.value / p.toAdd : 0;
+
       return {
         id: mc.id,
         name: mc.name,
@@ -92,6 +106,12 @@ export default async function RefillPage() {
             : p.low > 0
               ? fmt(m.overview.slotsLow, { count: p.low })
               : fmt(m.refill.items, { count: p.toAdd }),
+        note:
+          cost !== null && p.value > 0 && p.value < cost
+            ? m.refill.notWorthIt
+            : rate > 0 && weekAhead > p.toAdd
+              ? fmt(m.refill.forecastWeek, { items: weekAhead, value: f.euro(weekAhead * perPiece) })
+              : undefined,
       };
     });
 

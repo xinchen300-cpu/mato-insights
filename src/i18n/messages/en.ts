@@ -340,6 +340,8 @@ export const en = {
     shortagesHint: "Last 60 days, what the filler could not take.",
     shortagesEmpty: "Nothing came up short.",
     worthHint: "{items} to fill · about {value} · run about {cost}",
+    forecastWeek: "In a week about {items} · {value}",
+    notWorthIt: "Today this run costs more than it brings in.",
     shortagesTimes: "{count}x short, {units} in total",
     sheetTitle: "Refill sheet",
     createdAt: "Made {date}",

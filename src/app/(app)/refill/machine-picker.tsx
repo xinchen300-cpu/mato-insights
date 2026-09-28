@@ -7,7 +7,11 @@ import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/client";
 import { createRefillSheet } from "./actions";
 
-export function MachinePicker({ machines }: { machines: { id: string; name: string; hint: string; low: boolean }[] }) {
+export function MachinePicker({
+  machines,
+}: {
+  machines: { id: string; name: string; hint: string; low: boolean; note?: string }[];
+}) {
   const { m } = useI18n();
   const [selected, setSelected] = useState<Set<string>>(new Set(machines.filter((mc) => mc.low).map((mc) => mc.id)));
   const [empty, setEmpty] = useState(false);
@@ -65,6 +69,7 @@ export function MachinePicker({ machines }: { machines: { id: string; name: stri
                   <span className={cn("block text-sm", mc.low ? "text-negative" : "text-muted-foreground")}>
                     {mc.hint}
                   </span>
+                  {mc.note && <span className="block text-xs text-accent-foreground">{mc.note}</span>}
                 </span>
               </label>
             </li>

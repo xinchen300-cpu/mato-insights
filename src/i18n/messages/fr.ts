@@ -340,6 +340,8 @@ export const fr: Messages = {
     shortagesHint: "60 derniers jours, ce que le remplisseur n'a pas pu prendre.",
     shortagesEmpty: "Rien n'a manqué.",
     worthHint: "{items} à remplir · environ {value} · tournée environ {cost}",
+    forecastWeek: "Dans une semaine environ {items} pièces · {value}",
+    notWorthIt: "Aujourd'hui cette tournée coûte plus qu'elle ne rapporte.",
     shortagesTimes: "{count}x manquant, {units} au total",
     sheetTitle: "Liste de remplissage",
     createdAt: "Faite le {date}",

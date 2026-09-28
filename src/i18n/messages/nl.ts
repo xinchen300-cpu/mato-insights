@@ -340,6 +340,8 @@ export const nl: Messages = {
     shortagesHint: "Laatste 60 dagen, wat de vuller niet mee kon nemen.",
     shortagesEmpty: "Er kwam niets te kort.",
     worthHint: "{items} bij te vullen · ongeveer {value} · rit ongeveer {cost}",
+    forecastWeek: "Over een week ongeveer {items} stuks · {value}",
+    notWorthIt: "Vandaag kost deze rit meer dan ze opbrengt.",
     shortagesTimes: "{count}x te kort, samen {units} stuks",
     sheetTitle: "Vullijst",
     createdAt: "Gemaakt {date}",
