@@ -434,6 +434,7 @@ export const en = {
     signingIn: "Signing in…",
     wrongLogin: "Email or password is wrong.",
     createAccount: "Create your account",
+    notInvited: "This address has not been invited. Ask the operator for an invitation.",
     createHint: "This account becomes the owner of your Vendly data.",
     create: "Create account",
     creating: "Creating…",

@@ -434,6 +434,7 @@ export const nl: Messages = {
     signingIn: "Inloggen…",
     wrongLogin: "E-mail of wachtwoord klopt niet.",
     createAccount: "Maak je account aan",
+    notInvited: "Dit adres is niet uitgenodigd. Vraag de beheerder om een uitnodiging.",
     createHint: "Dit account wordt de eigenaar van je Vendly-gegevens.",
     create: "Account aanmaken",
     creating: "Aanmaken…",

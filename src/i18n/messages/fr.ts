@@ -434,6 +434,7 @@ export const fr: Messages = {
     signingIn: "Connexion…",
     wrongLogin: "E-mail ou mot de passe incorrect.",
     createAccount: "Créez votre compte",
+    notInvited: "Cette adresse n'a pas été invitée. Demandez une invitation à l'exploitant.",
     createHint: "Ce compte devient le propriétaire de vos données Vendly.",
     create: "Créer le compte",
     creating: "Création…",

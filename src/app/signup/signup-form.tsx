@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
 import { createClient } from "@/lib/supabase/client";
+import { checkInvite } from "./actions";
 
 export function SignupForm() {
   const { m } = useI18n();
@@ -19,6 +20,12 @@ export function SignupForm() {
     setLoading(true);
     setError(null);
     const email = String(formData.get("email"));
+
+    if (!(await checkInvite(email))) {
+      setLoading(false);
+      return setError(m.auth.notInvited);
+    }
+
     const { data, error } = await createClient().auth.signUp({
       email,
       password: String(formData.get("password")),
