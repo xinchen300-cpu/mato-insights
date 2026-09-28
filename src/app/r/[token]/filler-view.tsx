@@ -10,7 +10,7 @@ import { mediaUrl } from "@/lib/media";
 import { ExpiryPicker } from "@/components/refill/date-picker";
 import { combineByProduct, groupByMachine, lineKey, suggestedDate } from "@/lib/refill";
 import type { RefillLine } from "@/lib/types";
-import { completeSheet } from "./actions";
+import { completeSheet, saveBox } from "./actions";
 
 const CHECK_KEYS = ["expired", "clean", "labels", "test"] as const;
 // The name outlives one sheet: the same person usually fills again next week.
@@ -61,6 +61,21 @@ export function FillerView({
       localStorage.setItem(storageKey, JSON.stringify({ ticked: [...ticked], amounts, dates, checks, short }));
     } catch {}
   }, [storageKey, ticked, amounts, dates, checks, short]);
+
+  // What is in the cool box is part of the run, so the shop can see it while
+  // the filler is on the road. Written after a pause, not on every tap.
+  useEffect(() => {
+    const box: Record<string, number> = {};
+    for (const line of lines) {
+      if (!ticked.has(lineKey(line))) continue;
+      const key = line.product_id ?? line.product_name ?? lineKey(line);
+      box[key] = (box[key] ?? 0) + (amounts[lineKey(line)] ?? line.to_add);
+    }
+    const timer = setTimeout(() => {
+      void saveBox(token, box).catch(() => {});
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [lines, ticked, amounts, token]);
 
   function toggle(key: string) {
     setTicked((t) => {

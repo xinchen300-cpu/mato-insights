@@ -15,10 +15,11 @@ export async function generateMetadata() {
 export default async function SharedRefillSheetPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const { m, f } = await getI18n();
-  const sheet = await getRefillSheetByToken(token);
-  // Opening the sheet is the start of the run; the call does nothing on a
-  // sheet that is already running or closed.
-  if (sheet && !sheet.completed_at) await startRun(token);
+  const existing = await getRefillSheetByToken(token);
+  // Opening the sheet starts the run and refreshes its lines; a closed sheet is
+  // left exactly as it was.
+  if (existing && !existing.completed_at) await startRun(token);
+  const sheet = existing && !existing.completed_at ? await getRefillSheetByToken(token) : existing;
 
   return (
     <div className="mx-auto min-h-svh max-w-2xl px-4 pt-5">

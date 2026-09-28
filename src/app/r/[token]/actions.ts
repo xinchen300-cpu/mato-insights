@@ -5,9 +5,39 @@ import { getRefillSheetByToken } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Public: authorised by the unguessable share token, not by a login.
-/** The filler opening the sheet starts the clock, once. */
+/**
+ * Opening the sheet starts the clock and brings the list up to date: what sold
+ * while the run was being prepared is already off the list again. Only while
+ * the run is open — a closed run keeps the lines it was closed with.
+ */
 export async function startRun(token: string) {
-  await createAdminClient().rpc("start_run", { sheet_token: token });
+  const admin = createAdminClient();
+  await admin.rpc("start_run", { sheet_token: token });
+
+  const { data: sheet } = await admin
+    .from("refill_sheets")
+    .select("id, org_id, machine_ids, completed_at")
+    .eq("share_token", token)
+    .maybeSingle();
+  if (!sheet || sheet.completed_at) return;
+
+  const { data: lines } = await admin.rpc("refill_plan", {
+    target_org: sheet.org_id,
+    machine_filter: sheet.machine_ids,
+  });
+  if (lines) await admin.from("refill_sheets").update({ lines }).eq("id", sheet.id);
+}
+
+/** What the filler has put in the cool box so far, kept on the run itself. */
+export async function saveBox(token: string, box: Record<string, number>) {
+  const clean = Object.fromEntries(
+    Object.entries(box).filter(([, v]) => Number.isInteger(v) && v > 0 && v <= 999),
+  );
+  await createAdminClient()
+    .from("refill_sheets")
+    .update({ box: clean })
+    .eq("share_token", token)
+    .is("completed_at", null);
 }
 
 export async function completeSheet(

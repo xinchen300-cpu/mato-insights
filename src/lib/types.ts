@@ -138,6 +138,8 @@ export type RefillSheet = {
   completed_at: string | null;
   filled_by: string | null;
   km: number | null;
+  /** Pieces per product the filler has taken from the fridge so far. */
+  box: Record<string, number>;
 };
 
 /** What a fridge could not supply on a run, per product. */

@@ -388,7 +388,7 @@ export async function getLayoutTemplates(orgId: string): Promise<LayoutTemplate[
 export async function getRefillSheets(orgId: string): Promise<RefillSheet[]> {
   const { data } = await createAdminClient()
     .from("refill_sheets")
-    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km")
+    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box")
     .eq("org_id", orgId)
     .order("created_at", { ascending: false })
     .limit(10);
@@ -398,7 +398,7 @@ export async function getRefillSheets(orgId: string): Promise<RefillSheet[]> {
 export async function getRefillSheet(orgId: string, id: string): Promise<RefillSheet | null> {
   const { data } = await createAdminClient()
     .from("refill_sheets")
-    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km")
+    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box")
     .eq("org_id", orgId)
     .eq("id", id)
     .maybeSingle();
@@ -410,7 +410,7 @@ export async function getRefillSheetByToken(token: string): Promise<RefillSheet 
   if (!/^[A-Za-z0-9_-]{20,}$/.test(token)) return null;
   const { data } = await createAdminClient()
     .from("refill_sheets")
-    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km")
+    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box")
     .eq("share_token", token)
     .maybeSingle();
   return (data as RefillSheet) ?? null;

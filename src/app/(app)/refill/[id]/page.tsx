@@ -26,6 +26,17 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
 
   const total = sheet.lines.reduce((sum, l) => sum + l.to_add, 0);
 
+  // The cool box is keyed by product id; the lines know the names.
+  const nameOf = new Map(sheet.lines.map((l) => [l.product_id, l.product_name]));
+  const box = Object.entries(sheet.box ?? {})
+    .map(([id, qty]) => ({ name: nameOf.get(id) ?? "—", qty }))
+    .sort((a, b) => b.qty - a.qty);
+
+  const minutes =
+    sheet.started_at && sheet.completed_at
+      ? Math.max(1, Math.round((new Date(sheet.completed_at).getTime() - new Date(sheet.started_at).getTime()) / 60000))
+      : null;
+
   return (
     <>
       <PageHeader
@@ -63,6 +74,48 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
               <ShareBox token={sheet.share_token} />
             </Panel>
           )}
+          {(minutes !== null || sheet.km !== null || sheet.filled_by) && (
+            <Panel title={m.refill.runFacts}>
+              <ul className="flex flex-col divide-y">
+                {sheet.filled_by && (
+                  <li className="flex items-baseline justify-between gap-4 py-2.5">
+                    <span className="text-sm text-muted-foreground">{m.refill.filler}</span>
+                    <span className="font-semibold">{sheet.filled_by}</span>
+                  </li>
+                )}
+                {minutes !== null && (
+                  <li className="flex items-baseline justify-between gap-4 py-2.5">
+                    <span className="text-sm text-muted-foreground">{m.machines.history}</span>
+                    <span className="tabular font-semibold">{fmt(m.refill.runTime, { minutes })}</span>
+                  </li>
+                )}
+                {sheet.km !== null && (
+                  <li className="flex items-baseline justify-between gap-4 py-2.5">
+                    <span className="text-sm text-muted-foreground">{m.refill.kmLabel}</span>
+                    <span className="tabular font-semibold">{fmt(m.refill.runKm, { km: sheet.km })}</span>
+                  </li>
+                )}
+              </ul>
+            </Panel>
+          )}
+
+          {!sheet.completed_at && (
+            <Panel title={m.refill.boxTitle} hint={m.refill.boxHint}>
+              {box.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{m.refill.boxEmpty}</p>
+              ) : (
+                <ul className="flex flex-col divide-y">
+                  {box.map((row) => (
+                    <li key={row.name} className="flex items-baseline justify-between gap-4 py-2.5">
+                      <span className="min-w-0 truncate">{row.name}</span>
+                      <span className="tabular font-semibold">{row.qty}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
+          )}
+
           <Panel title={m.refill.notes}>
             <NotesForm sheetId={sheet.id} initialNotes={sheet.notes ?? ""} />
           </Panel>
