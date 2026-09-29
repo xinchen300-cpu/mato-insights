@@ -52,6 +52,8 @@ export function FillerView({
   const [refreshing, setRefreshing] = useState(false);
   const linesRef = useRef(lines);
   linesRef.current = lines;
+  const tickedRef = useRef(ticked);
+  tickedRef.current = ticked;
 
   // Ticks survive a reload or a dropped connection in the storage room.
   useEffect(() => {
@@ -88,54 +90,54 @@ export function FillerView({
   }, [lines, ticked, amounts, token]);
 
   /**
-   * Ask what the machines need now and fold it into what the filler has
-   * already ticked. A slot they packed stays on the list even if the plan
-   * would drop it, so nothing disappears out of the cool box.
+   * Ask what the machines need now. What the filler already ticked goes along
+   * untouched: those pieces are in the cool box, so their number is settled
+   * and the line must not vanish from the sheet either.
    */
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const fresh = await refreshLines(token);
+      const packed = [...tickedRef.current];
+      const fresh = await refreshLines(token, packed);
       if (!fresh) return;
-      const before = new Map(linesRef.current.map((l) => [lineKey(l), l]));
-      const keptKeys = new Set(fresh.map((l) => lineKey(l)));
-      const merged = [
-        ...fresh,
-        ...linesRef.current.filter((l) => !keptKeys.has(lineKey(l)) && ticked.has(lineKey(l))),
-      ];
-      setSold((s) => {
-        const next = { ...s };
+      const before = new Map(linesRef.current.map((line) => [lineKey(line), line]));
+      setSold((current) => {
+        const next = { ...current };
         for (const line of fresh) {
           const key = lineKey(line);
+          if (tickedRef.current.has(key)) continue;
           const grew = line.to_add - (before.get(key)?.to_add ?? line.to_add);
           if (grew > 0) next[key] = (next[key] ?? 0) + grew;
         }
         return next;
       });
-      setLines(merged);
+      setLines(fresh);
     } catch {
       // Out of range at the machine; the list on screen is still usable.
     } finally {
       setRefreshing(false);
     }
-  }, [token, ticked]);
+  }, [token]);
+
+  // The effect must not depend on refresh itself: every tick would otherwise
+  // cancel the pending timer and the correction would never arrive.
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
 
   // While the run is open: on a timer, and whenever the filler comes back to
   // the tab after driving.
   useEffect(() => {
     if (completed || status !== "idle") return;
-    const timer = setInterval(() => {
-      if (document.visibilityState === "visible") void refresh();
-    }, REFRESH_MS);
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void refresh();
+    const tick = () => {
+      if (document.visibilityState === "visible") void refreshRef.current();
     };
-    document.addEventListener("visibilitychange", onVisible);
+    const timer = setInterval(tick, REFRESH_MS);
+    document.addEventListener("visibilitychange", tick);
     return () => {
       clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisible);
+      document.removeEventListener("visibilitychange", tick);
     };
-  }, [completed, status, refresh]);
+  }, [completed, status]);
 
   function toggle(key: string) {
     setTicked((t) => {

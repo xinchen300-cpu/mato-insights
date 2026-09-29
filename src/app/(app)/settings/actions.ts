@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getCurrentBusinessId, getCurrentOrgId } from "@/lib/org";
+import { getCurrentBusinessId, getCurrentOrgId, requireOperator } from "@/lib/org";
 import { triggerPayterSync } from "@/lib/sync";
 
 async function requireOrgId() {
@@ -11,8 +11,19 @@ async function requireOrgId() {
   return orgId;
 }
 
-export async function connectPayter(formData: FormData) {
+/**
+ * Everything on this page belongs to whoever runs the fleet: the Payter
+ * login, the run cost, the shelf-life categories, the layout templates. A
+ * shop account has no business writing any of it.
+ */
+async function requireOrgOwner() {
   const orgId = await requireOrgId();
+  await requireOperator();
+  return orgId;
+}
+
+export async function connectPayter(formData: FormData) {
+  const orgId = await requireOrgOwner();
 
   const username = String(formData.get("username") ?? "").trim();
   const password = String(formData.get("password") ?? "");
@@ -31,21 +42,21 @@ export async function connectPayter(formData: FormData) {
 }
 
 export async function syncNow() {
-  const orgId = await requireOrgId();
+  const orgId = await requireOrgOwner();
   const result = await triggerPayterSync(orgId);
   revalidatePath("/", "layout");
   return result;
 }
 
 export async function deleteTemplate(templateId: string) {
-  const orgId = await requireOrgId();
+  const orgId = await requireOrgOwner();
   // Built-in templates have no org and can't be deleted.
   await createAdminClient().from("layout_templates").delete().eq("id", templateId).eq("org_id", orgId);
   revalidatePath("/settings");
 }
 
 export async function saveShelfLifePreset(formData: FormData) {
-  const orgId = await requireOrgId();
+  const orgId = await requireOrgOwner();
   const id = String(formData.get("id") ?? "") || null;
   const name = String(formData.get("name") ?? "").trim();
   const days = Number(String(formData.get("days") ?? "").trim());
@@ -61,7 +72,7 @@ export async function saveShelfLifePreset(formData: FormData) {
 
 /** Products in this category fall back to no shelf life until they get another. */
 export async function deleteShelfLifePreset(id: string) {
-  const orgId = await requireOrgId();
+  const orgId = await requireOrgOwner();
   const { error } = await createAdminClient()
     .from("shelf_life_presets")
     .delete()
@@ -72,18 +83,20 @@ export async function deleteShelfLifePreset(id: string) {
 }
 
 /** Hourly rate and price per kilometre, used to price a run. */
-export async function saveRunCost(perHour: number, perKm: number) {
-  const orgId = await requireOrgId();
+export async function saveRunCost(perHour: number, perKm: number): Promise<boolean> {
+  const orgId = await requireOrgOwner();
   const clean = (n: number, max: number) => (Number.isFinite(n) && n >= 0 && n <= max ? n : null);
   const hour = clean(perHour, 500);
   const km = clean(perKm, 20);
-  if (hour === null || km === null) return;
+  // Refusing quietly while the screen says "saved" is worse than refusing out loud.
+  if (hour === null || km === null) return false;
 
   await createAdminClient()
     .from("organizations")
     .update({ cost_per_hour: hour, cost_per_km: km })
     .eq("id", orgId);
   revalidatePath("/", "layout");
+  return true;
 }
 
 /** Remember this browser as somewhere Vendly may send a notification. */

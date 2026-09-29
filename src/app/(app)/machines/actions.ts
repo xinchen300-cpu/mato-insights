@@ -1,12 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireOrgId } from "@/lib/org";
+import { isOperator, requireOrgId } from "@/lib/org";
+import { getMachine, requireMachineAccess, requireProductAccess } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MACHINE_TYPES, SLOT_SIZES, type LayoutRowSpec, type MachineType, type SlotSize } from "@/lib/types";
 
 export async function assignProduct(machineId: string, selection: string, productId: string | null) {
   const orgId = await requireOrgId();
+  await requireMachineAccess(orgId, machineId);
+  if (productId) await requireProductAccess(orgId, productId);
   const { error } = await createAdminClient().rpc("assign_product", {
     target_org: orgId,
     target_machine: machineId,
@@ -31,13 +34,26 @@ export async function updateMachineDetails(
   },
 ) {
   const orgId = await requireOrgId();
+  await requireMachineAccess(orgId, machineId);
   const admin = createAdminClient();
 
   const name = input.name.trim();
   if (!name) throw new Error("Name is required");
   if (input.type && !MACHINE_TYPES.includes(input.type)) throw new Error("Invalid type");
 
+  // Who a machine belongs to is the operator's call. A shop that shares a
+  // fridge may rename it, but not write its co-tenant out of it.
   let businessId = input.businessId;
+  if (!(await isOperator())) {
+    const current = await getMachine(orgId, machineId);
+    if (
+      input.newBusinessName?.trim() ||
+      input.businessId !== (current?.business_id ?? null) ||
+      input.sharedBusinessId !== (current?.shared_business_id ?? null)
+    ) {
+      throw new Error("Not found");
+    }
+  }
   if (input.newBusinessName?.trim()) {
     const { data, error } = await admin
       .from("businesses")
@@ -83,6 +99,7 @@ export async function saveLayout(
   assignments: Record<string, string | null>,
 ) {
   const orgId = await requireOrgId();
+  await requireMachineAccess(orgId, machineId);
 
   const seen = new Set<string>();
   for (const row of rows) {
@@ -151,6 +168,7 @@ export async function recordStock(
   checks: Record<string, boolean> = {},
 ) {
   const orgId = await requireOrgId();
+  await requireMachineAccess(orgId, machineId);
   const clean = entries
     .filter((e) => /^[0-9]+$/.test(e.selection) && Number.isInteger(e.level_after) && e.level_after >= 0)
     .map((e) => ({

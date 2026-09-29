@@ -45,7 +45,7 @@ export function InsightsList({ insights, m, f }: { insights: Insight[]; m: Messa
                   ? TrendingUp
                   : Lightbulb;
           return (
-            <li key={i} className="flex gap-3 text-[15px] leading-snug">
+            <li key={i} className="figure flex gap-3 text-[15px] leading-snug">
               <Icon
                 className={`mt-0.5 size-[18px] shrink-0 ${insight.kind === "quietMachine" ? "text-negative" : "text-accent-foreground"}`}
               />

@@ -246,3 +246,17 @@ export type BusinessFreshness = {
 
 /** A named shelf life ("fresh meal, 3 days") shared by many products. */
 export type ShelfLifePreset = { id: string; name: string; days: number };
+
+/** One product's share of the bin over a period. */
+export type WasteRow = {
+  product_id: string;
+  product_name: string;
+  producer_id: string | null;
+  producer_name: string | null;
+  business_id: string | null;
+  qty_expired: number;
+  value_expired: number;
+  qty_sold: number;
+  value_sold: number;
+  share_expired: number | null;
+};

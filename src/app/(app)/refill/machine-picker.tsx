@@ -66,10 +66,10 @@ export function MachinePicker({
                 />
                 <span className="min-w-0">
                   <span className="block truncate font-semibold">{mc.name}</span>
-                  <span className={cn("block text-sm", mc.low ? "text-negative" : "text-muted-foreground")}>
+                  <span className={cn("figure block text-sm", mc.low ? "text-negative" : "text-muted-foreground")}>
                     {mc.hint}
                   </span>
-                  {mc.note && <span className="block text-xs text-accent-foreground">{mc.note}</span>}
+                  {mc.note && <span className="figure block text-xs text-accent-foreground">{mc.note}</span>}
                 </span>
               </label>
             </li>

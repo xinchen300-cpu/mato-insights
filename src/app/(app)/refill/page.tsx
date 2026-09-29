@@ -62,35 +62,57 @@ export default async function RefillPage() {
   }
   const shortList = [...shortByProduct.values()].sort((a, b) => b.units - a.units);
 
-  const perMachine = new Map<string, { low: number; toAdd: number; value: number; filled: number }>();
+  const perMachine = new Map<
+    string,
+    { low: number; toAdd: number; value: number; filled: number; capacity: number; priced: number; prices: number; counted: number }
+  >();
   for (const s of stock) {
     if (!s.product_id) continue;
-    const entry = perMachine.get(s.machine_id) ?? { low: 0, toAdd: 0, value: 0, filled: 0 };
+    const entry =
+      perMachine.get(s.machine_id) ?? { low: 0, toAdd: 0, value: 0, filled: 0, capacity: 0, priced: 0, prices: 0, counted: 0 };
     if (needsAttention(fillLevel(s.stock, s.capacity))) entry.low += 1;
-    const missing = s.capacity - (s.stock ?? 0);
-    entry.toAdd += missing;
-    entry.value += missing * (s.price ?? 0);
-    entry.filled += s.stock ?? 0;
+    entry.capacity += s.capacity;
+    if (s.price) {
+      entry.prices += s.price;
+      entry.priced += 1;
+    }
+    // A slot that was never counted is not an empty slot. Counting it as one
+    // would send the operator out for a run that has nothing to gain.
+    if (s.stock !== null) {
+      entry.counted += 1;
+      const missing = s.capacity - s.stock;
+      entry.toAdd += missing;
+      entry.value += missing * (s.price ?? 0);
+      entry.filled += s.stock;
+    }
     perMachine.set(s.machine_id, entry);
   }
+  // Minutes per visit across the fleet, for a machine that has never been
+  // filled through a sheet: better than pretending a visit costs no time.
+  const fleetMinutes = [...measured.values()].reduce(
+    (acc, t) => ({ minutes: acc.minutes + t.minutes, runs: acc.runs + t.runs }),
+    { minutes: 0, runs: 0 },
+  );
+  const typicalMinutes = fleetMinutes.runs > 0 ? fleetMinutes.minutes / fleetMinutes.runs : null;
 
   const pickable = machines
     .filter((mc) => perMachine.has(mc.id))
     .map((mc) => {
       const p = perMachine.get(mc.id)!;
       const time = measured.get(mc.id);
-      // Only a number we can stand behind: measured time and a distance the
-      // operator filled in. Without either, no amount is shown.
-      const cost =
-        mc.km_round_trip !== null || time
-          ? (mc.km_round_trip ?? 0) * perKm + (time ? (time.minutes / time.runs / 60) * perHour : 0)
-          : null;
+      // Only a number we can stand behind. Driving there is never the whole
+      // cost — somebody stands at that machine — so a run without any measured
+      // time falls back to what a visit takes elsewhere in the fleet, and
+      // without even that, no amount is shown at all.
+      const minutes = time ? time.minutes / time.runs : typicalMinutes;
+      const cost = minutes !== null ? (mc.km_round_trip ?? 0) * perKm + (minutes / 60) * perHour : null;
       // What the machine will be short of in a week, at the pace it has been
       // selling: the answer to "go now, or Thursday?".
       const rate = perDay.get(mc.id) ?? 0;
-      const capacity = p.toAdd + p.filled;
-      const weekAhead = Math.min(capacity, Math.round(p.toAdd + rate * 7));
-      const perPiece = p.toAdd > 0 ? p.value / p.toAdd : 0;
+      const weekAhead = Math.min(p.capacity, Math.round(p.toAdd + rate * 7));
+      // A machine that is full today still sells all week, so its week-ahead
+      // pieces are worth the average price in it, not nothing.
+      const perPiece = p.toAdd > 0 ? p.value / p.toAdd : p.priced > 0 ? p.prices / p.priced : 0;
 
       return {
         id: mc.id,
@@ -103,9 +125,11 @@ export default async function RefillPage() {
                 value: f.euro(p.value),
                 cost: f.euro(cost),
               })
-            : p.low > 0
-              ? fmt(m.overview.slotsLow, { count: p.low })
-              : fmt(m.refill.items, { count: p.toAdd }),
+            : p.counted === 0
+              ? m.overview.stockUnknown
+              : p.low > 0
+                ? fmt(m.overview.slotsLow, { count: p.low })
+                : fmt(m.refill.items, { count: p.toAdd }),
         note:
           cost !== null && p.value > 0 && p.value < cost
             ? m.refill.notWorthIt

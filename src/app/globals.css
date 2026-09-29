@@ -134,20 +134,25 @@
     font-variant-numeric: tabular-nums;
   }
   /* Showing the app to someone without showing the money: every figure and the
-     revenue chart go unreadable, the layout stays exactly as it is. */
+     revenue chart go unreadable, the layout stays exactly as it is. A figure
+     written into a sentence ("EUR 4.812 this month, a real increase") is money
+     too, so those carry .figure and blur with the rest. */
   [data-hide-numbers] .tabular,
+  [data-hide-numbers] .figure,
   [data-hide-numbers] .recharts-wrapper {
     filter: blur(7px);
     user-select: none;
   }
   /* The person actually filling must always read the quantities, even if the
      switch was left on in this browser. */
-  [data-hide-numbers] .show-numbers .tabular {
+  [data-hide-numbers] .show-numbers .tabular,
+  [data-hide-numbers] .show-numbers .figure {
     filter: none;
     user-select: auto;
   }
   @media print {
     [data-hide-numbers] .tabular,
+    [data-hide-numbers] .figure,
     [data-hide-numbers] .recharts-wrapper {
       filter: none;
     }

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getRefillSheetByToken } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { lineKey } from "@/lib/refill";
 import type { RefillLine } from "@/lib/types";
 
 // Public: authorised by the unguessable share token, not by a login.
@@ -14,35 +15,51 @@ import type { RefillLine } from "@/lib/types";
 export async function startRun(token: string) {
   const admin = createAdminClient();
   await admin.rpc("start_run", { sheet_token: token });
-  await recompute(token);
+  await recompute(token, []);
 }
 
 /**
  * The shop keeps selling while the filler is at the fridge or in the van, so
  * the list on their phone would slowly stop matching the machine. Asking again
  * costs one query and keeps the sheet honest: what sold in the meantime is
- * simply on the list again. A closed run is never touched.
+ * simply on the list again.
+ *
+ * What the filler already ticked is left exactly as it was. Those pieces are
+ * in the cool box; raising their number would ask for stock that is not in the
+ * van, and dropping the line would mean the refill is never written down.
  */
-export async function refreshLines(token: string): Promise<RefillLine[] | null> {
-  return recompute(token);
+export async function refreshLines(token: string, packed: string[] = []): Promise<RefillLine[] | null> {
+  return recompute(token, packed);
 }
 
-async function recompute(token: string): Promise<RefillLine[] | null> {
+async function recompute(token: string, packed: string[]): Promise<RefillLine[] | null> {
   const admin = createAdminClient();
   const { data: sheet } = await admin
     .from("refill_sheets")
-    .select("id, org_id, machine_ids, completed_at")
+    .select("id, org_id, machine_ids, lines, completed_at")
     .eq("share_token", token)
     .maybeSingle();
   if (!sheet || sheet.completed_at) return null;
 
-  const { data: lines } = await admin.rpc("refill_plan", {
+  const { data: fresh } = await admin.rpc("refill_plan", {
     target_org: sheet.org_id,
     machine_filter: sheet.machine_ids,
   });
-  if (!lines) return null;
-  await admin.from("refill_sheets").update({ lines }).eq("id", sheet.id);
-  return lines as RefillLine[];
+  if (!fresh) return null;
+
+  const frozen = new Set(packed.slice(0, 500));
+  const kept = ((sheet.lines ?? []) as RefillLine[]).filter((line) => frozen.has(lineKey(line)));
+  const lines = [...kept, ...(fresh as RefillLine[]).filter((line) => !frozen.has(lineKey(line)))].sort(
+    (a, b) =>
+      a.machine_name.localeCompare(b.machine_name) ||
+      a.row_position - b.row_position ||
+      a.slot_position - b.slot_position,
+  );
+
+  // A run that was completed while this was being worked out keeps the lines
+  // it was closed with.
+  await admin.from("refill_sheets").update({ lines }).eq("id", sheet.id).is("completed_at", null);
+  return lines;
 }
 
 /** What the filler has put in the cool box so far, kept on the run itself. */

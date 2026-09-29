@@ -22,6 +22,7 @@ import type {
   SlowMover,
   StatsReport,
   UnassignedGroup,
+  WasteRow,
 } from "@/lib/types";
 
 // Server-only data access. Every query is scoped to an org id that the caller
@@ -36,24 +37,43 @@ export type StatsFilters = {
   products?: string[] | null;
 };
 
+/**
+ * An id no row can carry. A filter narrowed down to nothing has to stay
+ * nothing: passing null here would mean "no filter", which is the whole fleet.
+ */
+const NOTHING = "00000000-0000-0000-0000-000000000000";
+
+/** The machine ids the caller may see, or null when they see the whole fleet. */
+async function ownMachineIds(orgId: string): Promise<string[] | null> {
+  const { businessId } = await getScope();
+  if (!businessId) return null;
+  return (await getMachines(orgId)).map((m) => m.id);
+}
+
+/** null means "no filter"; an empty list means the caller asked for someone else's. */
+function narrow(asked: string[] | null | undefined, allowed: string[] | null): string[] | null {
+  if (allowed === null) return asked?.length ? asked : null;
+  const kept = asked?.length ? asked.filter((id) => allowed.includes(id)) : allowed;
+  return kept.length ? kept : [NOTHING];
+}
+
 export async function getStatsReport(orgId: string, filters: StatsFilters): Promise<StatsReport> {
   // A membership tied to one business narrows every report to it, whatever the
-  // page asked for — the filter is enforced here, not at the call site.
+  // page asked for — the filter is enforced here, not at the call site. Asking
+  // for a business, machine or product that is not yours answers with nothing.
   const { businessId } = await getScope();
-  const businesses = businessId
-    ? filters.businesses?.length
-      ? filters.businesses.filter((id) => id === businessId)
-      : [businessId]
-    : filters.businesses;
+  const [ownMachines, ownProducts] = businessId
+    ? await Promise.all([getMachines(orgId), getProducts(orgId)])
+    : [null, null];
 
   const { data, error } = await createAdminClient().rpc("stats_report", {
     target_org: orgId,
     period: filters.period,
     custom_from: filters.from ?? null,
     custom_to: filters.to ?? null,
-    machine_filter: filters.machines?.length ? filters.machines : null,
-    business_filter: businesses?.length ? businesses : null,
-    product_filter: filters.products?.length ? filters.products : null,
+    machine_filter: narrow(filters.machines, ownMachines && ownMachines.map((m) => m.id)),
+    business_filter: narrow(filters.businesses, businessId ? [businessId] : null),
+    product_filter: narrow(filters.products, ownProducts && ownProducts.map((p) => p.id)),
   });
   if (error) throw new Error(error.message);
   return data as StatsReport;
@@ -241,6 +261,9 @@ export async function getProductSlotCounts(orgId: string): Promise<Map<string, n
 const BUSINESS_COLUMNS = "id, name, logo_path, started_on, contact_name, email, phone, notes, share_token";
 
 export async function getBusiness(orgId: string, id: string): Promise<Business | null> {
+  // A guessed id must not open another customer's contact details or share link.
+  const { businessId } = await getScope();
+  if (businessId && id !== businessId) return null;
   const { data } = await createAdminClient()
     .from("businesses")
     .select(BUSINESS_COLUMNS)
@@ -298,9 +321,12 @@ export async function getBusinesses(orgId: string): Promise<Business[]> {
 
 /** Slots with stock over date or going over within the day, worst first. */
 export async function getExpiryAlerts(orgId: string): Promise<ExpiryAlert[]> {
+  const { businessId } = await getScope();
   const { data, error } = await createAdminClient().rpc("expiry_alerts", { target_org: orgId });
   if (error) throw new Error(error.message);
-  return ((data ?? []) as ExpiryAlert[]).map((a) => ({
+  return ((data ?? []) as ExpiryAlert[])
+    .filter((a) => !businessId || a.business_id === businessId)
+    .map((a) => ({
     ...a,
     qty_expired: Number(a.qty_expired),
     qty_expiring_24h: Number(a.qty_expiring_24h),
@@ -310,12 +336,38 @@ export async function getExpiryAlerts(orgId: string): Promise<ExpiryAlert[]> {
 
 /** Slots where a full load cannot sell out before its date. */
 export async function getSlowMovers(orgId: string): Promise<SlowMover[]> {
+  const { businessId } = await getScope();
   const { data, error } = await createAdminClient().rpc("slow_movers", { target_org: orgId });
   if (error) throw new Error(error.message);
-  return ((data ?? []) as SlowMover[]).map((s) => ({
+  return ((data ?? []) as SlowMover[])
+    .filter((s) => !businessId || s.business_id === businessId)
+    .map((s) => ({
     ...s,
     units_per_day: Number(s.units_per_day),
     days_to_sell_full: s.days_to_sell_full === null ? null : Number(s.days_to_sell_full),
+  }));
+}
+
+/**
+ * What went in the bin instead of over the counter, per product. A shop
+ * account only ever sees its own products — the narrowing happens here, so no
+ * screen can forget it.
+ */
+export async function getWasteReport(orgId: string, daysBack = 60): Promise<WasteRow[]> {
+  const { businessId } = await getScope();
+  const { data, error } = await createAdminClient().rpc("waste_report", {
+    target_org: orgId,
+    days_back: daysBack,
+    business_filter: businessId,
+  });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as WasteRow[]).map((row) => ({
+    ...row,
+    qty_expired: Number(row.qty_expired),
+    qty_sold: Number(row.qty_sold),
+    value_expired: Number(row.value_expired),
+    value_sold: Number(row.value_sold),
+    share_expired: row.share_expired === null ? null : Number(row.share_expired),
   }));
 }
 
@@ -332,9 +384,12 @@ export async function getBusinessFreshness(orgId: string, businessId: string): P
 }
 
 export async function getUnassigned(orgId: string): Promise<UnassignedGroup[]> {
+  const mine = await ownMachineIds(orgId);
   const { data, error } = await createAdminClient().rpc("unassigned_sales", { target_org: orgId });
   if (error) throw new Error(error.message);
-  return ((data ?? []) as UnassignedGroup[]).map((g) => ({
+  return ((data ?? []) as UnassignedGroup[])
+    .filter((g) => !mine || mine.includes(g.machine_id))
+    .map((g) => ({
     ...g,
     sales: Number(g.sales),
     revenue: Number(g.revenue),
@@ -390,23 +445,31 @@ export async function getLayoutTemplates(orgId: string): Promise<LayoutTemplate[
 }
 
 export async function getRefillSheets(orgId: string): Promise<RefillSheet[]> {
+  const mine = await ownMachineIds(orgId);
   const { data } = await createAdminClient()
     .from("refill_sheets")
     .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box")
     .eq("org_id", orgId)
     .order("created_at", { ascending: false })
-    .limit(10);
-  return (data ?? []) as RefillSheet[];
+    .limit(mine ? 60 : 10);
+  const sheets = (data ?? []) as RefillSheet[];
+  // A run belongs to whoever owns the machines it visited.
+  if (!mine) return sheets;
+  return sheets.filter((sheet) => sheet.machine_ids.some((id) => mine.includes(id))).slice(0, 10);
 }
 
 export async function getRefillSheet(orgId: string, id: string): Promise<RefillSheet | null> {
+  const mine = await ownMachineIds(orgId);
   const { data } = await createAdminClient()
     .from("refill_sheets")
     .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box")
     .eq("org_id", orgId)
     .eq("id", id)
     .maybeSingle();
-  return (data as RefillSheet) ?? null;
+  const sheet = (data as RefillSheet) ?? null;
+  // Guessing a sheet id must not print another customer's run.
+  if (!sheet || !mine) return sheet;
+  return sheet.machine_ids.some((machineId) => mine.includes(machineId)) ? sheet : null;
 }
 
 // Public: the share link carries the unguessable token instead of a login.
@@ -432,12 +495,14 @@ export async function getLastSyncedAt(orgId: string): Promise<string | null> {
 /** What the fridge came up short on, newest first, over the last 60 days. */
 export async function getShortages(orgId: string, days = 60): Promise<Shortage[]> {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
-  const { data } = await createAdminClient()
+  const { businessId } = await getScope();
+  let query = createAdminClient()
     .from("run_shortages")
-    .select("qty, noted_at, product_id, products(name)")
+    .select("qty, noted_at, product_id, products!inner(name, business_id)")
     .eq("org_id", orgId)
-    .gte("noted_at", since)
-    .order("noted_at", { ascending: false });
+    .gte("noted_at", since);
+  if (businessId) query = query.eq("products.business_id", businessId);
+  const { data } = await query.order("noted_at", { ascending: false });
 
   return (data ?? []).map((row) => {
     const product = row.products as unknown as { name: string } | null;
@@ -452,12 +517,17 @@ export async function getShortages(orgId: string, days = 60): Promise<Shortage[]
 
 /** Who makes the food, so a shortage or a batch going off has an address. */
 export async function getProducers(orgId: string): Promise<Producer[]> {
+  const { businessId } = await getScope();
   const { data } = await createAdminClient()
     .from("producers")
     .select("id, name, email, phone, notes")
     .eq("org_id", orgId)
     .order("name");
-  return (data ?? []) as Producer[];
+  const producers = (data ?? []) as Producer[];
+  if (!businessId) return producers;
+  // A shop only knows the producers behind its own products.
+  const mine = new Set((await getProducts(orgId)).map((product) => product.producer_id).filter(Boolean));
+  return producers.filter((producer) => mine.has(producer.id));
 }
 
 /** The report that closes a run: filled, out of date and short, per product. */
@@ -468,4 +538,22 @@ export async function getRunSummary(orgId: string, sheetId: string): Promise<Run
   });
   if (error) throw new Error(error.message);
   return (data ?? []) as RunSummaryRow[];
+}
+
+/** Refuses unless the caller's scope contains this machine. */
+export async function requireMachineAccess(orgId: string, machineId: string): Promise<void> {
+  if (!(await getMachine(orgId, machineId))) throw new Error("Not found");
+}
+
+/** Refuses unless the caller's scope contains this product. */
+export async function requireProductAccess(orgId: string, productId: string): Promise<void> {
+  const { businessId } = await getScope();
+  if (!businessId) return;
+  const { data } = await createAdminClient()
+    .from("products")
+    .select("business_id")
+    .eq("org_id", orgId)
+    .eq("id", productId)
+    .maybeSingle();
+  if (!data || data.business_id !== businessId) throw new Error("Not found");
 }

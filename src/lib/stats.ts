@@ -112,3 +112,27 @@ export function lastFullWeeks(n: number, timeZone: string, now: Date = new Date(
     to: new Date(monday.getTime() - 86_400_000).toISOString().slice(0, 10),
   };
 }
+
+/**
+ * What share of a product ends up in the bin, and whether that share is solid
+ * enough to act on. Same arithmetic as the rest of Vendly: a proportion out of
+ * n pieces wobbles by √(p(1−p)/n), and food wobbles four times harder than
+ * chance. One piece out of two is not a 50% problem, and Vendly says so.
+ */
+export type WasteVerdict = "tooFew" | "small" | "worthActing";
+
+/**
+ * Floor for calling waste a problem. Fresh food in a machine always loses a
+ * little; above three pieces in a hundred it is worth looking at. Vendly only
+ * says so when the 95% interval clears that floor, so a slot that lost two
+ * pieces out of forty stays quiet.
+ */
+const WASTE_FLOOR = 0.03;
+
+export function wasteVerdict(expired: number, sold: number): WasteVerdict {
+  const n = expired + sold;
+  if (n < MIN_SALES) return "tooFew";
+  const share = expired / n;
+  const margin = Z95 * Math.sqrt((DISPERSION * share * (1 - share)) / n);
+  return share - margin > WASTE_FLOOR ? "worthActing" : "small";
+}

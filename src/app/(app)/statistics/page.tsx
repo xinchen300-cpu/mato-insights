@@ -91,7 +91,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
         ) : (
           <>
             <div className="max-w-3xl">
-              <p className="font-heading text-xl leading-snug text-foreground sm:text-2xl">{headline}</p>
+              <p className="figure font-heading text-xl leading-snug text-foreground sm:text-2xl">{headline}</p>
               {productLine && <p className="mt-1.5 text-sm text-muted-foreground">{productLine}</p>}
             </div>
 
@@ -260,19 +260,33 @@ function summary(
   const revenue = f.euro(totals.revenue);
   const ratio = changeRatio(totals.revenue, totals.prev_revenue);
   const verdict = compareCounts(totals.units, totals.prev_units);
+  const unitRatio = changeRatio(totals.units, totals.prev_units);
+  // The verdict counts pieces, the percentage counts euros, and the two can
+  // point opposite ways when the mix shifts. Saying "a real increase" above a
+  // minus sign is the kind of nonsense Vendly exists to avoid, so when they
+  // disagree the sentence says what actually happened instead.
+  const mixShift =
+    ratio !== null && unitRatio !== null && (verdict === "up" || verdict === "down") && ratio * unitRatio < 0;
 
   const headline =
     ratio === null
       ? fmt(m.stats.summaryNoCompare, { revenue })
       : verdict === "tooFew"
         ? fmt(m.stats.summaryTooFew, { revenue })
-        : verdict === "noise"
-          ? fmt(m.stats.summaryNoise, { revenue, change: f.change(ratio), compare })
-          : fmt(verdict === "up" ? m.stats.summaryRealUp : m.stats.summaryRealDown, {
+        : mixShift
+          ? fmt(verdict === "up" ? m.stats.summaryMoreForLess : m.stats.summaryLessForMore, {
               revenue,
               change: f.change(ratio),
+              units: f.change(unitRatio!),
               compare,
-          });
+            })
+          : verdict === "noise"
+            ? fmt(m.stats.summaryNoise, { revenue, change: f.change(ratio), compare })
+            : fmt(verdict === "up" ? m.stats.summaryRealUp : m.stats.summaryRealDown, {
+                revenue,
+                change: f.change(ratio),
+                compare,
+              });
 
   // "Best" only when it is clearly ahead of the runner-up.
   const [first, second] = report.by_product

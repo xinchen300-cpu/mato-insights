@@ -10,14 +10,19 @@ import { saveRunCost } from "./actions";
 /** The two numbers that turn a measured run into an amount. */
 export function CostForm({ perHour, perKm }: { perHour: number; perKm: number }) {
   const { m } = useI18n();
-  const [saved, setSaved] = useState(false);
+  const [status, setStatus] = useState<"idle" | "saved" | "bad">("idle");
   const [isPending, startTransition] = useTransition();
 
+  /** Here a euro is written with a comma, so read it that way. */
+  function amount(value: FormDataEntryValue | null) {
+    return Number(String(value ?? "").trim().replace(",", "."));
+  }
+
   function submit(formData: FormData) {
-    setSaved(false);
+    setStatus("idle");
     startTransition(async () => {
-      await saveRunCost(Number(formData.get("perHour")), Number(formData.get("perKm")));
-      setSaved(true);
+      const ok = await saveRunCost(amount(formData.get("perHour")), amount(formData.get("perKm")));
+      setStatus(ok ? "saved" : "bad");
     });
   }
 
@@ -38,7 +43,8 @@ export function CostForm({ perHour, perKm }: { perHour: number; perKm: number })
       <Button type="submit" disabled={isPending}>
         {isPending ? m.common.saving : m.common.save}
       </Button>
-      {saved && <span className="text-sm text-positive">{m.settings.costSaved}</span>}
+      {status === "saved" && <span className="text-sm text-positive">{m.settings.costSaved}</span>}
+      {status === "bad" && <span className="text-sm text-negative">{m.settings.costBad}</span>}
     </form>
   );
 }

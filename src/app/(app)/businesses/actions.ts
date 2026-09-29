@@ -2,8 +2,9 @@
 
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { requireOrgId } from "@/lib/org";
+import { requireBusinessAccess, requireOperator, requireOrgId } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireMachineAccess } from "@/lib/data";
 import { imageFrom, removeImage, uploadImage } from "@/lib/upload";
 
 function text(formData: FormData, field: string): string | null {
@@ -15,6 +16,9 @@ export async function saveBusiness(formData: FormData) {
   const admin = createAdminClient();
 
   const id = String(formData.get("id") ?? "") || null;
+  // An id in a form is a request, not a permission.
+  if (id) await requireBusinessAccess(id);
+  else await requireOperator();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Name is required");
 
@@ -66,6 +70,8 @@ export async function saveBusiness(formData: FormData) {
  */
 export async function setBusinessShare(id: string, enabled: boolean): Promise<string | null> {
   const orgId = await requireOrgId();
+  // Minting or revoking a public link to someone else's figures is not on.
+  await requireBusinessAccess(id);
   const token = enabled ? randomBytes(18).toString("base64url") : null;
   const { error } = await createAdminClient()
     .from("businesses")
@@ -80,6 +86,7 @@ export async function setBusinessShare(id: string, enabled: boolean): Promise<st
 /** Per-terminal override of the business start date, for a second-hand machine. */
 export async function setMachineDataSince(machineId: string, value: string | null) {
   const orgId = await requireOrgId();
+  await requireMachineAccess(orgId, machineId);
   const { error } = await createAdminClient()
     .from("machines")
     .update({ data_since: value || null })
@@ -94,6 +101,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export async function deleteBusiness(id: string) {
   if (!UUID.test(id)) throw new Error("Invalid business");
   const orgId = await requireOrgId();
+  await requireOperator();
   const admin = createAdminClient();
 
   const { count } = await admin
