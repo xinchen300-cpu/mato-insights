@@ -24,6 +24,7 @@ export async function saveProduct(formData: FormData): Promise<Product> {
   if (!name) throw new Error("Name is required");
   const price = parsePrice(formData.get("price"));
   const business_id = String(formData.get("businessId") ?? "") || null;
+  const producer_id = String(formData.get("producerId") ?? "") || null;
   const shelfRaw = Number(String(formData.get("shelfLifeDays") ?? "").trim());
   const preset = String(formData.get("shelfLifePresetId") ?? "");
   // A category or an own number, never both: the number only counts as an override.
@@ -35,7 +36,7 @@ export async function saveProduct(formData: FormData): Promise<Product> {
   if (id) {
     const { data, error } = await admin
       .from("products")
-      .update({ name, price, business_id, shelf_life_days, shelf_life_preset_id })
+      .update({ name, price, business_id, producer_id, shelf_life_days, shelf_life_preset_id })
       .eq("id", id)
       .eq("org_id", orgId)
       .select(PRODUCT_COLUMNS)
@@ -45,7 +46,7 @@ export async function saveProduct(formData: FormData): Promise<Product> {
   } else {
     const { data, error } = await admin
       .from("products")
-      .insert({ org_id: orgId, name, price, business_id, shelf_life_days, shelf_life_preset_id })
+      .insert({ org_id: orgId, name, price, business_id, producer_id, shelf_life_days, shelf_life_preset_id })
       .select(PRODUCT_COLUMNS)
       .single();
     if (error) throw new Error(error.message);

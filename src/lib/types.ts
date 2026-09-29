@@ -152,6 +152,17 @@ export type Producer = {
   notes: string | null;
 };
 
+/** One product's line in the report that closes a run. */
+export type RunSummaryRow = {
+  product_id: string;
+  product_name: string;
+  producer_id: string | null;
+  producer_name: string | null;
+  filled: number;
+  expired: number;
+  short: number;
+};
+
 /** What a fridge could not supply on a run, per product. */
 export type Shortage = {
   product_id: string | null;

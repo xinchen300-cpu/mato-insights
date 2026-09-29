@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getScope } from "@/lib/org";
 import type {
   Producer,
+  RunSummaryRow,
   Shortage,
   Business,
   BusinessFreshness,
@@ -457,4 +458,14 @@ export async function getProducers(orgId: string): Promise<Producer[]> {
     .eq("org_id", orgId)
     .order("name");
   return (data ?? []) as Producer[];
+}
+
+/** The report that closes a run: filled, out of date and short, per product. */
+export async function getRunSummary(orgId: string, sheetId: string): Promise<RunSummaryRow[]> {
+  const { data, error } = await createAdminClient().rpc("run_summary", {
+    target_org: orgId,
+    sheet: sheetId,
+  });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as RunSummaryRow[];
 }

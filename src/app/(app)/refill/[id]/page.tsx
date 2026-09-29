@@ -6,9 +6,10 @@ import { SheetTables } from "@/components/refill/sheet-tables";
 import { buttonVariants } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getRefillSheet } from "@/lib/data";
+import { getRefillSheet, getRunSummary } from "@/lib/data";
 import { requireOrgId } from "@/lib/org";
 import { NotesForm } from "./notes-form";
+import { RunReport } from "./run-report";
 import { ShareBox } from "./share-box";
 
 export async function generateMetadata() {
@@ -23,6 +24,9 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
 
   const sheet = await getRefillSheet(orgId, id);
   if (!sheet) notFound();
+
+  // Only a closed run has something to report.
+  const summary = sheet.completed_at ? await getRunSummary(orgId, sheet.id) : [];
 
   const total = sheet.lines.reduce((sum, l) => sum + l.to_add, 0);
 
@@ -64,6 +68,12 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
           <CircleCheck className="size-5" />
           {fmt(m.refill.completedAt, { date: f.dateTime(sheet.completed_at) })}
         </p>
+      )}
+
+      {sheet.completed_at && (
+        <Panel title={m.refill.reportTitle} hint={m.refill.reportHint} className="mb-8">
+          <RunReport rows={summary} when={f.dateTime(sheet.completed_at)} />
+        </Panel>
       )}
 
       <div className="grid gap-8 lg:grid-cols-[1.5fr_1fr]">

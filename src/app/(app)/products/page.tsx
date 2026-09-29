@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { ArrowRight, Link2 } from "lucide-react";
+import { ArrowRight, Factory, Link2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
+import { buttonVariants } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import {
   getBusinesses,
+  getProducers,
   getProducts,
   getProductSlotCounts,
   getShelfLifePresets,
@@ -22,17 +24,27 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const { business } = await searchParams;
   const { m } = await getI18n();
   const orgId = await requireOrgId();
-  const [products, slotCounts, unassigned, businesses, presets] = await Promise.all([
+  const [products, slotCounts, unassigned, businesses, presets, producers] = await Promise.all([
     getProducts(orgId, { includeArchived: true }),
     getProductSlotCounts(orgId),
     getUnassigned(orgId),
     getBusinesses(orgId),
     getShelfLifePresets(orgId),
+    getProducers(orgId),
   ]);
 
   return (
     <>
-      <PageHeader title={m.products.title} subtitle={m.products.subtitle} />
+      <PageHeader
+        title={m.products.title}
+        subtitle={m.products.subtitle}
+        actions={
+          <Link href="/producers" className={buttonVariants({ variant: "outline" })}>
+            <Factory />
+            {m.producers.title}
+          </Link>
+        }
+      />
 
       {unassigned.length > 0 && (
         <Link
@@ -51,6 +63,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
         businesses={businesses.map((b) => ({ id: b.id, name: b.name }))}
         initialBusiness={businesses.some((b) => b.id === business) ? business : ""}
         presets={presets}
+        producers={producers.map((p) => ({ id: p.id, name: p.name }))}
       />
     </>
   );

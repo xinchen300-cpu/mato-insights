@@ -28,12 +28,14 @@ export function ProductGrid({
   businesses,
   initialBusiness = "",
   presets,
+  producers,
 }: {
   products: Product[];
   slotCounts: Record<string, number>;
   businesses: BusinessOption[];
   initialBusiness?: string;
   presets: ShelfLifePreset[];
+  producers: BusinessOption[];
 }) {
   const { m, f } = useI18n();
   const [editing, setEditing] = useState<Product | "new" | null>(null);
@@ -149,6 +151,7 @@ export function ProductGrid({
           product={editing === "new" ? null : editing}
           businesses={businesses}
           presets={presets}
+          producers={producers}
           defaultBusiness={business === NO_BUSINESS ? "" : business}
           onClose={() => setEditing(null)}
         />
@@ -161,12 +164,14 @@ function ProductDialog({
   product,
   businesses,
   presets,
+  producers,
   defaultBusiness,
   onClose,
 }: {
   product: Product | null;
   businesses: BusinessOption[];
   presets: ShelfLifePreset[];
+  producers: BusinessOption[];
   defaultBusiness: string;
   onClose: () => void;
 }) {
@@ -277,6 +282,24 @@ function ProductDialog({
             </select>
             <p className="text-xs text-muted-foreground">{m.products.businessHint}</p>
           </div>
+          {producers.length > 0 && (
+            <div className="grid gap-2">
+              <Label htmlFor="producerId">{m.producers.title}</Label>
+              <select
+                id="producerId"
+                name="producerId"
+                defaultValue={product?.producer_id ?? ""}
+                className={selectClass}
+              >
+                <option value="">{m.producers.none}</option>
+                {producers.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="grid gap-2">
             <Label>{m.products.photo}</Label>
             <ImagePicker
