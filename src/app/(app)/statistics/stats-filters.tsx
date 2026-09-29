@@ -27,7 +27,7 @@ export function StatsFilters({
   machine: string | null;
   product: string | null;
   businesses: Option[];
-  machines: (Option & { businessId: string | null })[];
+  machines: (Option & { businessIds: string[] })[];
   products: Option[];
 }) {
   const { m } = useI18n();
@@ -47,7 +47,10 @@ export function StatsFilters({
     startTransition(() => router.push(`${pathname}?${params.toString()}`, { scroll: false }));
   }
 
-  const machineOptions = business ? machines.filter((mc) => mc.businessId === business) : machines;
+  const machineOptions = business ? machines.filter((mc) => mc.businessIds.includes(business)) : machines;
+  // Narrowing the business must not leave a machine selected that the list no
+  // longer offers, or the bar says "all machines" while one is filtered out.
+  const machineValue = machineOptions.some((mc) => mc.id === machine) ? machine : "";
   const selectClass =
     "h-10 w-full border border-input bg-card px-3 text-base outline-none focus-visible:border-ring md:text-sm";
 
@@ -105,7 +108,7 @@ export function StatsFilters({
         </select>
         <select
           aria-label={m.stats.machine}
-          value={machine ?? ""}
+          value={machineValue ?? ""}
           onChange={(e) => update({ machine: e.target.value || null })}
           className={selectClass}
         >

@@ -8,6 +8,8 @@ import type { Machine, MachineSalesSplit, PaymentEntry, PaymentHealth } from "@/
 // Above this share of payments breaking off, the machine or its connection
 // deserves a look; a declined card is usually the customer's bank.
 const FAILED_WARNING = 0.02;
+/** Same idea as everywhere else: too few events, no conclusion. */
+const MIN_ATTEMPTS = 50;
 
 export function TerminalPanel({
   machine,
@@ -29,6 +31,10 @@ export function TerminalPanel({
   const since = status === "offline" ? machine.last_disconnected_at : machine.last_connected_at;
   const attempts = health ? health.approved + health.declined + health.failed : 0;
   const failedShare = health && attempts ? health.failed / attempts : 0;
+  // One customer walking away mid-tap on a quiet machine is not a broken
+  // terminal. Below this many attempts Vendly keeps the warning to itself.
+  const enoughTaps = attempts >= MIN_ATTEMPTS;
+  const failing = enoughTaps && failedShare > FAILED_WARNING;
   const flagLabels = m.status.flags as Record<string, string>;
   const reasonLabels = m.status.reasons as Record<string, string>;
 
@@ -113,15 +119,15 @@ export function TerminalPanel({
                   <span className="tabular block text-lg font-semibold">{f.number(health.declined)}</span>
                   <span className="text-xs text-muted-foreground">{m.status.declined}</span>
                 </li>
-                <li className={`border p-2 ${failedShare > FAILED_WARNING ? "border-negative/40 bg-card" : "bg-surface"}`}>
-                  <span className={`tabular block text-lg font-semibold ${failedShare > FAILED_WARNING ? "text-negative" : ""}`}>
+                <li className={`border p-2 ${failing ? "border-negative/40 bg-card" : "bg-surface"}`}>
+                  <span className={`tabular block text-lg font-semibold ${failing ? "text-negative" : ""}`}>
                     {f.number(health.failed)}
                   </span>
                   <span className="text-xs text-muted-foreground">{m.status.failed}</span>
                 </li>
               </ul>
               <p className="text-xs text-muted-foreground">
-                {failedShare > FAILED_WARNING
+                {failing
                   ? fmt(m.status.failedWarning, { pct: f.percent(failedShare) })
                   : m.status.paymentsHint}
               </p>

@@ -24,51 +24,68 @@ function lineFor(d: Digest): string | null {
 }
 
 Deno.serve(async (req) => {
-  const auth = req.headers.get("Authorization") ?? "";
-  if (!auth.includes(SERVICE_ROLE)) return new Response("forbidden", { status: 403 });
-
   const db = createClient(SUPABASE_URL, SERVICE_ROLE);
 
   const { data: keys } = await db.from("app_keys").select("name, value");
   const key = (name: string) => keys?.find((k) => k.name === name)?.value ?? "";
+
+  // Called by pg_cron with the shared secret; nothing else gets in.
+  const given = req.headers.get("x-notify-secret") ?? "";
+  if (!key("notify_secret") || given !== key("notify_secret")) {
+    return new Response("forbidden", { status: 403 });
+  }
+
+  const dryRun = new URL(req.url).searchParams.get("dry") === "1";
   webpush.setVapidDetails(key("vapid_subject"), key("vapid_public"), key("vapid_private"));
 
   const { data: orgs } = await db.from("organizations").select("id, name");
-  const results: { org: string; sent: number; dropped: number; skipped?: string }[] = [];
+  const results: { org: string; audience: string; line: string | null; sent: number; dropped: number }[] = [];
 
   for (const org of orgs ?? []) {
-    const { data } = await db.rpc("evening_digest", { target_org: org.id });
-    const digest = (Array.isArray(data) ? data[0] : data) as Digest | undefined;
-    const body = digest ? lineFor(digest) : null;
-    if (!body) {
-      results.push({ org: org.name, sent: 0, dropped: 0, skipped: "niets te melden" });
-      continue;
-    }
-
     const { data: subs } = await db.from("push_subscriptions").select("*").eq("org_id", org.id);
-    let sent = 0;
-    let dropped = 0;
+    if (!subs?.length) continue;
 
-    for (const sub of subs ?? []) {
-      try {
-        await webpush.sendNotification(
-          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          JSON.stringify({ title: "Vendly", body, url: "/", tag: "evening" }),
-        );
-        sent += 1;
-        await db.from("push_subscriptions").update({ last_sent_at: new Date().toISOString(), failures: 0 }).eq("endpoint", sub.endpoint);
-      } catch (error) {
-        // A browser that unsubscribed answers 404 or 410; that row is dead.
-        const status = (error as { statusCode?: number }).statusCode;
-        if (status === 404 || status === 410) {
-          await db.from("push_subscriptions").delete().eq("endpoint", sub.endpoint);
-          dropped += 1;
-        } else {
-          await db.from("push_subscriptions").update({ failures: (sub.failures ?? 0) + 1 }).eq("endpoint", sub.endpoint);
+    // A shop hears about its own machines, the operator about the whole fleet.
+    // So: one line per audience, not one line per organisation.
+    const audienceOf = (sub: { business_id: string | null }) => sub.business_id ?? "";
+    const audiences = [...new Set(subs.map(audienceOf))];
+
+    for (const audience of audiences) {
+      const { data } = await db.rpc("evening_digest", {
+        target_org: org.id,
+        target_business: audience || null,
+      });
+      const digest = (Array.isArray(data) ? data[0] : data) as Digest | undefined;
+      const body = digest ? lineFor(digest) : null;
+      const label = audience || "hele vloot";
+      if (!body || dryRun) {
+        results.push({ org: org.name, audience: label, line: body, sent: 0, dropped: 0 });
+        continue;
+      }
+
+      let sent = 0;
+      let dropped = 0;
+      for (const sub of subs.filter((s) => audienceOf(s) === audience)) {
+        try {
+          await webpush.sendNotification(
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            JSON.stringify({ title: "Vendly", body, url: "/", tag: "evening" }),
+          );
+          sent += 1;
+          await db.from("push_subscriptions").update({ last_sent_at: new Date().toISOString(), failures: 0 }).eq("endpoint", sub.endpoint);
+        } catch (error) {
+          // A browser that unsubscribed answers 404 or 410; that row is dead.
+          const status = (error as { statusCode?: number }).statusCode;
+          if (status === 404 || status === 410) {
+            await db.from("push_subscriptions").delete().eq("endpoint", sub.endpoint);
+            dropped += 1;
+          } else {
+            await db.from("push_subscriptions").update({ failures: (sub.failures ?? 0) + 1 }).eq("endpoint", sub.endpoint);
+          }
         }
       }
+      results.push({ org: org.name, audience: label, line: body, sent, dropped });
     }
-    results.push({ org: org.name, sent, dropped });
   }
 
   return new Response(JSON.stringify({ results }), { headers: { "Content-Type": "application/json" } });

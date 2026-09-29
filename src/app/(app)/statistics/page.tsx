@@ -43,7 +43,12 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
   const prevAvg = totals.prev_units ? totals.prev_revenue / totals.prev_units : 0;
 
   const named = report.by_product.filter((p) => p.product_id);
-  const best = named.filter((p) => p.units > 0).slice(0, 5);
+  // Sorted here on purpose: the headline above ranks by pieces, so this panel
+  // must too, or the same screen names two different best sellers.
+  const best = named
+    .filter((p) => p.units > 0)
+    .sort((a, b) => b.units - a.units || b.revenue - a.revenue)
+    .slice(0, 5);
   const slowest = [...named].sort((a, b) => a.units - b.units || a.revenue - b.revenue).slice(0, 5);
   // Judging a product slow takes whole weeks: fewer and it is mostly luck.
   const days = periodDays(report).length;
@@ -81,7 +86,12 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
             machine={machine}
             product={product}
             businesses={businesses.map((b) => ({ id: b.id, name: b.name }))}
-            machines={machines.map((mc) => ({ id: mc.id, name: mc.name, businessId: mc.business_id }))}
+            machines={machines.map((mc) => ({
+              id: mc.id,
+              name: mc.name,
+              // A shared fridge belongs to both its businesses, here as everywhere else.
+              businessIds: [mc.business_id, mc.shared_business_id].filter((id): id is string => Boolean(id)),
+            }))}
             products={products.map((p) => ({ id: p.id, name: p.name }))}
           />
         </Suspense>

@@ -154,12 +154,26 @@ function toMachine(row: MachineRow): Machine {
 }
 
 export async function getMachineStock(orgId: string, machineIds?: string[]): Promise<SlotStock[]> {
+  const { businessId } = await getScope();
   const { data, error } = await createAdminClient().rpc("machine_stock", {
     target_org: orgId,
     machine_filter: machineIds?.length ? machineIds : null,
   });
   if (error) throw new Error(error.message);
-  return (data ?? []) as SlotStock[];
+  const slots = (data ?? []) as SlotStock[];
+  if (!businessId) return slots;
+
+  // On a fridge two shops share, the co-tenant's slots stay on the drawing —
+  // taking them out would leave holes and make the machine unreadable — but
+  // what is in them, what it costs and how much is left is not yours to see.
+  const mine = new Set((await getMachines(orgId)).map((m) => m.id));
+  return slots
+    .filter((slot) => mine.has(slot.machine_id))
+    .map((slot) =>
+      slot.business_id === businessId
+        ? slot
+        : { ...slot, product_id: null, product_name: null, photo_path: null, price: null, stock: null },
+    );
 }
 
 /** Per machine: payments that went through and those that did not, since a date. */
@@ -200,13 +214,16 @@ export async function getMachineSalesSplit(
   machineId: string,
   since: Date,
 ): Promise<MachineSalesSplit[]> {
+  const { businessId } = await getScope();
   const { data, error } = await createAdminClient().rpc("machine_sales_split", {
     target_org: orgId,
     target_machine: machineId,
     since: since.toISOString(),
   });
   if (error) throw new Error(error.message);
-  return ((data ?? []) as MachineSalesSplit[]).map((r) => ({
+  return ((data ?? []) as MachineSalesSplit[])
+    .filter((r) => !businessId || r.business_id === businessId)
+    .map((r) => ({
     ...r,
     units: Number(r.units),
     revenue: Number(r.revenue),
