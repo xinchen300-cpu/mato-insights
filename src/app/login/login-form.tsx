@@ -47,6 +47,12 @@ export function LoginForm({ canSignUp }: { canSignUp: boolean }) {
           <Input id="password" name="password" type="password" required autoComplete="current-password" />
         </div>
         {error && <p className="text-sm text-negative">{m.auth.wrongLogin}</p>}
+        <Link
+          href="/login/forgot"
+          className="justify-self-start text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+        >
+          {m.auth.forgot}
+        </Link>
         <Button type="submit" size="lg" disabled={loading} className="mt-2">
           {loading ? m.auth.signingIn : m.auth.signIn}
         </Button>
