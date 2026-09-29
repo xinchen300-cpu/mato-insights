@@ -3,6 +3,7 @@ import { getStatsReport } from "@/lib/data";
 import { getI18n } from "@/i18n/server";
 import { requireOrgId } from "@/lib/org";
 import { parseStatsParams } from "@/lib/stats-params";
+import { reportDay } from "@/lib/stats";
 
 export async function GET(request: Request) {
   const { m } = await getI18n();
@@ -10,9 +11,14 @@ export async function GET(request: Request) {
   const params = Object.fromEntries(new URL(request.url).searchParams);
   const { filters } = parseStatsParams(params);
   const report = await getStatsReport(orgId, filters);
+  // The period is read where the business stands, not in UTC: a September
+  // report must not tell the accountant it starts on 31 August. The end is the
+  // first moment after the period, so the last day it covers is a tick earlier.
+  const firstDay = reportDay(report.cur_start, report.timezone);
+  const lastDay = reportDay(new Date(report.cur_end).getTime() - 1, report.timezone);
 
   const rows: (string | number | null)[][] = [
-    [m.stats.period, report.cur_start.slice(0, 10), report.cur_end.slice(0, 10)],
+    [m.stats.period, firstDay, lastDay],
     [m.stats.revenue, report.totals.revenue],
     [m.stats.units, report.totals.units],
     [],
@@ -28,5 +34,5 @@ export async function GET(request: Request) {
     ...report.by_day.map((d) => [d.day, d.units, d.revenue]),
   ];
 
-  return csvResponse(`vendly-${report.period}-${report.cur_start.slice(0, 10)}.csv`, rows);
+  return csvResponse(`vendly-${report.period}-${firstDay}.csv`, rows);
 }

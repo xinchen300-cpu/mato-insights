@@ -32,8 +32,11 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
 
   // The cool box is keyed by product id; the lines know the names.
   const nameOf = new Map(sheet.lines.map((l) => [l.product_id, l.product_name]));
+  // Keyed by product id, since two products may share a name, and a product
+  // that dropped out of the plan would otherwise render as a nameless "—".
   const box = Object.entries(sheet.box ?? {})
-    .map(([id, qty]) => ({ name: nameOf.get(id) ?? "—", qty }))
+    .map(([id, qty]) => ({ id, name: nameOf.get(id) ?? null, qty }))
+    .filter((row) => row.name !== null)
     .sort((a, b) => b.qty - a.qty);
 
   const minutes =
@@ -116,7 +119,7 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
               ) : (
                 <ul className="flex flex-col divide-y">
                   {box.map((row) => (
-                    <li key={row.name} className="flex items-baseline justify-between gap-4 py-2.5">
+                    <li key={row.id} className="flex items-baseline justify-between gap-4 py-2.5">
                       <span className="min-w-0 truncate">{row.name}</span>
                       <span className="tabular font-semibold">{row.qty}</span>
                     </li>

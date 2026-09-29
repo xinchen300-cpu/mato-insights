@@ -136,51 +136,76 @@ export function LayoutBuilder({
   const [selRow, selIndex] = selectedKey ? selectedKey.split(":").map(Number) : [null, null];
   const selectedSelection = selRow !== null && selIndex !== null ? rows[selRow]?.selections[selIndex] : undefined;
 
+  /**
+   * A product link and a slot's owner hang on the selection number, so when a
+   * number changes they have to travel with the slot. Otherwise renumbering a
+   * row hands the neighbour's product — and on a shared fridge, the neighbour's
+   * revenue — to whoever happens to land on that number.
+   */
+  function moveByPosition<T>(map: Record<string, T>, from: string[], to: string[]): Record<string, T> {
+    if (from.join() === to.join()) return map;
+    const next = { ...map };
+    for (const selection of from) delete next[selection];
+    from.forEach((was, i) => {
+      const now = to[i];
+      if (now && map[was] !== undefined) next[now] = map[was];
+    });
+    return next;
+  }
+
+  function renumbered(from: string[], to: string[]) {
+    setAssignments((current) => moveByPosition(current, from, to));
+    setSlotOwners((current) => moveByPosition(current, from, to));
+  }
+
   function updateRow(index: number, patch: Partial<Pick<EditorRow, "size" | "depth" | "step" | "first">> & { count?: number }) {
-    setRows((current) =>
-      current.map((row, i) => {
-        if (i !== index) return row;
-        const next = { ...row, ...patch };
-        if (patch.size && patch.step === undefined) next.step = defaultStep(patch.size);
-        // Changing the count keeps the numbers already typed and adds or drops
-        // from the end; a new size renumbers the row, since the step changes.
-        if (patch.count !== undefined) {
-          const count = Math.max(1, Math.min(20, patch.count));
-          const step = next.step || defaultStep(next.size);
-          const last = Number(row.selections[row.selections.length - 1] ?? index * 10);
-          next.selections =
-            count <= row.selections.length
-              ? row.selections.slice(0, count)
-              : [
-                  ...row.selections,
-                  ...Array.from({ length: count - row.selections.length }, (_, k) => String(last + step * (k + 1))),
-                ];
-        } else if (patch.size) {
-          next.selections = numberRow(index, row.selections.length, next.step, next.first);
-        }
-        return next;
-      }),
-    );
+    const row = rows[index];
+    if (!row) return;
+    const next = { ...row, ...patch };
+    if (patch.size && patch.step === undefined) next.step = defaultStep(patch.size);
+    // Changing the count keeps the numbers already typed and adds or drops
+    // from the end; a new size renumbers the row, since the step changes.
+    if (patch.count !== undefined) {
+      const count = Math.max(1, Math.min(20, patch.count));
+      const step = next.step || defaultStep(next.size);
+      const last = Number(row.selections[row.selections.length - 1] ?? index * 10);
+      next.selections =
+        count <= row.selections.length
+          ? row.selections.slice(0, count)
+          : [
+              ...row.selections,
+              ...Array.from({ length: count - row.selections.length }, (_, k) => String(last + step * (k + 1))),
+            ];
+    } else if (patch.size) {
+      next.selections = numberRow(index, row.selections.length, next.step, next.first);
+    }
+
+    setRows((current) => current.map((r, i) => (i === index ? next : r)));
+    renumbered(row.selections, next.selections);
     setSelectedKey(null);
   }
 
   function setSelectionAt(rowIndex: number, slotIndex: number, value: string) {
     const clean = value.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+    const was = rows[rowIndex]?.selections[slotIndex];
     setRows((current) =>
       current.map((row, i) =>
         i === rowIndex ? { ...row, selections: row.selections.map((s, j) => (j === slotIndex ? clean : s)) } : row,
       ),
     );
+    if (was && was !== clean) renumbered([was], [clean]);
   }
 
   function setSelection(value: string) {
     if (selRow === null || selIndex === null) return;
     const clean = value.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+    const was = rows[selRow]?.selections[selIndex];
     setRows((current) =>
       current.map((row, i) =>
         i === selRow ? { ...row, selections: row.selections.map((s, j) => (j === selIndex ? clean : s)) } : row,
       ),
     );
+    if (was && was !== clean) renumbered([was], [clean]);
   }
 
   function addRow() {
@@ -221,6 +246,11 @@ export function LayoutBuilder({
     for (const selection of allSelections) {
       const next = assignments[selection] ?? null;
       if (next !== (initialAssignments[selection] ?? null)) changed[selection] = next;
+    }
+    // A selection that was renumbered away still carries its old link in the
+    // database; say so, or the product stays attached to a slot that is gone.
+    for (const selection of Object.keys(initialAssignments)) {
+      if (initialAssignments[selection] && !allSelections.includes(selection)) changed[selection] = null;
     }
 
     startTransition(async () => {

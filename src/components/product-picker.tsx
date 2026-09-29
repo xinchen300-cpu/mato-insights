@@ -49,7 +49,10 @@ export function ProductPicker({
     return list.slice(0, 60);
   }, [products, query]);
 
-  const exactMatch = products.some((p) => normalize(p.name) === normalize(query));
+  // The product whose name IS what was typed, not merely one that contains it:
+  // typing "Rijst" must not link "Gebakken Rijst" because it sorts first.
+  const exact = products.find((p) => normalize(p.name) === normalize(query));
+  const exactMatch = Boolean(exact);
   const canCreate = Boolean(onCreate && query.trim() && !exactMatch);
 
   useEffect(() => {
@@ -113,7 +116,8 @@ export function ProductPicker({
               if (e.key === "Escape") setOpen(false);
               if (e.key === "Enter") {
                 e.preventDefault();
-                if (matches.length > 0 && (exactMatch || !canCreate)) choose(matches[0].id);
+                if (exact) choose(exact.id);
+                else if (matches.length > 0 && !canCreate) choose(matches[0].id);
                 else if (canCreate) void create();
               }
             }}

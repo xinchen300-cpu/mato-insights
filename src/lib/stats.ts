@@ -44,6 +44,16 @@ function localDay(instant: string | number | Date, timeZone: string): string {
   return format.format(new Date(instant));
 }
 
+/**
+ * A moment as the calendar day it falls on where the business stands. Slicing
+ * an ISO string instead reads the day in UTC, which in Belgian summer is two
+ * hours behind — a September report would announce itself as starting on
+ * 31 August.
+ */
+export function reportDay(instant: string | number | Date, timeZone: string): string {
+  return localDay(instant, timeZone);
+}
+
 /** Every calendar day the report covers, in its own time zone ("2026-09-21"). */
 export function periodDays(report: StatsReport): string[] {
   const first = localDay(report.cur_start, report.timezone);
