@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
-import { Check, CircleCheck } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { Check, CircleCheck, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/client";
@@ -10,15 +10,18 @@ import { mediaUrl } from "@/lib/media";
 import { ExpiryPicker } from "@/components/refill/date-picker";
 import { combineByProduct, groupByMachine, lineKey, suggestedDate } from "@/lib/refill";
 import type { RefillLine } from "@/lib/types";
-import { completeSheet, saveBox } from "./actions";
+import { completeSheet, refreshLines, saveBox } from "./actions";
 
 const CHECK_KEYS = ["expired", "clean", "labels", "test"] as const;
 // The name outlives one sheet: the same person usually fills again next week.
 const FILLER_KEY = "vendly-filler";
+// Often enough that the list is never far off, rarely enough that a phone on a
+// bad connection in a storage room is not busy all morning.
+const REFRESH_MS = 90_000;
 
 export function FillerView({
   token,
-  lines,
+  lines: initialLines,
   notes,
   completed,
 }: {
@@ -42,6 +45,13 @@ export function FillerView({
   const [expiryMissing, setExpiryMissing] = useState(false);
   const [km, setKm] = useState("");
   const [isPending, startTransition] = useTransition();
+  // The list is not frozen: it is what the machines need right now.
+  const [lines, setLines] = useState(initialLines);
+  // Per slot, how much was sold since the filler last looked at it.
+  const [sold, setSold] = useState<Record<string, number>>({});
+  const [refreshing, setRefreshing] = useState(false);
+  const linesRef = useRef(lines);
+  linesRef.current = lines;
 
   // Ticks survive a reload or a dropped connection in the storage room.
   useEffect(() => {
@@ -76,6 +86,56 @@ export function FillerView({
     }, 1200);
     return () => clearTimeout(timer);
   }, [lines, ticked, amounts, token]);
+
+  /**
+   * Ask what the machines need now and fold it into what the filler has
+   * already ticked. A slot they packed stays on the list even if the plan
+   * would drop it, so nothing disappears out of the cool box.
+   */
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const fresh = await refreshLines(token);
+      if (!fresh) return;
+      const before = new Map(linesRef.current.map((l) => [lineKey(l), l]));
+      const keptKeys = new Set(fresh.map((l) => lineKey(l)));
+      const merged = [
+        ...fresh,
+        ...linesRef.current.filter((l) => !keptKeys.has(lineKey(l)) && ticked.has(lineKey(l))),
+      ];
+      setSold((s) => {
+        const next = { ...s };
+        for (const line of fresh) {
+          const key = lineKey(line);
+          const grew = line.to_add - (before.get(key)?.to_add ?? line.to_add);
+          if (grew > 0) next[key] = (next[key] ?? 0) + grew;
+        }
+        return next;
+      });
+      setLines(merged);
+    } catch {
+      // Out of range at the machine; the list on screen is still usable.
+    } finally {
+      setRefreshing(false);
+    }
+  }, [token, ticked]);
+
+  // While the run is open: on a timer, and whenever the filler comes back to
+  // the tab after driving.
+  useEffect(() => {
+    if (completed || status !== "idle") return;
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") void refresh();
+    }, REFRESH_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [completed, status, refresh]);
 
   function toggle(key: string) {
     setTicked((t) => {
@@ -141,6 +201,7 @@ export function FillerView({
 
   const combined = combineByProduct(lines);
   const machines = groupByMachine(lines);
+  const soldTotal = Object.values(sold).reduce((n, v) => n + v, 0);
 
   // Lines that carry a date at all, and the date they share when they agree.
   const dated = lines.filter((l) => suggestedDate(l));
@@ -158,6 +219,22 @@ export function FillerView({
         <div className="border border-primary/30 bg-accent p-4 text-[15px]">
           <p className="eyebrow mb-1">{m.refill.notes}</p>
           <p className="whitespace-pre-wrap">{notes}</p>
+        </div>
+      )}
+
+      {soldTotal > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border border-primary/40 bg-accent p-4">
+          <p className="text-[15px]">
+            <span className="font-semibold">{fmt(m.refill.soldMeanwhile, { count: soldTotal })}</span>{" "}
+            <span className="text-muted-foreground">{m.refill.soldMeanwhileHint}</span>
+          </p>
+          <button
+            type="button"
+            onClick={() => setSold({})}
+            className="text-xs font-semibold text-muted-foreground underline underline-offset-2"
+          >
+            {m.refill.soldSeen}
+          </button>
         </div>
       )}
 
@@ -266,6 +343,11 @@ export function FillerView({
                       {line.qty_expired > 0 && (
                         <span className="font-semibold text-negative">
                           {fmt(m.refill.pullFirst, { count: line.qty_expired })}
+                        </span>
+                      )}
+                      {(sold[key] ?? 0) > 0 && (
+                        <span className="font-semibold text-accent-foreground">
+                          {fmt(m.refill.soldHere, { count: sold[key] })}
                         </span>
                       )}
                       {suggestedDate(line) && (
@@ -381,7 +463,18 @@ export function FillerView({
 
       <div className="fixed inset-x-0 bottom-0 border-t bg-card/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur">
         <div className="mx-auto flex max-w-2xl flex-col gap-2">
-          <p className="text-xs text-muted-foreground">{m.refill.adjustHint}</p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground">{m.refill.adjustHint}</p>
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              disabled={refreshing}
+              className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-muted-foreground underline underline-offset-2 disabled:no-underline"
+            >
+              <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
+              {refreshing ? m.refill.refreshing : m.refill.refresh}
+            </button>
+          </div>
           {status === "error" && <p className="text-sm text-negative">{m.common.error}</p>}
           <Button size="lg" onClick={confirm} disabled={isPending} className="w-full">
             <CircleCheck />

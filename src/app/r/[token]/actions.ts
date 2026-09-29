@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getRefillSheetByToken } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { RefillLine } from "@/lib/types";
 
 // Public: authorised by the unguessable share token, not by a login.
 /**
@@ -13,19 +14,35 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export async function startRun(token: string) {
   const admin = createAdminClient();
   await admin.rpc("start_run", { sheet_token: token });
+  await recompute(token);
+}
 
+/**
+ * The shop keeps selling while the filler is at the fridge or in the van, so
+ * the list on their phone would slowly stop matching the machine. Asking again
+ * costs one query and keeps the sheet honest: what sold in the meantime is
+ * simply on the list again. A closed run is never touched.
+ */
+export async function refreshLines(token: string): Promise<RefillLine[] | null> {
+  return recompute(token);
+}
+
+async function recompute(token: string): Promise<RefillLine[] | null> {
+  const admin = createAdminClient();
   const { data: sheet } = await admin
     .from("refill_sheets")
     .select("id, org_id, machine_ids, completed_at")
     .eq("share_token", token)
     .maybeSingle();
-  if (!sheet || sheet.completed_at) return;
+  if (!sheet || sheet.completed_at) return null;
 
   const { data: lines } = await admin.rpc("refill_plan", {
     target_org: sheet.org_id,
     machine_filter: sheet.machine_ids,
   });
-  if (lines) await admin.from("refill_sheets").update({ lines }).eq("id", sheet.id);
+  if (!lines) return null;
+  await admin.from("refill_sheets").update({ lines }).eq("id", sheet.id);
+  return lines as RefillLine[];
 }
 
 /** What the filler has put in the cool box so far, kept on the run itself. */
