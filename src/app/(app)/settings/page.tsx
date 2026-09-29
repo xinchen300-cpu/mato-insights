@@ -20,6 +20,7 @@ import { getCurrentOrgId } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { connectPayter, deleteTemplate } from "./actions";
 import { CostForm } from "./cost-form";
+import { NotifyToggle } from "./notify-toggle";
 import { ShelfLifePresets } from "./shelf-life-presets";
 import { SyncNowButton } from "./sync-now-button";
 
@@ -128,6 +129,14 @@ export default async function SettingsPage() {
                 );
               })}
             </ul>
+          )}
+        </Panel>
+
+        <Panel title={m.settings.notifyTitle} hint={m.settings.notifyHint}>
+          {process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ? (
+            <NotifyToggle publicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY} />
+          ) : (
+            <p className="text-sm text-muted-foreground">{m.settings.notifyUnsupported}</p>
           )}
         </Panel>
 

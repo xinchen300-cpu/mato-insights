@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getCurrentOrgId } from "@/lib/org";
+import { getCurrentBusinessId, getCurrentOrgId } from "@/lib/org";
 import { triggerPayterSync } from "@/lib/sync";
 
 async function requireOrgId() {
@@ -84,4 +84,31 @@ export async function saveRunCost(perHour: number, perKm: number) {
     .update({ cost_per_hour: hour, cost_per_km: km })
     .eq("id", orgId);
   revalidatePath("/", "layout");
+}
+
+/** Remember this browser as somewhere Vendly may send a notification. */
+export async function rememberDevice(sub: { endpoint: string; p256dh: string; auth: string; label: string }) {
+  const orgId = await requireOrgId();
+  const businessId = await getCurrentBusinessId();
+  if (!sub.endpoint || !sub.p256dh || !sub.auth) return;
+
+  await createAdminClient()
+    .from("push_subscriptions")
+    .upsert(
+      {
+        endpoint: sub.endpoint,
+        org_id: orgId,
+        business_id: businessId,
+        p256dh: sub.p256dh,
+        auth: sub.auth,
+        label: sub.label,
+        failures: 0,
+      },
+      { onConflict: "endpoint" },
+    );
+}
+
+export async function forgetDevice(endpoint: string) {
+  const orgId = await requireOrgId();
+  await createAdminClient().from("push_subscriptions").delete().eq("endpoint", endpoint).eq("org_id", orgId);
 }
