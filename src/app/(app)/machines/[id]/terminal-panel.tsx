@@ -2,14 +2,13 @@ import { StatusBadge } from "@/components/machine/status-badge";
 import { Panel } from "@/components/page-header";
 import { fmt, plural, type Formatters } from "@/i18n/format";
 import type { Messages } from "@/i18n/messages";
+import { shareIsReal } from "@/lib/stats";
 import { terminalStatus } from "@/lib/terminal-status";
 import type { Machine, MachineSalesSplit, PaymentEntry, PaymentHealth } from "@/lib/types";
 
 // Above this share of payments breaking off, the machine or its connection
 // deserves a look; a declined card is usually the customer's bank.
 const FAILED_WARNING = 0.02;
-/** Same idea as everywhere else: too few events, no conclusion. */
-const MIN_ATTEMPTS = 50;
 
 export function TerminalPanel({
   machine,
@@ -32,9 +31,11 @@ export function TerminalPanel({
   const attempts = health ? health.approved + health.declined + health.failed : 0;
   const failedShare = health && attempts ? health.failed / attempts : 0;
   // One customer walking away mid-tap on a quiet machine is not a broken
-  // terminal. Below this many attempts Vendly keeps the warning to itself.
-  const enoughTaps = attempts >= MIN_ATTEMPTS;
-  const failing = enoughTaps && failedShare > FAILED_WARNING;
+  // terminal, but a machine that fails most of its taps is — however few they
+  // are. So the same test as everywhere else: the share counts as real when
+  // its 95% interval clears the floor, which keeps 1-in-8 quiet and 30-in-34
+  // loud.
+  const failing = attempts > 0 && shareIsReal(health?.failed ?? 0, attempts, FAILED_WARNING);
   const flagLabels = m.status.flags as Record<string, string>;
   const reasonLabels = m.status.reasons as Record<string, string>;
 

@@ -49,9 +49,14 @@ export default async function MachinesPage() {
   for (const slot of stock) {
     const s = summary.get(slot.machine_id) ?? { stock: 0, capacity: 0, low: 0, slots: 0, counted: false };
     s.slots += 1;
-    s.capacity += slot.capacity;
-    s.stock += slot.stock ?? 0;
-    if (slot.stock !== null) s.counted = true;
+    // A slot with no count — never counted, or a co-tenant's on a shared
+    // fridge — belongs to neither side of the sum, or a full machine reads as
+    // half empty.
+    if (slot.stock !== null) {
+      s.capacity += slot.capacity;
+      s.stock += slot.stock;
+      s.counted = true;
+    }
     if (slot.product_id && needsAttention(fillLevel(slot.stock, slot.capacity))) s.low += 1;
     summary.set(slot.machine_id, s);
   }

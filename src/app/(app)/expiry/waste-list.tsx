@@ -35,7 +35,7 @@ export function WasteList({ rows }: { rows: WasteRow[] }) {
                   />
                   {row.product_name}
                 </span>
-                <span className="block truncate text-sm text-muted-foreground">
+                <span className="figure block truncate text-sm text-muted-foreground">
                   {row.producer_name ? `${row.producer_name} · ` : ""}
                   {fmt(m.expiry.binSold, { count: row.qty_sold })}
                 </span>
@@ -46,7 +46,7 @@ export function WasteList({ rows }: { rows: WasteRow[] }) {
                 </span>
                 <span
                   className={cn(
-                    "block text-xs",
+                    "figure block text-xs",
                     verdict === "worthActing" ? "font-semibold text-negative" : "text-muted-foreground",
                   )}
                 >

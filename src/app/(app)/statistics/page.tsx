@@ -102,7 +102,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
           <>
             <div className="max-w-3xl">
               <p className="figure font-heading text-xl leading-snug text-foreground sm:text-2xl">{headline}</p>
-              {productLine && <p className="mt-1.5 text-sm text-muted-foreground">{productLine}</p>}
+              {productLine && <p className="figure mt-1.5 text-sm text-muted-foreground">{productLine}</p>}
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -287,7 +287,7 @@ function summary(
           ? fmt(verdict === "up" ? m.stats.summaryMoreForLess : m.stats.summaryLessForMore, {
               revenue,
               change: f.change(ratio),
-              units: f.change(unitRatio!),
+              units: f.percent(Math.abs(unitRatio!)),
               compare,
             })
           : verdict === "noise"

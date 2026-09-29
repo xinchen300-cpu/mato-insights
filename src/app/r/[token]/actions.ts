@@ -12,10 +12,14 @@ import type { RefillLine } from "@/lib/types";
  * while the run was being prepared is already off the list again. Only while
  * the run is open — a closed run keeps the lines it was closed with.
  */
+/**
+ * Opening the sheet starts the clock, and nothing else. It used to refresh the
+ * lines here too, but the page re-renders on every request, so that threw away
+ * the freeze on everything the filler had already ticked and packed. The list
+ * is brought up to date by the sheet itself, which knows what is in the box.
+ */
 export async function startRun(token: string) {
-  const admin = createAdminClient();
-  await admin.rpc("start_run", { sheet_token: token });
-  await recompute(token, []);
+  await createAdminClient().rpc("start_run", { sheet_token: token });
 }
 
 /**

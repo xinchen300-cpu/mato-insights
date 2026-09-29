@@ -4,12 +4,16 @@ import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireOrgId } from "@/lib/org";
+import { requireMachineAccess } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { RefillLine } from "@/lib/types";
 
 export async function createRefillSheet(machineIds: string[]): Promise<{ empty: true } | void> {
   const orgId = await requireOrgId();
   if (machineIds.length === 0) return { empty: true };
+  // The list comes from a checkbox on a page, so it comes from the client:
+  // asking for a machine that is not yours must not put it on your sheet.
+  for (const machineId of machineIds) await requireMachineAccess(orgId, machineId);
   const admin = createAdminClient();
 
   const { data, error } = await admin.rpc("refill_plan", { target_org: orgId, machine_filter: machineIds });

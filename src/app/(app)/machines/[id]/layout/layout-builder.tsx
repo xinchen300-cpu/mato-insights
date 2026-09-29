@@ -142,20 +142,38 @@ export function LayoutBuilder({
    * row hands the neighbour's product — and on a shared fridge, the neighbour's
    * revenue — to whoever happens to land on that number.
    */
-  function moveByPosition<T>(map: Record<string, T>, from: string[], to: string[]): Record<string, T> {
+  function moveByPosition<T>(
+    map: Record<string, T>,
+    from: string[],
+    to: string[],
+    taken: Set<string>,
+  ): Record<string, T> {
     if (from.join() === to.join()) return map;
     const next = { ...map };
-    for (const selection of from) delete next[selection];
+    const parked: [string, T][] = [];
     from.forEach((was, i) => {
       const now = to[i];
-      if (now && map[was] !== undefined) next[now] = map[was];
+      const value = map[was];
+      if (value === undefined) return;
+      // Nowhere safe to put it — the box is half typed, or that number already
+      // belongs to another row — so leave it where it is rather than lose it.
+      if (!now || taken.has(now) || taken.has(was)) return;
+      delete next[was];
+      parked.push([now, value]);
     });
+    for (const [now, value] of parked) next[now] = value;
     return next;
   }
 
-  function renumbered(from: string[], to: string[]) {
-    setAssignments((current) => moveByPosition(current, from, to));
-    setSlotOwners((current) => moveByPosition(current, from, to));
+  /** Every number in use by the other rows: never overwritten, never emptied. */
+  function othersThan(rowIndex: number) {
+    return new Set(rows.flatMap((row, i) => (i === rowIndex ? [] : row.selections)));
+  }
+
+  function renumbered(rowIndex: number, from: string[], to: string[]) {
+    const taken = othersThan(rowIndex);
+    setAssignments((current) => moveByPosition(current, from, to, taken));
+    setSlotOwners((current) => moveByPosition(current, from, to, taken));
   }
 
   function updateRow(index: number, patch: Partial<Pick<EditorRow, "size" | "depth" | "step" | "first">> & { count?: number }) {
@@ -181,7 +199,7 @@ export function LayoutBuilder({
     }
 
     setRows((current) => current.map((r, i) => (i === index ? next : r)));
-    renumbered(row.selections, next.selections);
+    renumbered(index, row.selections, next.selections);
     setSelectedKey(null);
   }
 
@@ -193,7 +211,7 @@ export function LayoutBuilder({
         i === rowIndex ? { ...row, selections: row.selections.map((s, j) => (j === slotIndex ? clean : s)) } : row,
       ),
     );
-    if (was && was !== clean) renumbered([was], [clean]);
+    if (was && was !== clean) renumbered(rowIndex, [was], [clean]);
   }
 
   function setSelection(value: string) {
@@ -205,7 +223,7 @@ export function LayoutBuilder({
         i === selRow ? { ...row, selections: row.selections.map((s, j) => (j === selIndex ? clean : s)) } : row,
       ),
     );
-    if (was && was !== clean) renumbered([was], [clean]);
+    if (was && was !== clean) renumbered(selRow, [was], [clean]);
   }
 
   function addRow() {

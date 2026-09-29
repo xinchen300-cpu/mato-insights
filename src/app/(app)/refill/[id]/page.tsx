@@ -34,9 +34,10 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
   const nameOf = new Map(sheet.lines.map((l) => [l.product_id, l.product_name]));
   // Keyed by product id, since two products may share a name, and a product
   // that dropped out of the plan would otherwise render as a nameless "—".
+  // A product that dropped out of the plan is still in the van, so it stays on
+  // the list with a dash for a name. Hiding it would claim an empty cool box.
   const box = Object.entries(sheet.box ?? {})
-    .map(([id, qty]) => ({ id, name: nameOf.get(id) ?? null, qty }))
-    .filter((row) => row.name !== null)
+    .map(([id, qty]) => ({ id, name: nameOf.get(id) ?? "—", qty }))
     .sort((a, b) => b.qty - a.qty);
 
   const minutes =

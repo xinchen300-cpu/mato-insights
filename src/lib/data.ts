@@ -43,6 +43,19 @@ export type StatsFilters = {
  */
 const NOTHING = "00000000-0000-0000-0000-000000000000";
 
+/**
+ * One van run often covers two customers' machines. Owning one of them is not
+ * a reason to read the other: the sheet comes back with only the caller's own
+ * machines on it, lines and all.
+ */
+function onlyMine(sheet: RefillSheet, mine: string[]): RefillSheet {
+  return {
+    ...sheet,
+    machine_ids: sheet.machine_ids.filter((id) => mine.includes(id)),
+    lines: sheet.lines.filter((line) => mine.includes(line.machine_id)),
+  };
+}
+
 /** The machine ids the caller may see, or null when they see the whole fleet. */
 async function ownMachineIds(orgId: string): Promise<string[] | null> {
   const { businessId } = await getScope();
@@ -50,10 +63,25 @@ async function ownMachineIds(orgId: string): Promise<string[] | null> {
   return (await getMachines(orgId)).map((m) => m.id);
 }
 
-/** null means "no filter"; an empty list means the caller asked for someone else's. */
-function narrow(asked: string[] | null | undefined, allowed: string[] | null): string[] | null {
-  if (allowed === null) return asked?.length ? asked : null;
-  const kept = asked?.length ? asked.filter((id) => allowed.includes(id)) : allowed;
+/**
+ * The business the caller is confined to. Always sent, even when the page asked
+ * for nothing, and never null — null would mean the whole fleet.
+ */
+function onlyBusiness(asked: string[] | null | undefined, businessId: string): string[] {
+  if (!asked?.length) return [businessId];
+  return asked.includes(businessId) ? [businessId] : [NOTHING];
+}
+
+/**
+ * A machine or product the page asked for, checked against what the caller may
+ * see. Asking for nothing sends no filter at all: the business filter already
+ * does the scoping, and a list here would quietly drop sales of archived
+ * products and of selections that are not linked to anything.
+ */
+function onlyAsked(asked: string[] | null | undefined, allowed: string[] | null): string[] | null {
+  if (!asked?.length) return null;
+  if (allowed === null) return asked;
+  const kept = asked.filter((id) => allowed.includes(id));
   return kept.length ? kept : [NOTHING];
 }
 
@@ -63,7 +91,10 @@ export async function getStatsReport(orgId: string, filters: StatsFilters): Prom
   // for a business, machine or product that is not yours answers with nothing.
   const { businessId } = await getScope();
   const [ownMachines, ownProducts] = businessId
-    ? await Promise.all([getMachines(orgId), getProducts(orgId)])
+    ? await Promise.all([
+        filters.machines?.length ? getMachines(orgId) : null,
+        filters.products?.length ? getProducts(orgId) : null,
+      ])
     : [null, null];
 
   const { data, error } = await createAdminClient().rpc("stats_report", {
@@ -71,9 +102,13 @@ export async function getStatsReport(orgId: string, filters: StatsFilters): Prom
     period: filters.period,
     custom_from: filters.from ?? null,
     custom_to: filters.to ?? null,
-    machine_filter: narrow(filters.machines, ownMachines && ownMachines.map((m) => m.id)),
-    business_filter: narrow(filters.businesses, businessId ? [businessId] : null),
-    product_filter: narrow(filters.products, ownProducts && ownProducts.map((p) => p.id)),
+    machine_filter: onlyAsked(filters.machines, ownMachines && ownMachines.map((m) => m.id)),
+    business_filter: businessId
+      ? onlyBusiness(filters.businesses, businessId)
+      : filters.businesses?.length
+        ? filters.businesses
+        : null,
+    product_filter: onlyAsked(filters.products, ownProducts && ownProducts.map((p) => p.id)),
   });
   if (error) throw new Error(error.message);
   return data as StatsReport;
@@ -172,7 +207,17 @@ export async function getMachineStock(orgId: string, machineIds?: string[]): Pro
     .map((slot) =>
       slot.business_id === businessId
         ? slot
-        : { ...slot, product_id: null, product_name: null, photo_path: null, price: null, stock: null },
+        : {
+            ...slot,
+            product_id: null,
+            product_name: null,
+            photo_path: null,
+            price: null,
+            stock: null,
+            level_after: null,
+            counted_at: null,
+            sales_since: 0,
+          },
     );
 }
 
@@ -472,7 +517,10 @@ export async function getRefillSheets(orgId: string): Promise<RefillSheet[]> {
   const sheets = (data ?? []) as RefillSheet[];
   // A run belongs to whoever owns the machines it visited.
   if (!mine) return sheets;
-  return sheets.filter((sheet) => sheet.machine_ids.some((id) => mine.includes(id))).slice(0, 10);
+  return sheets
+    .filter((sheet) => sheet.machine_ids.some((id) => mine.includes(id)))
+    .map((sheet) => onlyMine(sheet, mine))
+    .slice(0, 10);
 }
 
 export async function getRefillSheet(orgId: string, id: string): Promise<RefillSheet | null> {
@@ -486,7 +534,7 @@ export async function getRefillSheet(orgId: string, id: string): Promise<RefillS
   const sheet = (data as RefillSheet) ?? null;
   // Guessing a sheet id must not print another customer's run.
   if (!sheet || !mine) return sheet;
-  return sheet.machine_ids.some((machineId) => mine.includes(machineId)) ? sheet : null;
+  return sheet.machine_ids.some((machineId) => mine.includes(machineId)) ? onlyMine(sheet, mine) : null;
 }
 
 // Public: the share link carries the unguessable token instead of a login.

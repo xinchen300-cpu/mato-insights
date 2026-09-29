@@ -132,6 +132,20 @@ export function lastFullWeeks(n: number, timeZone: string, now: Date = new Date(
 export type WasteVerdict = "tooFew" | "small" | "worthActing";
 
 /**
+ * Is a share of n events really above `floor`, or could this many events have
+ * landed there by chance? Same arithmetic as the rest of Vendly: a proportion
+ * wobbles by √(p(1−p)/n), and real life wobbles four times harder. Small n is
+ * not silenced outright — 30 failures out of 34 is a broken machine however
+ * quiet it is — it simply has to be that much worse to count.
+ */
+export function shareIsReal(part: number, total: number, floor: number): boolean {
+  if (total <= 0) return false;
+  const share = part / total;
+  const margin = Z95 * Math.sqrt((DISPERSION * share * (1 - share)) / total);
+  return share - margin > floor;
+}
+
+/**
  * Floor for calling waste a problem. Fresh food in a machine always loses a
  * little; above three pieces in a hundred it is worth looking at. Vendly only
  * says so when the 95% interval clears that floor, so a slot that lost two
@@ -142,7 +156,5 @@ const WASTE_FLOOR = 0.03;
 export function wasteVerdict(expired: number, sold: number): WasteVerdict {
   const n = expired + sold;
   if (n < MIN_SALES) return "tooFew";
-  const share = expired / n;
-  const margin = Z95 * Math.sqrt((DISPERSION * share * (1 - share)) / n);
-  return share - margin > WASTE_FLOOR ? "worthActing" : "small";
+  return shareIsReal(expired, n, WASTE_FLOOR) ? "worthActing" : "small";
 }

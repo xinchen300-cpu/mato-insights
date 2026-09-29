@@ -135,6 +135,7 @@ export async function saveLayout(
 
   // Product links are kept per selection number, so only changed ones are written.
   for (const [selection, productId] of Object.entries(assignments)) {
+    if (productId) await requireProductAccess(orgId, productId);
     if (!seen.has(selection)) continue;
     const { error: assignError } = await admin.rpc("assign_product", {
       target_org: orgId,

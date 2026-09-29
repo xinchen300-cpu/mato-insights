@@ -54,6 +54,7 @@ export function FillerView({
   linesRef.current = lines;
   const tickedRef = useRef(ticked);
   tickedRef.current = ticked;
+  const closingRef = useRef(false);
 
   // Ticks survive a reload or a dropped connection in the storage room.
   useEffect(() => {
@@ -95,6 +96,9 @@ export function FillerView({
    * and the line must not vanish from the sheet either.
    */
   const refresh = useCallback(async () => {
+    // Confirming is a stock count; a refresh landing mid-flight would rewrite
+    // the very lines being booked.
+    if (closingRef.current) return;
     setRefreshing(true);
     try {
       const packed = [...tickedRef.current];
@@ -131,6 +135,8 @@ export function FillerView({
     const tick = () => {
       if (document.visibilityState === "visible") void refreshRef.current();
     };
+    // Once on arrival, with whatever was already ticked, then on the clock.
+    tick();
     const timer = setInterval(tick, REFRESH_MS);
     document.addEventListener("visibilitychange", tick);
     return () => {
@@ -168,6 +174,7 @@ export function FillerView({
     const expiries = Object.fromEntries(
       lines.map((l) => [lineKey(l), dates[lineKey(l)] ?? suggestedDate(l)]).filter(([, date]) => date),
     ) as Record<string, string>;
+    closingRef.current = true;
     startTransition(async () => {
       const result = await completeSheet(
         token,

@@ -1,9 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { PRODUCT_COLUMNS } from "@/lib/data";
+import { PRODUCT_COLUMNS, requireProductAccess } from "@/lib/data";
 import { CUSTOM_SHELF_LIFE } from "@/lib/expiry";
-import { requireOrgId } from "@/lib/org";
+import { requireBusinessAccess, requireOrgId } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Product } from "@/lib/types";
 import { imageFrom, removeImage, uploadImage } from "@/lib/upload";
@@ -20,10 +20,14 @@ export async function saveProduct(formData: FormData): Promise<Product> {
   const admin = createAdminClient();
 
   const id = String(formData.get("id") ?? "") || null;
+  // The id and the business come out of a form, so they come from the client:
+  // neither may reach for another customer's product.
+  if (id) await requireProductAccess(orgId, id);
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Name is required");
   const price = parsePrice(formData.get("price"));
   const business_id = String(formData.get("businessId") ?? "") || null;
+  if (business_id) await requireBusinessAccess(business_id);
   const producer_id = String(formData.get("producerId") ?? "") || null;
   const shelfRaw = Number(String(formData.get("shelfLifeDays") ?? "").trim());
   const preset = String(formData.get("shelfLifePresetId") ?? "");
@@ -95,6 +99,7 @@ export async function createProduct(
 
 export async function setProductArchived(id: string, archived: boolean) {
   const orgId = await requireOrgId();
+  await requireProductAccess(orgId, id);
   await createAdminClient().from("products").update({ archived }).eq("id", id).eq("org_id", orgId);
   revalidatePath("/products");
 }

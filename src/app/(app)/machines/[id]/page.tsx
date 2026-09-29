@@ -62,7 +62,8 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   const tracksStock = machine.type !== "other";
   const counted = slots.filter((s) => s.stock !== null);
   const totalStock = counted.reduce((sum, s) => sum + (s.stock ?? 0), 0);
-  const totalCapacity = slots.reduce((sum, s) => sum + s.capacity, 0);
+  // Only the slots that carry a count, so the fill level matches its numerator.
+  const totalCapacity = counted.reduce((sum, s) => sum + s.capacity, 0);
 
   return (
     <>
