@@ -520,6 +520,7 @@ export const nl: Messages = {
     resetSend: "Stuur de link",
     resetSending: "Versturen…",
     resetSent: "Verstuurd. Kijk in je mailbox, ook bij ongewenste mail.",
+    resetTooOften: "Te veel mails na elkaar. De mailserver van Supabase laat er maar een paar per uur door. Wacht een uur, of gebruik de link uit een mail die je al kreeg.",
     pasteTitle: "Plak de link uit je mail",
     pasteHint: "Klik de link in de mail niet aan, maar kopieer hem (rechtermuisknop → Linkadres kopiëren) en plak hem hier. Aanklikken verbruikt hem, plakken niet.",
     pasteLabel: "Link uit de mail",

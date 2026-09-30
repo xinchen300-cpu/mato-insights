@@ -520,6 +520,7 @@ export const en = {
     resetSend: "Send the link",
     resetSending: "Sending…",
     resetSent: "Sent. Check your mailbox, and your junk mail too.",
+    resetTooOften: "Too many mails in a row. Supabase's own mail server allows only a few per hour. Wait an hour, or use the link from a mail you already have.",
     pasteTitle: "Paste the link from your mail",
     pasteHint: "Do not click the link in the mail — copy it (right-click, Copy link address) and paste it here. Clicking spends it, pasting does not.",
     pasteLabel: "Link from the mail",

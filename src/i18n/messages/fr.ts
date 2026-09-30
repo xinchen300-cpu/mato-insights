@@ -520,6 +520,7 @@ export const fr: Messages = {
     resetSend: "Envoyer le lien",
     resetSending: "Envoi…",
     resetSent: "Envoyé. Regardez dans votre boîte, et aussi dans les indésirables.",
+    resetTooOften: "Trop d'e-mails d'affilée. Le serveur de Supabase n'en laisse passer que quelques-uns par heure. Attendez une heure, ou utilisez le lien d'un e-mail déjà reçu.",
     pasteTitle: "Collez le lien de votre e-mail",
     pasteHint: "Ne cliquez pas sur le lien dans l'e-mail : copiez-le (clic droit, Copier l'adresse du lien) et collez-le ici. Un clic le consomme, un copier-coller non.",
     pasteLabel: "Lien de l'e-mail",

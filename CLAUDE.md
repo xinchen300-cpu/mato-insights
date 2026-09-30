@@ -4,6 +4,13 @@
 
 **Naam:** naar de gebruiker toe heet dit sinds 30-09-2026 **MATO Insights** (`src/app/layout.tsx`, 18 plaatsen in elk `messages/*.ts`). De map, de `package.json`-naam en het Vercel-project heten nog `vendly` — laat dat zo tenzij Xin het vraagt, en schrijf "Vendly" nergens meer in tekst die een gebruiker leest.
 
+**Drie dingen moeten `vendly` blijven heten, hernoemen breekt ze:**
+- `LOCALE_COOKIE = "vendly-locale"` in `src/i18n/config.ts` — hernoemen wist ieders taalkeuze.
+- De opslagsleutels in de browser voor een bijvulronde — hernoemen kost een vuller zijn halve ronde.
+- De omgevingsvariabele `VENDLY_REQUIRE_LOGIN`.
+
+De Supabase-edge-functie heet ook `vendly-notify`; die naam is infrastructuur, geen merknaam, en blijft.
+
 Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts. Live op
 **https://vendly-six-gold.vercel.app**, Vercel-project `vendly` op team `mato1`.
 Supabase-project `bjzufmvwldoltpitkrvx`.
