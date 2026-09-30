@@ -1,6 +1,8 @@
 @AGENTS.md
 
-# Vendly — dashboard voor vending-uitbaters
+# MATO Insights — dashboard voor vending-uitbaters
+
+**Naam:** naar de gebruiker toe heet dit sinds 30-09-2026 **MATO Insights** (`src/app/layout.tsx`, 18 plaatsen in elk `messages/*.ts`). De map, de `package.json`-naam en het Vercel-project heten nog `vendly` — laat dat zo tenzij Xin het vraagt, en schrijf "Vendly" nergens meer in tekst die een gebruiker leest.
 
 Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts. Live op
 **https://vendly-six-gold.vercel.app**, Vercel-project `vendly` op team `mato1`.
