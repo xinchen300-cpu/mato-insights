@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { LogOut, Settings } from "lucide-react";
-import { VendlyWordmark } from "@/components/brand/vendly-mark";
+import { MatoWordmark } from "@/components/brand/mato-mark";
 import { getI18n } from "@/i18n/server";
 import { createClient } from "@/lib/supabase/server";
 import { HideNumbers } from "./hide-numbers";
@@ -18,7 +18,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4 sm:px-6">
           <Link href="/" aria-label={m.nav.overview}>
-            <VendlyWordmark subtitle={m.brand.subtitle} />
+            <MatoWordmark subtitle={m.brand.subtitle} />
           </Link>
           <DesktopNav />
           <div className="ml-auto flex items-center gap-2">

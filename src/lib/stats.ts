@@ -1,15 +1,15 @@
 import type { StatsReport } from "@/lib/types";
 
-// How Vendly decides whether a change means something.
+// How MATO Insights decides whether a change means something.
 //
 // Sales arrive one at a time, so chance alone makes a count of n wobble by
 // about √n. Food wobbles more than dice: weather, holidays, a slot that stood
 // empty. Measured on MATO's own weekly sales per machine (April–September 2026),
-// the week-to-week swing is about four times what pure chance gives, so Vendly
+// the week-to-week swing is about four times what pure chance gives, so MATO Insights
 // counts with four times the variance. A change is real when it is more than
 // 1.96 standard deviations from nothing — the usual 95% line.
 
-/** Below this many sales in the two periods together, Vendly draws no conclusion. */
+/** Below this many sales in the two periods together, MATO Insights draws no conclusion. */
 export const MIN_SALES = 30;
 /** Variance of food sales relative to pure chance, measured on MATO's data. */
 export const DISPERSION = 4;
@@ -125,15 +125,15 @@ export function lastFullWeeks(n: number, timeZone: string, now: Date = new Date(
 
 /**
  * What share of a product ends up in the bin, and whether that share is solid
- * enough to act on. Same arithmetic as the rest of Vendly: a proportion out of
+ * enough to act on. Same arithmetic as the rest of MATO Insights: a proportion out of
  * n pieces wobbles by √(p(1−p)/n), and food wobbles four times harder than
- * chance. One piece out of two is not a 50% problem, and Vendly says so.
+ * chance. One piece out of two is not a 50% problem, and MATO Insights says so.
  */
 export type WasteVerdict = "tooFew" | "small" | "worthActing";
 
 /**
  * Is a share of n events really above `floor`, or could this many events have
- * landed there by chance? Same arithmetic as the rest of Vendly: a proportion
+ * landed there by chance? Same arithmetic as the rest of MATO Insights: a proportion
  * wobbles by √(p(1−p)/n), and real life wobbles four times harder. Small n is
  * not silenced outright — 30 failures out of 34 is a broken machine however
  * quiet it is — it simply has to be that much worse to count.
@@ -147,7 +147,7 @@ export function shareIsReal(part: number, total: number, floor: number): boolean
 
 /**
  * Floor for calling waste a problem. Fresh food in a machine always loses a
- * little; above three pieces in a hundred it is worth looking at. Vendly only
+ * little; above three pieces in a hundred it is worth looking at. MATO Insights only
  * says so when the 95% interval clears that floor, so a slot that lost two
  * pieces out of forty stays quiet.
  */

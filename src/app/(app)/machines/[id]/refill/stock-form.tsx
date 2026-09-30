@@ -36,7 +36,7 @@ export function StockForm({
   const [error, setError] = useState(false);
 
   // Refill: everything starts full, only differences get changed.
-  // Correction: start from what Vendly thinks is in there now.
+  // Correction: start from what MATO Insights thinks is in there now.
   const initial = useMemo(
     () =>
       Object.fromEntries(

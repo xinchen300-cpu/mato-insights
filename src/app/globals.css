@@ -56,26 +56,28 @@
 :root {
   --radius: 0px;
 
-  --background: #ede6d8; /* cream */
-  --surface: #f5f0e6;
+  /* The palette of matoautomaat.be: a warm near-white ground, white panels,
+     and gold used generously rather than as a sliver. */
+  --background: #faf7f1;
+  --surface: #f5efe1;
   --foreground: #1c1812;
-  --card: #fbf8f2;
+  --card: #ffffff;
   --card-foreground: #1c1812;
-  --popover: #fbf8f2;
+  --popover: #ffffff;
   --popover-foreground: #1c1812;
-  --primary: #a6752c; /* gold */
-  --primary-foreground: #15110b;
-  --secondary: #e2d9c6;
+  --primary: #a97a1f; /* gold */
+  --primary-foreground: #211a0d;
+  --secondary: #f2ece0;
   --secondary-foreground: #1c1812;
-  --muted: #e2d9c6;
-  --muted-foreground: #6b6356;
-  --accent: rgb(166 117 44 / 0.12);
-  --accent-foreground: #5f4318;
+  --muted: #f2ece0;
+  --muted-foreground: rgb(28 24 18 / 0.64);
+  --accent: rgb(169 122 31 / 0.1);
+  --accent-foreground: #8a6117;
   --destructive: #b4432f;
-  --border: #d6ccb9;
-  --input: #cbc0aa;
-  --ring: #a6752c;
-  --heading: #8b6f2e; /* olive-brown */
+  --border: rgb(28 24 18 / 0.12);
+  --input: rgb(28 24 18 / 0.2);
+  --ring: #a97a1f;
+  --heading: #8a6117;
 
   --positive: #3f7d4e;
   --negative: #b4432f;
@@ -85,13 +87,13 @@
   --level-full: #4a8a58;
   --level-half: #d08a2a;
   --level-low: #c0452f;
-  --level-empty: #d9cfbd;
+  --level-empty: #e4dccb;
 
-  --chart-1: #a6752c;
-  --chart-2: #8b6f2e;
+  --chart-1: #a97a1f;
+  --chart-2: #8a6117;
   --chart-3: #3f7d4e;
   --chart-4: #b4432f;
-  --chart-5: #b7ab93;
+  --chart-5: #bdb098;
 }
 
 @layer base {

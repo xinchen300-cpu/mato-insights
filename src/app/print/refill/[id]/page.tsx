@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { VendlyWordmark } from "@/components/brand/vendly-mark";
+import { MatoWordmark } from "@/components/brand/mato-mark";
 import { SheetTables } from "@/components/refill/sheet-tables";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
@@ -28,7 +28,7 @@ export default async function PrintRefillSheetPage({ params }: { params: Promise
       <style>{`@page { size: A4; margin: 14mm; } @media print { body { background: white; } }`}</style>
       <div className="mb-6 flex items-start justify-between gap-4 border-b pb-4">
         <div>
-          <VendlyWordmark />
+          <MatoWordmark />
           <h1 className="mt-4 text-3xl">{m.refill.sheetTitle}</h1>
           <p className="text-sm text-muted-foreground">
             {fmt(m.refill.createdAt, { date: f.dateTime(sheet.created_at) })} · {fmt(m.refill.items, { count: total })}

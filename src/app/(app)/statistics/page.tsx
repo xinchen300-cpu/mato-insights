@@ -273,7 +273,7 @@ function summary(
   const unitRatio = changeRatio(totals.units, totals.prev_units);
   // The verdict counts pieces, the percentage counts euros, and the two can
   // point opposite ways when the mix shifts. Saying "a real increase" above a
-  // minus sign is the kind of nonsense Vendly exists to avoid, so when they
+  // minus sign is the kind of nonsense MATO Insights exists to avoid, so when they
   // disagree the sentence says what actually happened instead.
   const mixShift =
     ratio !== null && unitRatio !== null && (verdict === "up" || verdict === "down") && ratio * unitRatio < 0;

@@ -13,7 +13,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ siz
   if (!SIZES.includes(raw)) return new Response("Not found", { status: 404 });
 
   const size = Number(raw);
-  const u = (size * 0.56) / 28; // one unit of the 32×32 mark, scaled to ~56% of the icon
+  const u = (size * 0.6) / 30; // one unit of the 32x32 mark, at ~60% of the icon
 
   return new ImageResponse(
     (
@@ -21,16 +21,18 @@ export async function GET(_request: Request, { params }: { params: Promise<{ siz
         style={{
           width: size,
           height: size,
-          background: "#ede6d8",
+          background: "#faf7f1",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <div style={{ position: "relative", width: 24 * u, height: 28 * u, background: "#1c1812", display: "flex" }}>
-          <div style={{ position: "absolute", left: 5 * u, top: 15 * u, width: 4 * u, height: 8 * u, background: "#a6752c" }} />
-          <div style={{ position: "absolute", left: 10.5 * u, top: 10 * u, width: 4 * u, height: 13 * u, background: "#a6752c" }} />
-          <div style={{ position: "absolute", left: 16 * u, top: 5 * u, width: 4 * u, height: 18 * u, background: "#ede6d8" }} />
+        {/* the column that breaks out sets the height, so the mark stays centred */}
+        <div style={{ position: "relative", width: 24 * u, height: 28 * u, display: "flex" }}>
+          <div style={{ position: "absolute", left: 0, top: 4 * u, width: 24 * u, height: 24 * u, background: "#1c1812" }} />
+          <div style={{ position: "absolute", left: 4.5 * u, top: 16 * u, width: 4 * u, height: 8 * u, background: "#a97a1f" }} />
+          <div style={{ position: "absolute", left: 10 * u, top: 11 * u, width: 4 * u, height: 13 * u, background: "#b98a2e" }} />
+          <div style={{ position: "absolute", left: 15.5 * u, top: 0, width: 4 * u, height: 24 * u, background: "#c99a3d" }} />
         </div>
       </div>
     ),

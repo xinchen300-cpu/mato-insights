@@ -22,5 +22,5 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     ...sheet.lines.map((l) => [l.machine_name, l.selection_number, l.product_name, l.stock, l.capacity, l.to_add]),
   ];
 
-  return csvResponse(`vendly-refill-${sheet.created_at.slice(0, 10)}.csv`, rows);
+  return csvResponse(`mato-insights-refill-${sheet.created_at.slice(0, 10)}.csv`, rows);
 }
