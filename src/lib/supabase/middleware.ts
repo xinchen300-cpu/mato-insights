@@ -27,6 +27,19 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // A mail link carries a one-time code. Supabase sends it to the project's
+  // Site URL when the address it was given is not on the allow list, so the
+  // code can land on any path. Wherever it turns up, hand it to the one route
+  // that knows how to trade it for a session.
+  const code = request.nextUrl.searchParams.get("code");
+  if (code && !user && !pathname.startsWith("/auth/")) {
+    const url = request.nextUrl.clone();
+    const next = request.nextUrl.searchParams.get("next") ?? (pathname === "/" ? "/" : pathname);
+    url.pathname = "/auth/callback";
+    url.search = `?code=${encodeURIComponent(code)}&next=${encodeURIComponent(next)}`;
+    return NextResponse.redirect(url);
+  }
+
   if (user && (pathname === "/login" || pathname === "/signup")) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
