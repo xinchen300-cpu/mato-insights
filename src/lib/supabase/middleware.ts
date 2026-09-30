@@ -37,7 +37,12 @@ export async function updateSession(request: NextRequest) {
   if (REQUIRE_LOGIN && !user && !isPublicPath(pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    url.search = `?next=${encodeURIComponent(pathname + request.nextUrl.search)}`;
+    // A dead mail link lands here with its complaint in the query string;
+    // carry that to the login page instead of showing a blank form.
+    const failed = request.nextUrl.searchParams.get("error_code");
+    url.search = failed
+      ? `?error_code=${encodeURIComponent(failed)}`
+      : `?next=${encodeURIComponent(pathname + request.nextUrl.search)}`;
     return NextResponse.redirect(url);
   }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,15 @@ export function LoginForm({ canSignUp }: { canSignUp: boolean }) {
   const searchParams = useSearchParams();
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Supabase reports a dead mail link either in the query string or, on the
+  // implicit flow, only in the fragment — which never reaches the server.
+  const [linkDead, setLinkDead] = useState(false);
+
+  useEffect(() => {
+    const fromQuery = searchParams.get("error_code");
+    const fromHash = new URLSearchParams(window.location.hash.slice(1)).get("error_code");
+    if (fromQuery || fromHash) setLinkDead(true);
+  }, [searchParams]);
 
   async function submit(formData: FormData) {
     setLoading(true);
@@ -46,6 +55,7 @@ export function LoginForm({ canSignUp }: { canSignUp: boolean }) {
           <Label htmlFor="password">{m.auth.password}</Label>
           <Input id="password" name="password" type="password" required autoComplete="current-password" />
         </div>
+        {linkDead && <p className="text-sm text-negative">{m.auth.resetExpired}</p>}
         {error && <p className="text-sm text-negative">{m.auth.wrongLogin}</p>}
         <Link
           href="/login/forgot"
