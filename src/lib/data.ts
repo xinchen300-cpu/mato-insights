@@ -23,6 +23,7 @@ import type {
   StatsReport,
   UnassignedGroup,
   WasteRow,
+  PriceMismatch,
 } from "@/lib/types";
 
 // Server-only data access. Every query is scoped to an org id that the caller
@@ -603,6 +604,32 @@ export async function getRunSummary(orgId: string, sheetId: string): Promise<Run
   });
   if (error) throw new Error(error.message);
   return (data ?? []) as RunSummaryRow[];
+}
+
+/**
+ * Slots where what people pay does not match the product hanging on them. Two
+ * different illnesses with one symptom: one steady other price means the price
+ * here is simply out of date, while a wide spread means several products go
+ * through that one number and the per-product figures cannot be trusted.
+ */
+export async function getPriceMismatches(orgId: string, daysBack = 90): Promise<PriceMismatch[]> {
+  const { businessId } = await getScope();
+  const { data, error } = await createAdminClient().rpc("price_mismatch", {
+    target_org: orgId,
+    days_back: daysBack,
+  });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as PriceMismatch[])
+    .filter((row) => !businessId || row.business_id === businessId)
+    .map((row) => ({
+      ...row,
+      list_price: Number(row.list_price),
+      sales: Number(row.sales),
+      off_price: Number(row.off_price),
+      distinct_prices: Number(row.distinct_prices),
+      spread: Number(row.spread),
+      usual_price: Number(row.usual_price),
+    }));
 }
 
 /** What a new operator still has to do before the app can tell them anything. */

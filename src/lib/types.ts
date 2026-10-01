@@ -260,3 +260,19 @@ export type WasteRow = {
   value_sold: number;
   share_expired: number | null;
 };
+
+/** A slot whose sales do not match the price of the product linked to it. */
+export type PriceMismatch = {
+  machine_id: string;
+  machine_name: string;
+  selection_number: string;
+  product_id: string;
+  product_name: string;
+  business_id: string | null;
+  list_price: number;
+  sales: number;
+  off_price: number;
+  distinct_prices: number;
+  spread: number;
+  usual_price: number;
+};
