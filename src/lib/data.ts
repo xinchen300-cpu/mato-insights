@@ -605,6 +605,56 @@ export async function getRunSummary(orgId: string, sheetId: string): Promise<Run
   return (data ?? []) as RunSummaryRow[];
 }
 
+/** What a new operator still has to do before the app can tell them anything. */
+export type SetupState = {
+  payterConnected: boolean;
+  machines: number;
+  namedMachines: number;
+  withLayout: number;
+  products: number;
+  linkedSelections: number;
+  done: boolean;
+};
+
+/**
+ * The state of a fresh installation. Everything here answers one question for
+ * someone who just bought the app: what do I do next?
+ */
+export async function getSetupState(orgId: string): Promise<SetupState> {
+  const admin = createAdminClient();
+  const [credentials, machines, slots, products, assignments] = await Promise.all([
+    admin.from("payter_credentials").select("org_id").eq("org_id", orgId).maybeSingle(),
+    admin.from("machines").select("id, name, payter_serial_number").eq("org_id", orgId).eq("excluded", false),
+    admin.from("slots").select("machine_id").eq("org_id", orgId),
+    admin.from("products").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("archived", false),
+    admin.from("selection_assignments").select("id", { count: "exact", head: true }).eq("org_id", orgId).is("valid_to", null),
+  ]);
+
+  const all = machines.data ?? [];
+  // A machine keeps its serial as a name until somebody gives it a real one.
+  const named = all.filter((m) => m.name && m.name !== m.payter_serial_number).length;
+  const withLayout = new Set((slots.data ?? []).map((s) => s.machine_id)).size;
+
+  const state = {
+    payterConnected: Boolean(credentials.data),
+    machines: all.length,
+    namedMachines: named,
+    withLayout,
+    products: products.count ?? 0,
+    linkedSelections: assignments.count ?? 0,
+  };
+  return {
+    ...state,
+    done:
+      state.payterConnected &&
+      state.machines > 0 &&
+      state.namedMachines === state.machines &&
+      state.withLayout === state.machines &&
+      state.products > 0 &&
+      state.linkedSelections > 0,
+  };
+}
+
 /** Refuses unless the caller's scope contains this machine. */
 export async function requireMachineAccess(orgId: string, machineId: string): Promise<void> {
   if (!(await getMachine(orgId, machineId))) throw new Error("Not found");

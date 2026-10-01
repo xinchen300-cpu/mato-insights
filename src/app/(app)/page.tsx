@@ -4,6 +4,7 @@ import { RevenueChart } from "@/components/charts/revenue-chart";
 import { StatusBadge } from "@/components/machine/status-badge";
 import { Delta } from "@/components/delta";
 import { InsightsList } from "@/components/insights-list";
+import { SetupGuide } from "@/components/setup-guide";
 import { EmptyState, PageHeader, Panel } from "@/components/page-header";
 import { StatTile } from "@/components/stat-tile";
 import { TipsPanel } from "@/components/tips-panel";
@@ -18,6 +19,7 @@ import {
   getMachineStock,
   getStatsReport,
   getUnassigned,
+  getSetupState,
 } from "@/lib/data";
 import { buildInsights } from "@/lib/insights";
 import { compareCounts, fillDays, lastFullWeeks } from "@/lib/stats";
@@ -57,7 +59,8 @@ export default async function OverviewPage() {
 
   // Weekday patterns only from whole weeks, and enough of them (see lib/stats).
   const patternWeeks = 8;
-  const [today, week, month, weeks, machines, stock, unassigned, expiring, lastSales, syncedAt] = await Promise.all([
+  const [today, week, month, weeks, machines, stock, unassigned, expiring, lastSales, syncedAt, setup] =
+    await Promise.all([
     getStatsReport(orgId, { period: "today" }),
     getStatsReport(orgId, { period: "week" }),
     getStatsReport(orgId, { period: "month" }),
@@ -68,21 +71,26 @@ export default async function OverviewPage() {
     getExpiryAlerts(orgId),
     getLastSales(orgId),
     getLastSyncedAt(orgId),
+    getSetupState(orgId),
   ]);
 
   if (month.totals.units === 0 && weeks.totals.units === 0) {
     return (
       <>
         <PageHeader title={m.overview.title} />
-        <EmptyState
-          title={m.overview.noData}
-          hint={m.overview.noDataHint}
-          action={
-            <Link href="/settings" className={buttonVariants()}>
-              {m.overview.toSettings}
-            </Link>
-          }
-        />
+        {setup.done ? (
+          <EmptyState
+            title={m.overview.noData}
+            hint={m.overview.noDataHint}
+            action={
+              <Link href="/settings" className={buttonVariants()}>
+                {m.overview.toSettings}
+              </Link>
+            }
+          />
+        ) : (
+          <SetupGuide setup={setup} m={m} />
+        )}
       </>
     );
   }
@@ -198,6 +206,9 @@ export default async function OverviewPage() {
       />
 
       <div className="flex flex-col gap-6">
+        {/* Still being set up: what to do next comes before what happened. */}
+        {!setup.done && <SetupGuide setup={setup} m={m} />}
+
         {todos.length > 0 && (
           <Panel title={m.overview.todo}>
             <ul className="flex flex-col divide-y">

@@ -34,3 +34,11 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Waar de app draait
+
+De serverfuncties draaien in **dub1 (Dublin)**, niet in Vercels standaard
+`iad1` (Washington), omdat de Supabase-databank in `eu-west-1` (Ierland) staat.
+Elke paginaweergave stelt tientallen vragen aan die databank, en die gingen
+anders heen en terug over de oceaan: ~85 ms per vraag in plaats van ~5 ms.
+Verhuist de databank ooit, dan verhuist `vercel.json` mee.
