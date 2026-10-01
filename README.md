@@ -42,3 +42,29 @@ De serverfuncties draaien in **dub1 (Dublin)**, niet in Vercels standaard
 Elke paginaweergave stelt tientallen vragen aan die databank, en die gingen
 anders heen en terug over de oceaan: ~85 ms per vraag in plaats van ~5 ms.
 Verhuist de databank ooit, dan verhuist `vercel.json` mee.
+
+## Uitrollen
+
+De repo hangt aan het Vercel-project `vendly` (team `mato1`), dus **elke commit
+op `main` rolt vanzelf uit naar productie**. Handmatig deployen hoeft niet meer
+en wordt beter vermeden: dan draait er code die niet in de geschiedenis staat.
+
+```bash
+git push            # dit is de uitrol
+```
+
+Gaat er iets mis, dan staat de vorige versie één klik terug in Vercel onder
+Deployments → Promote to Production.
+
+### Waar wat staat
+
+| | |
+|---|---|
+| Map op de laptop | `~/Documents/GitHub/vendly` |
+| GitHub | `siiiuol/vendly` (privé) |
+| Vercel | team `mato1`, project `vendly`, regio `dub1` |
+| Databank | Supabase `bjzufmvwldoltpitkrvx`, regio `eu-west-1` |
+| Wat de klant ziet | **MATO Insights** |
+
+Alleen die laatste naam staat in de app. De rest is interne bedrading, en die
+hoeft niet gelijkgetrokken te worden — hernoemen kost meer dan het opbrengt.
