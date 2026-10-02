@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, Store, Trash2 } from "lucide-react";
+import { ChevronRight, Store, Trash2, Users } from "lucide-react";
 import { PageHeader, Panel } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -34,6 +34,10 @@ export default async function SettingsPage() {
   const orgId = await getCurrentOrgId();
   const admin = createAdminClient();
 
+  const { data: vendor } = orgId
+    ? await admin.from("organizations").select("is_vendor").eq("id", orgId).maybeSingle()
+    : { data: null };
+
   const [{ data: credentials }, { data: syncLogs }, templates, businesses, machines, presets, { data: org }] = orgId
     ? await Promise.all([
         admin.from("payter_credentials").select("last_synced_at").eq("org_id", orgId).maybeSingle(),
@@ -59,6 +63,15 @@ export default async function SettingsPage() {
       <PageHeader title={m.settings.title} />
 
       <div className="grid max-w-3xl gap-6">
+        {vendor?.is_vendor && (
+          <Panel title={m.customers.title} hint={m.customers.subtitle}>
+            <Link href="/klanten" className={buttonVariants({ variant: "outline" })}>
+              <Users />
+              {m.customers.listTitle}
+            </Link>
+          </Panel>
+        )}
+
         <Panel
           title={m.settings.payter}
           hint={m.settings.payterHint}
