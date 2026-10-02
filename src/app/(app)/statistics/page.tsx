@@ -10,7 +10,8 @@ import { StatsGuide } from "@/components/stats-guide";
 import { buttonVariants } from "@/components/ui/button";
 import { changeRatio, fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getBusinesses, getMachines, getProducts, getStatsReport } from "@/lib/data";
+import Link from "next/link";
+import { getBusinesses, getMachines, getPriceMismatches, getProducts, getStatsReport } from "@/lib/data";
 import { mediaUrl } from "@/lib/media";
 import { requireOrgId } from "@/lib/org";
 import { compareCounts, detectableChange, fillDays, MIN_WEEKS, periodDays, weekdayStats } from "@/lib/stats";
@@ -30,12 +31,24 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
   const orgId = await requireOrgId();
   const { period, from, to, business, machine, product, filters } = parseStatsParams(raw);
 
-  const [report, machines, businesses, products] = await Promise.all([
+  const [report, machines, businesses, products, mismatches] = await Promise.all([
     getStatsReport(orgId, filters),
     getMachines(orgId),
     getBusinesses(orgId),
     getProducts(orgId),
+    getPriceMismatches(orgId),
   ]);
+
+  // A slot taking several different prices carries several products through one
+  // number, so nothing here can say what sold. Saying it is the whole point of
+  // this app; a confident ranking built on that would be the one lie it tells.
+  const scrambled = [
+    ...new Set(
+      mismatches
+        .filter((row) => row.spread > 0 && (!machine || row.machine_id === machine))
+        .map((row) => row.machine_name),
+    ),
+  ];
 
   const compare = m.periods[compareLabelKey(report.period)];
   const { totals } = report;
@@ -149,6 +162,21 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                 }
               />
             </Panel>
+
+            {scrambled.length > 0 && (
+              <div className="border border-warning/40 bg-card p-5">
+                <p className="font-heading text-lg font-semibold text-heading">{m.stats.mixedTitle}</p>
+                <p className="mt-1 max-w-[62ch] text-sm text-muted-foreground">
+                  {fmt(m.stats.mixedBody, { machines: scrambled.join(", ") })}
+                </p>
+                <Link
+                  href="/unassigned"
+                  className="mt-3 inline-block text-sm font-semibold text-accent-foreground underline underline-offset-4"
+                >
+                  {m.stats.mixedFix}
+                </Link>
+              </div>
+            )}
 
             <div className="grid gap-6 lg:grid-cols-2">
               <Panel title={m.stats.bestSellers}>
