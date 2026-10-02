@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ArrowRight, CalendarClock, Link2, PackageOpen, WifiOff, type LucideIcon } from "lucide-react";
 import { RevenueChart } from "@/components/charts/revenue-chart";
 import { StatusBadge } from "@/components/machine/status-badge";
@@ -21,10 +22,11 @@ import {
   getUnassigned,
   getSetupState,
 } from "@/lib/data";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { buildInsights } from "@/lib/insights";
 import { compareCounts, fillDays, lastFullWeeks } from "@/lib/stats";
 import { terminalStatus } from "@/lib/terminal-status";
-import { getCurrentOrgId } from "@/lib/org";
+import { getCurrentOrgId, isOperator } from "@/lib/org";
 import { fillLevel, levelColor, needsAttention } from "@/lib/stock";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +44,17 @@ const LOW_ROWS = 3;
 export default async function OverviewPage() {
   const { m, f } = await getI18n();
   const orgId = await getCurrentOrgId();
+
+  // Wie nog nooit door de rondleiding is, hoort niet op een leeg dashboard te
+  // landen. Eén keer, en daarna nooit meer.
+  if (orgId && (await isOperator())) {
+    const { data: org } = await createAdminClient()
+      .from("organizations")
+      .select("onboarded_at")
+      .eq("id", orgId)
+      .maybeSingle();
+    if (org && !org.onboarded_at) redirect("/welkom");
+  }
 
   if (!orgId) {
     return (

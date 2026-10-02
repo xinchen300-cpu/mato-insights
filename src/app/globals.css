@@ -166,3 +166,71 @@
     display: none !important;
   }
 }
+
+/* ── De rondleiding ────────────────────────────────────────────────────────
+   Eén bewuste beweging: een stap die wegvalt wordt onscherp en zakt weg, de
+   volgende komt scherp en rustig naar boven. Verder beweegt er niets, zodat
+   die ene overgang iets betekent. De curve is die van matoautomaat.be. */
+@layer components {
+  .step-enter {
+    animation: step-in 0.52s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .step-leave {
+    animation: step-out 0.22s cubic-bezier(0.4, 0, 1, 1) both;
+  }
+  /* Elk kind komt een tikje na het vorige, zodat het oog de volgorde volgt. */
+  .step-enter > * {
+    animation: step-child 0.46s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: calc(var(--i, 0) * 55ms + 70ms);
+  }
+  .rail-fill {
+    transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: left;
+  }
+}
+
+@keyframes step-in {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+}
+@keyframes step-out {
+  from {
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateY(-8px);
+  }
+}
+@keyframes step-child {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Wie beweging liever niet heeft, krijgt ze niet. */
+@media (prefers-reduced-motion: reduce) {
+  .step-enter,
+  .step-leave,
+  .step-enter > * {
+    animation: none;
+  }
+  .rail-fill {
+    transition: none;
+  }
+}
