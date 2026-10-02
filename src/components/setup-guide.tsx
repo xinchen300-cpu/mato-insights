@@ -38,8 +38,8 @@ export function SetupGuide({ setup, m }: { setup: SetupState; m: Messages }) {
       why: m.setup.machinesWhy,
       state: setup.machines > 0 ? fmt(m.setup.machinesFound, { count: setup.machines }) : m.setup.machinesWaiting,
       done: setup.machines > 0,
-      href: "/machines",
-      action: m.nav.machines,
+      href: "/terminals",
+      action: m.terminals.title,
     },
     {
       title: m.setup.naming,
@@ -49,8 +49,8 @@ export function SetupGuide({ setup, m }: { setup: SetupState; m: Messages }) {
           ? fmt(m.setup.namingLeft, { count: setup.machines - setup.namedMachines })
           : null,
       done: setup.machines > 0 && setup.namedMachines === setup.machines,
-      href: "/machines",
-      action: m.nav.machines,
+      href: "/terminals",
+      action: m.terminals.title,
     },
     {
       title: m.setup.layout,

@@ -52,6 +52,19 @@ Deno.serve(async (req) => {
   });
 
   const body = await req.json().catch(() => ({}));
+
+  // Just show what is on this Payter account, importing nothing. The operator
+  // picks which terminals are theirs before any of it becomes a machine.
+  if (body?.action === "terminals" && typeof body?.orgId === "string") {
+    try {
+      const terminals = await listTerminals(supabase, body.orgId);
+      return Response.json({ terminals });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return Response.json({ terminals: [], error: message }, { status: 200 });
+    }
+  }
+
   let orgIds: string[];
   if (typeof body?.orgId === "string") {
     orgIds = [body.orgId];
@@ -66,6 +79,42 @@ Deno.serve(async (req) => {
   }
   return Response.json({ results });
 });
+
+/** Every terminal on the account, with what the operator needs to recognise it. */
+async function listTerminals(supabase: SupabaseClient, orgId: string) {
+  const { data: credRow } = await supabase
+    .from("payter_credentials")
+    .select("cached_token, token_expires_at")
+    .eq("org_id", orgId)
+    .single();
+  if (!credRow) throw new Error("No Payter credentials configured");
+
+  const tokenId = await getToken(supabase, orgId, credRow);
+  const res = await fetch(`${PAYTER_API_BASE}/Data`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `CURO-TOKEN token="${tokenId}"` },
+    body: JSON.stringify({
+      index: "Terminals",
+      query: "",
+      maxResults: 200,
+      offset: 0,
+      sorts: [],
+      filters: [],
+      aggregations: [],
+    }),
+  });
+  if (!res.ok) throw new Error(`Payter terminal request failed (${res.status})`);
+
+  const terminals: PayterTerminal[] = (await res.json()).documents ?? [];
+  return terminals
+    .filter((t) => t.serialNumber)
+    .map((t) => ({
+      serial: t.serialNumber as string,
+      model: t.model?.name ?? null,
+      last_connected: isoDate(t.data?.["Last Connect Date"] ?? t.lastConnected),
+      site: (t.data?.["Site Reference"] as string | undefined) ?? null,
+    }));
+}
 
 async function syncOrganization(supabase: SupabaseClient, orgId: string): Promise<SyncResult> {
   let transactionsSynced = 0;
@@ -317,10 +366,20 @@ async function resolveMachines(
   }
   if (unknown.size === 0) return result;
 
-  // New terminal: named after its serial until the user labels it.
+  // A terminal nobody asked for is parked, not adopted: one Payter login can
+  // carry other people's machines, and a reseller account always does. It
+  // shows up in the picker under Settings, where the operator says whether it
+  // is theirs and what it should be called. Until then its sales stay out.
   const { data: created } = await supabase
     .from("machines")
-    .insert([...unknown].map((serial) => ({ org_id: orgId, name: serial, payter_serial_number: serial })))
+    .insert(
+      [...unknown].map((serial) => ({
+        org_id: orgId,
+        name: serial,
+        payter_serial_number: serial,
+        excluded: true,
+      })),
+    )
     .select("id, payter_serial_number");
   for (const m of created ?? []) {
     cache.set(m.payter_serial_number, m.id);

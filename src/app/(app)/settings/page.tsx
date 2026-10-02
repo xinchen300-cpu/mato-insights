@@ -77,7 +77,12 @@ export default async function SettingsPage() {
                   time: credentials.last_synced_at ? f.relative(credentials.last_synced_at) : m.settings.never,
                 })}
               </p>
-              <SyncNowButton />
+              <div className="flex flex-wrap items-center gap-3">
+                <SyncNowButton />
+                <Link href="/terminals" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                  {m.terminals.title}
+                </Link>
+              </div>
               <details className="text-sm">
                 <summary className="cursor-pointer font-semibold text-muted-foreground">
                   {m.settings.reconnect}
