@@ -53,6 +53,11 @@ en wordt beter vermeden: dan draait er code die niet in de geschiedenis staat.
 git push            # dit is de uitrol
 ```
 
+Commits in deze repo staan op naam van het GitHub-account dat Vercel als
+eigenaar kent (`git config user.email` staat lokaal op het noreply-adres van
+`siiiuol`). Staat er een andere auteur op, dan weigert Vercel de uitrol met
+"the commit author doesn't have permission to create deployments".
+
 Gaat er iets mis, dan staat de vorige versie één klik terug in Vercel onder
 Deployments → Promote to Production.
 
