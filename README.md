@@ -65,7 +65,7 @@ Deployments → Promote to Production.
 
 | | |
 |---|---|
-| Map op de laptop | `~/Documents/GitHub/vendly` |
+| Map op de laptop | `~/GitHub/vendly` |
 | GitHub | `siiiuol/vendly` (privé) |
 | Vercel | team `mato1`, project `vendly`, regio `dub1` |
 | Databank | Supabase `bjzufmvwldoltpitkrvx`, regio `eu-west-1` |
