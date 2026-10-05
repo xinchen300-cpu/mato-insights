@@ -25,7 +25,11 @@ export default async function CustomersPage() {
   if (!me?.is_vendor || !(await isOperator())) notFound();
 
   const [{ data: orgs }, { data: invites }, { data: machines }] = await Promise.all([
-    admin.from("organizations").select("id, name, plan, created_at, onboarded_at").eq("is_vendor", false).order("created_at"),
+    admin
+      .from("organizations")
+      .select("id, name, plan, created_at, onboarded_at, trial_ends_at, cancelled_at, mollie_subscription_id")
+      .eq("is_vendor", false)
+      .order("created_at"),
     admin.from("allowed_emails").select("email, org_id, claimed_at"),
     admin.from("machines").select("org_id").eq("excluded", false),
   ]);
@@ -46,6 +50,9 @@ export default async function CustomersPage() {
       registered: Boolean(invite?.claimed_at),
       machines: machineCount.get(org.id) ?? 0,
       plan: planById(org.plan as string | null),
+      trialEndsAt: org.trial_ends_at as string | null,
+      cancelled: Boolean(org.cancelled_at),
+      subscribed: Boolean(org.mollie_subscription_id),
       since: org.created_at as string,
     };
   });
@@ -82,7 +89,13 @@ export default async function CustomersPage() {
                     <span className="figure block text-xs text-muted-foreground">
                       {fmt(m.customers.machinesCount, { count: c.machines })}
                       {" · "}
-                      {c.plan ? `${m.plans[c.plan.id]} · ${f.euro(c.plan.pricePerMonth)}` : m.customers.noPlan}
+                      {c.plan ? `${m.plans[c.plan.id]} · ${f.euroRound(c.plan.pricePerMonth)}` : m.customers.noPlan}
+                      {c.plan && c.cancelled && ` · ${m.billing.statusCancelled}`}
+                      {c.plan && !c.cancelled && c.trialEndsAt && new Date(c.trialEndsAt) > new Date() &&
+                        ` · ${fmt(m.billing.statusTrial, { date: f.date(c.trialEndsAt) })}`}
+                      {c.plan && !c.cancelled && c.trialEndsAt && new Date(c.trialEndsAt) <= new Date() &&
+                        !c.subscribed &&
+                        ` · ${m.billing.statusEnded}`}
                     </span>
                   </span>
                 </li>

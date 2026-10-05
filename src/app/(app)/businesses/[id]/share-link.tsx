@@ -1,19 +1,32 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Copy, ExternalLink, Link2, RefreshCw } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/i18n/client";
+import { fmt } from "@/i18n/format";
+import { cheapestWith } from "@/lib/plans";
 import { setBusinessShare } from "../actions";
 
 // The customer's own page: a private link that shows only their sales.
-export function ShareLink({ businessId, token }: { businessId: string; token: string | null }) {
+export function ShareLink({
+  businessId,
+  token,
+  operator,
+}: {
+  businessId: string;
+  token: string | null;
+  /** Only the operator has a subscription to point to. */
+  operator: boolean;
+}) {
   const { m } = useI18n();
   const router = useRouter();
   const [origin, setOrigin] = useState("");
   const [copied, setCopied] = useState(false);
+  const [locked, setLocked] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => setOrigin(window.location.origin), []);
@@ -23,7 +36,11 @@ export function ShareLink({ businessId, token }: { businessId: string; token: st
   function set(enabled: boolean) {
     setCopied(false);
     startTransition(async () => {
-      await setBusinessShare(businessId, enabled);
+      const result = await setBusinessShare(businessId, enabled);
+      if ("locked" in result) {
+        setLocked(true);
+        return;
+      }
       router.refresh();
     });
   }
@@ -33,12 +50,26 @@ export function ShareLink({ businessId, token }: { businessId: string; token: st
     setCopied(true);
   }
 
+  const lockedNote = locked && (
+    <p role="status" className="text-sm">
+      {fmt(m.billing.locked, { plan: m.plans[cheapestWith("shareWithShops").id] })}{" "}
+      {operator && (
+        <Link href="/settings#abonnement" className="font-semibold underline underline-offset-4">
+          {m.billing.lockedLink}
+        </Link>
+      )}
+    </p>
+  );
+
   if (!token) {
     return (
-      <Button onClick={() => set(true)} disabled={isPending}>
-        <Link2 />
-        {m.businesses.shareCreate}
-      </Button>
+      <div className="flex flex-col items-start gap-3">
+        <Button onClick={() => set(true)} disabled={isPending}>
+          <Link2 />
+          {m.businesses.shareCreate}
+        </Button>
+        {lockedNote}
+      </div>
     );
   }
 
@@ -65,6 +96,7 @@ export function ShareLink({ businessId, token }: { businessId: string; token: st
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">{m.businesses.shareRegenerateHint}</p>
+      {lockedNote}
     </div>
   );
 }

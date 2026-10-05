@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { requireOperator, requireOrgId } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getI18n } from "@/i18n/server";
+import { getBilling, linkedMachineCount, paymentsEnabled } from "@/lib/billing";
+import { upgradeLine } from "@/lib/billing-copy";
+import { planFor, priceInclVat, type PlanId } from "@/lib/plans";
 
 export type TerminalChoice = { serial: string; mine: boolean; name: string };
 
@@ -12,7 +16,8 @@ export type TerminalChoice = { serial: string; mine: boolean; name: string };
  * the figures — that is how one login can carry another business's machines
  * without mixing them in.
  */
-export async function saveTerminalChoices(choices: TerminalChoice[]) {
+/** Returns the package after saving, which linking more machines may have moved up. */
+export async function saveTerminalChoices(choices: TerminalChoice[]): Promise<{ plan: PlanId | null }> {
   const orgId = await requireOrgId();
   // Which machines exist at all is the operator's call, never a shop's.
   await requireOperator();
@@ -44,5 +49,42 @@ export async function saveTerminalChoices(choices: TerminalChoice[]) {
     }
   }
 
+  const plan = await followPackage(orgId);
   revalidatePath("/", "layout");
+  return { plan };
+}
+
+/**
+ * The package follows the machines up, never down: a machine more than the
+ * package carries moves it to the next one, with the line the picker already
+ * showed stored as what they saw. Going down is a choice in Settings.
+ */
+async function followPackage(orgId: string): Promise<PlanId | null> {
+  const billing = await getBilling(orgId);
+  const current = billing.plan?.id ?? null;
+  if (billing.isVendor || !billing.plan || billing.cancelledAt) return current;
+  const machines = await linkedMachineCount(orgId);
+  const { m, f } = await getI18n();
+  // The same sentence both pickers showed before Save, or nothing to do.
+  const text = upgradeLine(m, f, billing.plan, machines, paymentsEnabled());
+  if (!text) return current;
+  const next = planFor(machines);
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("organizations").update({ plan: next.id }).eq("id", orgId);
+  if (error) return current;
+  await admin.from("billing_consents").insert({
+    org_id: orgId,
+    plan: next.id,
+    price_excl: next.pricePerMonth,
+    price_incl: priceInclVat(next),
+    trial_ends_at: billing.trialEndsAt,
+    payments: paymentsEnabled(),
+    text_shown: text,
+  });
+
+  // The running Mollie subscription is not touched here. The new amount may
+  // only be charged after a mail that says so, at least seven days ahead;
+  // supabase/functions/vendly-billing sends that mail and then patches it.
+  return next.id;
 }

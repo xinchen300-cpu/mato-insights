@@ -1,10 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/client";
+import { fmt } from "@/i18n/format";
+import { cheapestWith } from "@/lib/plans";
 import { createRefillSheet } from "./actions";
 
 export function MachinePicker({
@@ -15,6 +18,7 @@ export function MachinePicker({
   const { m } = useI18n();
   const [selected, setSelected] = useState<Set<string>>(new Set(machines.filter((mc) => mc.low).map((mc) => mc.id)));
   const [empty, setEmpty] = useState(false);
+  const [locked, setLocked] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   function toggle(id: string) {
@@ -31,7 +35,8 @@ export function MachinePicker({
     setEmpty(false);
     startTransition(async () => {
       const result = await createRefillSheet([...selected]);
-      if (result?.empty) setEmpty(true);
+      if (result && "empty" in result) setEmpty(true);
+      if (result && "locked" in result) setLocked(true);
     });
   }
 
@@ -81,6 +86,14 @@ export function MachinePicker({
         <ClipboardList />
         {isPending ? m.refill.making : m.refill.make}
       </Button>
+      {locked && (
+        <p role="status" className="text-sm">
+          {fmt(m.billing.locked, { plan: m.plans[cheapestWith("refill").id] })}{" "}
+          <Link href="/settings#abonnement" className="font-semibold underline underline-offset-4">
+            {m.billing.lockedLink}
+          </Link>
+        </p>
+      )}
     </div>
   );
 }

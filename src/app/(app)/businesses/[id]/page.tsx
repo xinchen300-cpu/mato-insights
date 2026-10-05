@@ -7,7 +7,7 @@ import { fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { businessMachineIds, getBusiness, getMachines, getProducts } from "@/lib/data";
 import { mediaUrl } from "@/lib/media";
-import { requireOrgId } from "@/lib/org";
+import { requireOrgId, isOperator } from "@/lib/org";
 import { BusinessSettings, MachineStarts } from "./business-settings";
 import { ShareLink } from "./share-link";
 
@@ -67,7 +67,7 @@ export default async function BusinessPage({ params }: { params: Promise<{ id: s
         </Panel>
 
         <Panel title={m.businesses.shareTitle} hint={m.businesses.shareHint}>
-          <ShareLink businessId={business.id} token={business.share_token} />
+          <ShareLink businessId={business.id} token={business.share_token} operator={await isOperator()} />
         </Panel>
 
         <Panel title={m.businesses.machinesTitle} hint={m.machines.dataSinceHint}>

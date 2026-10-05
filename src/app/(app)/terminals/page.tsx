@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { getI18n } from "@/i18n/server";
-import { requireOrgId } from "@/lib/org";
+import { getBilling, paymentsEnabled } from "@/lib/billing";
+import { isOperator, requireOrgId } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { listPayterTerminals } from "@/lib/sync";
 import { TerminalPicker, type TerminalRow } from "./terminal-picker";
@@ -15,7 +17,11 @@ export async function generateMetadata() {
 export default async function TerminalsPage() {
   const { m, f } = await getI18n();
   const orgId = await requireOrgId();
+  // Which terminals exist on the Payter login, and what the operator calls
+  // them, is not a shop's to see: the list carries every machine.
+  if (!(await isOperator())) notFound();
   const admin = createAdminClient();
+  const billing = await getBilling(orgId);
 
   const [terminals, { data: machines }, { data: sold }] = await Promise.all([
     listPayterTerminals(orgId),
@@ -33,6 +39,7 @@ export default async function TerminalsPage() {
       .map((mc) => mc.payter_serial_number),
   );
 
+  const onPayter = new Set(terminals.map((t) => t.serial));
   const rows: TerminalRow[] = terminals.map((t) => {
     const machine = known.get(t.serial);
     return {
@@ -45,6 +52,20 @@ export default async function TerminalsPage() {
       hasSales: withSales.has(t.serial),
     };
   });
+  // A machine still linked here but gone from the Payter account keeps
+  // counting towards the package; it has to be on the list to be unticked.
+  for (const mc of machines ?? []) {
+    if (mc.excluded || !mc.payter_serial_number || onPayter.has(mc.payter_serial_number)) continue;
+    rows.push({
+      serial: mc.payter_serial_number as string,
+      model: null,
+      lastSeenLabel: null,
+      name: mc.name !== mc.payter_serial_number ? (mc.name as string) : "",
+      mine: true,
+      hasSales: withSales.has(mc.payter_serial_number),
+      orphan: true,
+    });
+  }
 
   return (
     <>
@@ -65,7 +86,11 @@ export default async function TerminalsPage() {
           }
         />
       ) : (
-        <TerminalPicker rows={rows} />
+        <TerminalPicker
+          rows={rows}
+          planId={billing.isVendor ? null : (billing.plan?.id ?? null)}
+          paymentsEnabled={paymentsEnabled()}
+        />
       )}
     </>
   );

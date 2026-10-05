@@ -52,6 +52,9 @@ const NOTHING = "00000000-0000-0000-0000-000000000000";
 function onlyMine(sheet: RefillSheet, mine: string[]): RefillSheet {
   return {
     ...sheet,
+    // The filler's link opens the whole run, every machine on the round, so a
+    // shop never gets it: it would hand over the co-tenant's slots in one click.
+    share_token: "",
     machine_ids: sheet.machine_ids.filter((id) => mine.includes(id)),
     lines: sheet.lines.filter((line) => mine.includes(line.machine_id)),
   };

@@ -5,7 +5,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getMachines, getMachineStock, getRefillSheets, getShortages, getStatsReport } from "@/lib/data";
-import { requireOrgId } from "@/lib/org";
+import { isOperator, requireOrgId } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fillLevel, needsAttention } from "@/lib/stock";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
@@ -146,7 +146,9 @@ export default async function RefillPage() {
       <PageHeader title={m.refill.title} subtitle={m.refill.subtitle} />
 
       <div className="flex flex-col gap-8">
-        {pickable.length === 0 ? (
+        {!(await isOperator()) ? (
+          <p className="max-w-[60ch] text-sm text-muted-foreground">{m.refill.operatorOnly}</p>
+        ) : pickable.length === 0 ? (
           <EmptyState
             title={m.machines.noLayout}
             hint={m.machines.noLayoutHint}

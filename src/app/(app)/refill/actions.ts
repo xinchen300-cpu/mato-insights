@@ -3,13 +3,21 @@
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireOrgId } from "@/lib/org";
+import { requireOperator, requireOrgId } from "@/lib/org";
 import { requireMachineAccess } from "@/lib/data";
+import { featureAllowed } from "@/lib/billing";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { RefillLine } from "@/lib/types";
 
-export async function createRefillSheet(machineIds: string[]): Promise<{ empty: true } | void> {
+export async function createRefillSheet(
+  machineIds: string[],
+): Promise<{ empty: true } | { locked: true } | void> {
   const orgId = await requireOrgId();
+  // A run carries every slot of every machine on it, including a co-tenant's
+  // on a shared machine: planning one is the operator's job, never a shop's.
+  await requireOperator();
+  // Refill runs start at Zaak; a Solo account sees the note, not an error.
+  if (!(await featureAllowed(orgId, "refill"))) return { locked: true };
   if (machineIds.length === 0) return { empty: true };
   // The list comes from a checkbox on a page, so it comes from the client:
   // asking for a machine that is not yours must not put it on your sheet.
@@ -39,6 +47,8 @@ export async function createRefillSheet(machineIds: string[]): Promise<{ empty: 
 
 export async function saveSheetNotes(sheetId: string, notes: string) {
   const orgId = await requireOrgId();
+  // The notes belong to the run, and the run is the operator's.
+  await requireOperator();
   await createAdminClient()
     .from("refill_sheets")
     .update({ notes: notes.trim() || null })

@@ -2,43 +2,62 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Clock, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n/client";
-import { fmt } from "@/i18n/format";
-import { PLANS, planFor, type Plan } from "@/lib/plans";
+import { fmt, plural } from "@/i18n/format";
+import { LARGEST_PLAN, PLANS, needsQuote, planById, planFits, planFor, type Plan } from "@/lib/plans";
+import { acceptLine, disclosureLines, planFeatureLines, trialDates, upgradeLine } from "@/lib/billing-copy";
 import type { PayterTerminal } from "@/lib/sync";
 import { cn } from "@/lib/utils";
 import { connectPayter } from "@/app/(app)/settings/actions";
 import { saveTerminalChoices } from "@/app/(app)/terminals/actions";
-import { choosePlan, fetchTerminals, finishOnboarding } from "./actions";
+import { fetchTerminals, finishOnboarding, startTrial, type StartTrialResult } from "./actions";
 
-type Pick = { serial: string; mine: boolean; name: string; model: string | null };
+type Pick = {
+  serial: string;
+  mine: boolean;
+  name: string;
+  model: string | null;
+  /** Linked here before, but no longer on the Payter account. */
+  orphan?: boolean;
+};
 
-const STEPS = ["hello", "payter", "machines", "plan", "ready"] as const;
+const STEPS = ["hello", "payter", "machines", "plan", "confirm", "ready"] as const;
 type Step = (typeof STEPS)[number];
 
 export function Wizard({
   payterConnected,
   chosenPlan,
   knownMachines,
+  isVendor,
+  paymentsEnabled,
+  trialEndsAt,
+  returnedFromPayment,
 }: {
   payterConnected: boolean;
   chosenPlan: string | null;
   knownMachines: { serial: string; name: string; excluded: boolean }[];
+  /** The organisation that sells the app picks no package of its own. */
+  isVendor: boolean;
+  paymentsEnabled: boolean;
+  trialEndsAt: string | null;
+  /** Back from Mollie's checkout: the setup is done, only the welcome is left. */
+  returnedFromPayment: boolean;
 }) {
   const { m, f } = useI18n();
   const router = useRouter();
 
   // Someone coming back mid-way should not retell the part they finished.
-  const [step, setStep] = useState<Step>(payterConnected ? "machines" : "hello");
+  const [step, setStep] = useState<Step>(returnedFromPayment ? "ready" : payterConnected ? "machines" : "hello");
   const [leaving, setLeaving] = useState(false);
   const [connected, setConnected] = useState(payterConnected);
   const [terminals, setTerminals] = useState<Pick[] | null>(null);
   const [loadingTerminals, setLoadingTerminals] = useState(false);
   const [plan, setPlan] = useState<string | null>(chosenPlan);
+  const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const liveRegion = useRef<HTMLParagraphElement>(null);
@@ -62,8 +81,14 @@ export function Wizard({
     try {
       const found = await fetchTerminals();
       const known = new Map(knownMachines.map((k) => [k.serial, k]));
-      setTerminals(
-        found.map((t) => {
+      const onPayter = new Set(found.map((t) => t.serial));
+      // A machine linked earlier that Payter no longer lists still counts for
+      // the package; it has to be on the list to be unticked.
+      const orphans: Pick[] = knownMachines
+        .filter((k) => !k.excluded && !onPayter.has(k.serial))
+        .map((k) => ({ serial: k.serial, model: null, name: k.name !== k.serial ? k.name : "", mine: true, orphan: true }));
+      setTerminals([
+        ...found.map((t) => {
           const seen = known.get(t.serial);
           return {
             serial: t.serial,
@@ -73,7 +98,8 @@ export function Wizard({
             mine: seen ? !seen.excluded : false,
           };
         }),
-      );
+        ...orphans,
+      ]);
     } catch {
       setTerminals([]);
     } finally {
@@ -106,18 +132,50 @@ export function Wizard({
 
   function saveMachines() {
     startTransition(async () => {
-      await saveTerminalChoices((terminals ?? []).map((t) => ({ serial: t.serial, mine: t.mine, name: t.name })));
-      go("plan");
+      const saved = await saveTerminalChoices(
+        (terminals ?? []).map((t) => ({ serial: t.serial, mine: t.mine, name: t.name })),
+      );
+      // Linking more machines may have moved the package up; the line above
+      // the button said so before the click.
+      setPlan(saved.plan);
+      setAccepted(false);
+      go(isVendor ? "ready" : "plan");
     });
   }
 
+  // Choosing is not agreeing: the terms come on their own screen next.
   function pickPlan(p: Plan) {
+    if (!planFits(p, chosen)) return;
     setPlan(p.id);
+    setAccepted(false);
+    go("confirm");
+  }
+
+  const failures: Record<Exclude<StartTrialResult, { ok: true }>["reason"], string> = {
+    plan: m.billing.tooSmallFailed,
+    tooSmall: m.billing.tooSmallFailed,
+    notAccepted: m.billing.acceptNeeded,
+    vendor: m.billing.tooSmallFailed,
+    payment: m.billing.paymentFailed,
+  };
+
+  function confirmTrial() {
+    if (!plan) return;
+    setError(null);
     startTransition(async () => {
-      await choosePlan(p.id);
-      go("ready");
+      const result = await startTrial(plan, accepted);
+      if (!result.ok) {
+        setError(failures[result.reason]);
+        return;
+      }
+      if (result.checkoutUrl) window.location.href = result.checkoutUrl;
+      else go("ready");
     });
   }
+
+  const pickedPlan = planById(plan);
+  const upgrade = upgradeLine(m, f, pickedPlan, chosen, paymentsEnabled);
+  const trialEnd = trialDates(trialEndsAt).end;
 
   function leave(to: string) {
     startTransition(async () => {
@@ -277,7 +335,11 @@ export function Wizard({
                         </button>
                         <span className="min-w-0 flex-1">
                           <span className="block font-mono text-sm font-semibold">{t.serial}</span>
-                          {t.model && <span className="block truncate text-xs text-muted-foreground">{t.model}</span>}
+                          {(t.model || t.orphan) && (
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {t.orphan ? m.billing.orphan : t.model}
+                            </span>
+                          )}
                         </span>
                         <Input
                           value={t.name}
@@ -295,6 +357,11 @@ export function Wizard({
                     ))}
                   </ul>
                   <p className="mt-4 max-w-[58ch] text-sm text-muted-foreground">{m.welcome.machinesForeign}</p>
+                  {upgrade && (
+                    <p role="status" className="mt-4 max-w-[58ch] bg-surface p-4 text-sm">
+                      {upgrade}
+                    </p>
+                  )}
                 </>
               )}
             </div>
@@ -317,60 +384,148 @@ export function Wizard({
               {m.welcome.planTitle}
             </h1>
             <p style={{ "--i": 1 } as React.CSSProperties} className="mt-4 max-w-[58ch] text-[17px] leading-relaxed text-muted-foreground">
-              {chosen > 0 ? fmt(m.welcome.planBody, { count: chosen }) : m.welcome.planBodyNone}
+              {chosen > 0 ? plural(chosen, m.welcome.planBodyOne, m.welcome.planBody) : m.welcome.planBodyNone}
             </p>
 
             <ul style={{ "--i": 2 } as React.CSSProperties} className="mt-7 grid gap-px bg-border sm:grid-cols-3">
               {PLANS.map((p) => {
-                const fits = chosen > 0 && planFor(chosen).id === p.id;
-                const picked = plan === p.id;
+                const fits = planFits(p, chosen);
+                const best = chosen > 0 && !needsQuote(chosen) && planFor(chosen).id === p.id;
+                const picked = fits && plan === p.id;
+                const why = `plan-${p.id}-why`;
                 return (
-                  <li key={p.id} className="bg-card">
-                    <button
-                      type="button"
-                      onClick={() => pickPlan(p)}
-                      disabled={isPending}
-                      className={cn(
-                        "flex h-full w-full flex-col items-start gap-1 p-5 text-left transition-colors",
-                        picked ? "bg-accent" : "hover:bg-surface",
-                      )}
-                    >
-                      <span className="font-heading text-lg font-semibold text-heading">{m.plans[p.id]}</span>
-                      <span className="tabular font-heading text-3xl font-bold">{f.euro(p.pricePerMonth)}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {m.welcome.planPerMonth} · {m.welcome.planExcl}
-                      </span>
-                      <span className="mt-3 text-sm">
-                        {p.maxMachines === null
-                          ? m.welcome.planUnlimited
-                          : fmt(m.welcome.planMachines, { count: p.maxMachines })}
-                      </span>
-                      {fits && (
-                        <span className="mt-3 inline-flex rounded-full bg-primary/15 px-2.5 py-1 text-xs font-semibold text-accent-foreground">
-                          {fmt(m.welcome.planFits, { count: chosen })}
+                  <li
+                    key={p.id}
+                    aria-current={picked || undefined}
+                    className={cn("flex flex-col gap-1 p-5", picked ? "bg-accent" : "bg-card")}
+                  >
+                    <h2 className={cn("font-heading text-lg font-semibold text-heading", !fits && "opacity-55")}>
+                      {m.plans[p.id]}
+                    </h2>
+                    <p className={cn("tabular font-heading text-3xl font-bold", !fits && "opacity-55")}>
+                      {f.euroRound(p.pricePerMonth)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {m.welcome.planPerMonth} · {m.welcome.planExcl}
+                    </p>
+                    <ul className={cn("mt-4 flex flex-col gap-1.5 text-sm", !fits && "opacity-55")}>
+                      {planFeatureLines(m, p, PLANS).map((line) => (
+                        <li key={line.text} className={cn("flex gap-2", line.soon && "text-muted-foreground")}>
+                          {line.soon ? (
+                            <Clock className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                          ) : (
+                            <Check className="mt-0.5 size-3.5 shrink-0 text-positive" strokeWidth={3} aria-hidden="true" />
+                          )}
+                          {line.text}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-auto flex flex-col items-start gap-3 pt-4">
+                      {!fits ? (
+                        <span id={why} className="text-xs font-semibold text-muted-foreground">
+                          {fmt(m.billing.tooSmall, { count: chosen })}
                         </span>
-                      )}
-                      {picked && (
-                        <span className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-positive">
-                          <Check className="size-4" strokeWidth={3} />
-                          {m.welcome.planChosen}
+                      ) : best ? (
+                        <span
+                          id={why}
+                          className="inline-flex rounded-full bg-primary/15 px-2.5 py-1 text-xs font-semibold text-accent-foreground"
+                        >
+                          {plural(chosen, m.billing.fitsOne, m.billing.fits)}
                         </span>
-                      )}
-                    </button>
+                      ) : null}
+                      {/* Coming back to this step, the chosen package still leads on. */}
+                      <Button
+                        variant={picked || p.featured ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => pickPlan(p)}
+                        disabled={isPending}
+                        aria-disabled={!fits || undefined}
+                        aria-describedby={!fits || best ? why : undefined}
+                        className={cn(!fits && "cursor-not-allowed opacity-55")}
+                      >
+                        {picked && <Check aria-hidden="true" />}
+                        {picked ? m.welcome.planChosen : m.welcome.planChoose}
+                      </Button>
+                    </div>
                   </li>
                 );
               })}
             </ul>
 
-            <p style={{ "--i": 3 } as React.CSSProperties} className="mt-5 max-w-[58ch] text-sm text-muted-foreground">
-              {m.welcome.planNoPayment}
-            </p>
+            {needsQuote(chosen) && (
+              <p style={{ "--i": 3 } as React.CSSProperties} className="mt-5 max-w-[58ch] text-sm">
+                {fmt(m.billing.quote, { count: LARGEST_PLAN.maxMachines })}{" "}
+                <a
+                  href="https://www.matoautomaat.be/contact"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold underline underline-offset-4"
+                >
+                  {m.billing.quoteLink}
+                </a>
+              </p>
+            )}
 
             <Nav
               style={{ "--i": 4 } as React.CSSProperties}
               onBack={() => go("machines")}
               backLabel={m.welcome.back}
               busy={isPending}
+            />
+          </>
+        )}
+
+        {step === "confirm" && pickedPlan && (
+          <>
+            <h1 style={{ "--i": 0 } as React.CSSProperties} className="text-4xl">
+              {m.welcome.confirmTitle}
+            </h1>
+            <p style={{ "--i": 1 } as React.CSSProperties} className="mt-4 text-[17px] text-muted-foreground">
+              <span className="font-semibold text-foreground">{m.plans[pickedPlan.id]}</span>
+              {" · "}
+              <span className="tabular">{f.euroRound(pickedPlan.pricePerMonth)}</span> {m.welcome.planPerMonth} ·{" "}
+              {m.welcome.planExcl}
+            </p>
+
+            {/* Every term on this screen itself, not behind a link: the card schemes ask for it. */}
+            <ul
+              style={{ "--i": 2 } as React.CSSProperties}
+              className="mt-6 flex max-w-[60ch] flex-col gap-3 border bg-card p-5 text-[15px] leading-relaxed"
+            >
+              {disclosureLines(m, f, pickedPlan, trialEnd, paymentsEnabled).map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+
+            {paymentsEnabled && (
+              <label
+                style={{ "--i": 3 } as React.CSSProperties}
+                className="mt-5 flex max-w-[60ch] cursor-pointer items-start gap-3 text-[15px]"
+              >
+                <input
+                  type="checkbox"
+                  checked={accepted}
+                  onChange={(e) => setAccepted(e.target.checked)}
+                  className="mt-0.5 size-5 shrink-0 accent-[var(--primary)]"
+                />
+                <span>{acceptLine(m, f, pickedPlan)}</span>
+              </label>
+            )}
+
+            {error && (
+              <p role="alert" className="mt-4 text-sm text-negative">
+                {error}
+              </p>
+            )}
+
+            <Nav
+              style={{ "--i": 4 } as React.CSSProperties}
+              onBack={() => go("plan")}
+              onNext={confirmTrial}
+              nextLabel={paymentsEnabled ? m.welcome.confirmStartPay : m.welcome.confirmStart}
+              busy={isPending}
+              disabled={paymentsEnabled && !accepted}
+              backLabel={m.welcome.back}
             />
           </>
         )}

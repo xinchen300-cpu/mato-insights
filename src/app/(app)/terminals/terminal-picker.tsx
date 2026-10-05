@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
+import { needsQuote, planById, LARGEST_PLAN } from "@/lib/plans";
+import { upgradeLine } from "@/lib/billing-copy";
 import { cn } from "@/lib/utils";
 import { saveTerminalChoices } from "./actions";
 
@@ -18,6 +20,8 @@ export type TerminalRow = {
   mine: boolean;
   /** Whether sales already came in from it, which usually settles the question. */
   hasSales: boolean;
+  /** Linked here, but no longer on the Payter account. */
+  orphan?: boolean;
 };
 
 /**
@@ -26,14 +30,27 @@ export type TerminalRow = {
  * is a question only the operator can answer — and it has to be answered
  * before any figure means anything.
  */
-export function TerminalPicker({ rows }: { rows: TerminalRow[] }) {
-  const { m } = useI18n();
+export function TerminalPicker({
+  rows,
+  planId,
+  paymentsEnabled,
+}: {
+  rows: TerminalRow[];
+  /** The package now; null for the vendor or an account without one. */
+  planId: string | null;
+  paymentsEnabled: boolean;
+}) {
+  const { m, f } = useI18n();
   const [state, setState] = useState(rows);
   const [saved, setSaved] = useState(false);
   const [missingName, setMissingName] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const chosen = state.filter((r) => r.mine).length;
+  // Ticking one machine too many moves the package up. Say so while ticking,
+  // before Save, so the new price is something they saw rather than found.
+  const current = planById(planId);
+  const upgrade = upgradeLine(m, f, current, chosen, paymentsEnabled);
 
   function set(serial: string, patch: Partial<TerminalRow>) {
     setSaved(false);
@@ -78,6 +95,7 @@ export function TerminalPicker({ rows }: { rows: TerminalRow[] }) {
                   row.model,
                   row.lastSeenLabel ? `${m.terminals.lastSeen}: ${row.lastSeenLabel}` : m.terminals.never,
                   row.hasSales ? m.terminals.hasSales : null,
+                  row.orphan ? m.billing.orphan : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")}
@@ -106,6 +124,16 @@ export function TerminalPicker({ rows }: { rows: TerminalRow[] }) {
         {saved && <span className="text-sm text-positive">{m.terminals.saved}</span>}
         {missingName && <span className="text-sm text-negative">{m.terminals.nameNeeded}</span>}
       </div>
+      {upgrade && (
+        <p role="status" className="max-w-[60ch] bg-surface p-4 text-sm">
+          {upgrade}
+        </p>
+      )}
+      {current && needsQuote(chosen) && (
+        <p className="max-w-[60ch] text-sm text-muted-foreground">
+          {fmt(m.billing.quoteNeeded, { count: LARGEST_PLAN.maxMachines })}
+        </p>
+      )}
     </div>
   );
 }

@@ -83,7 +83,7 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
       <div className="grid gap-8 lg:grid-cols-[1.5fr_1fr]">
         <SheetTables lines={sheet.lines} m={m} />
         <div className="flex flex-col gap-6 lg:sticky lg:top-24 lg:self-start">
-          {!sheet.completed_at && (
+          {!sheet.completed_at && sheet.share_token && (
             <Panel title={m.refill.share}>
               <ShareBox token={sheet.share_token} />
             </Panel>

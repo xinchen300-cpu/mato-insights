@@ -3,6 +3,7 @@
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { requireBusinessAccess, requireOperator, requireOrgId } from "@/lib/org";
+import { featureAllowed } from "@/lib/billing";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireMachineAccess } from "@/lib/data";
 import { imageFrom, removeImage, uploadImage } from "@/lib/upload";
@@ -68,10 +69,24 @@ export async function saveBusiness(formData: FormData) {
  * Turn the business' read-only page on (a fresh token, which also kills any
  * earlier link) or off.
  */
-export async function setBusinessShare(id: string, enabled: boolean): Promise<string | null> {
+export async function setBusinessShare(
+  id: string,
+  enabled: boolean,
+): Promise<{ token: string | null } | { locked: true }> {
   const orgId = await requireOrgId();
   // Minting or revoking a public link to someone else's figures is not on.
   await requireBusinessAccess(id);
+  // Switching a link on is a Zaak feature. Switching one off, or replacing a
+  // link that may have leaked, is a safety action and never is.
+  if (enabled && !(await featureAllowed(orgId, "shareWithShops"))) {
+    const { data: current } = await createAdminClient()
+      .from("businesses")
+      .select("share_token")
+      .eq("id", id)
+      .eq("org_id", orgId)
+      .maybeSingle();
+    if (!current?.share_token) return { locked: true };
+  }
   const token = enabled ? randomBytes(18).toString("base64url") : null;
   const { error } = await createAdminClient()
     .from("businesses")
@@ -80,7 +95,7 @@ export async function setBusinessShare(id: string, enabled: boolean): Promise<st
     .eq("org_id", orgId);
   if (error) throw new Error(error.message);
   revalidatePath("/", "layout");
-  return token;
+  return { token };
 }
 
 /** Per-terminal override of the business start date, for a second-hand machine. */

@@ -6,7 +6,9 @@ export const REQUIRE_LOGIN =
   process.env.VENDLY_REQUIRE_LOGIN === "true" ||
   (process.env.NODE_ENV === "production" && process.env.VENDLY_REQUIRE_LOGIN !== "false");
 
-const PUBLIC_PREFIXES = ["/login", "/signup", "/auth/", "/r/", "/b/", "/pwa-icon/"];
+// Mollie's webhook arrives without a session; it carries only an id that the
+// route looks up again with our own key.
+const PUBLIC_PREFIXES = ["/login", "/signup", "/auth/", "/r/", "/b/", "/pwa-icon/", "/api/mollie/"];
 // The service worker is fetched by the browser without the session, so a
 // redirect to the login page would stop it registering at all.
 const PUBLIC_FILES = ["/manifest.webmanifest", "/icon.svg", "/sw.js"];

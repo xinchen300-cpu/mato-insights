@@ -16,12 +16,14 @@ import {
   getShelfLifePresets,
 } from "@/lib/data";
 import { mediaUrl } from "@/lib/media";
-import { getCurrentOrgId } from "@/lib/org";
+import { getBilling, linkedMachineCount, paymentsEnabled } from "@/lib/billing";
+import { getCurrentOrgId, isOperator } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { connectPayter, deleteTemplate } from "./actions";
 import { CostForm } from "./cost-form";
 import { NotifyToggle } from "./notify-toggle";
 import { ShelfLifePresets } from "./shelf-life-presets";
+import { SubscriptionPanel } from "./subscription-panel";
 import { SyncNowButton } from "./sync-now-button";
 
 export async function generateMetadata() {
@@ -29,7 +31,7 @@ export async function generateMetadata() {
   return { title: m.settings.title };
 }
 
-export default async function SettingsPage() {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ betaald?: string }> }) {
   const { m, f } = await getI18n();
   const orgId = await getCurrentOrgId();
   const admin = createAdminClient();
@@ -58,11 +60,32 @@ export default async function SettingsPage() {
 
   const ownTemplates = templates.filter((t) => t.org_id);
 
+  // The subscription is the operator's business, and the vendor has none.
+  const operator = await isOperator();
+  const billing = orgId && !vendor?.is_vendor && operator ? await getBilling(orgId) : null;
+  const { data: chargeRow } = billing && orgId
+    ? await admin.from("organizations").select("first_charge_on").eq("id", orgId).maybeSingle()
+    : { data: null };
+  const linked = billing && orgId ? await linkedMachineCount(orgId) : 0;
+
   return (
     <>
       <PageHeader title={m.settings.title} />
 
       <div className="grid max-w-3xl gap-6">
+        {billing && (
+          <SubscriptionPanel
+            planId={billing.plan?.id ?? null}
+            status={billing.status}
+            trialEndsAt={billing.trialEndsAt}
+            firstChargeOn={(chargeRow?.first_charge_on as string | null) ?? null}
+            paymentsEnabled={paymentsEnabled()}
+            hasMandate={billing.hasMandate}
+            machines={linked}
+            returnedFromPayment={(await searchParams).betaald === "1"}
+          />
+        )}
+
         {vendor?.is_vendor && (
           <Panel title={m.customers.title} hint={m.customers.subtitle}>
             <Link href="/klanten" className={buttonVariants({ variant: "outline" })}>
@@ -92,9 +115,11 @@ export default async function SettingsPage() {
               </p>
               <div className="flex flex-wrap items-center gap-3">
                 <SyncNowButton />
-                <Link href="/terminals" className={buttonVariants({ variant: "outline", size: "sm" })}>
-                  {m.terminals.title}
-                </Link>
+                {operator && (
+                  <Link href="/terminals" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                    {m.terminals.title}
+                  </Link>
+                )}
               </div>
               <details className="text-sm">
                 <summary className="cursor-pointer font-semibold text-muted-foreground">

@@ -47,7 +47,8 @@ export default async function OverviewPage() {
 
   // Wie nog nooit door de rondleiding is, hoort niet op een leeg dashboard te
   // landen. Eén keer, en daarna nooit meer.
-  if (orgId && (await isOperator())) {
+  const operator = await isOperator();
+  if (orgId && operator) {
     const { data: org } = await createAdminClient()
       .from("organizations")
       .select("onboarded_at")
@@ -91,7 +92,8 @@ export default async function OverviewPage() {
     return (
       <>
         <PageHeader title={m.overview.title} />
-        {setup.done ? (
+        {/* A shop has no setup of its own to finish, and /terminals is not hers. */}
+        {setup.done || !operator ? (
           <EmptyState
             title={m.overview.noData}
             hint={m.overview.noDataHint}
@@ -220,7 +222,7 @@ export default async function OverviewPage() {
 
       <div className="flex flex-col gap-6">
         {/* Still being set up: what to do next comes before what happened. */}
-        {!setup.done && <SetupGuide setup={setup} m={m} />}
+        {operator && !setup.done && <SetupGuide setup={setup} m={m} />}
 
         {todos.length > 0 && (
           <Panel title={m.overview.todo}>
