@@ -652,8 +652,9 @@ export type SetupState = {
  */
 export async function getSetupState(orgId: string): Promise<SetupState> {
   const admin = createAdminClient();
-  const [credentials, machines, slots, products, assignments] = await Promise.all([
+  const [credentials, org, machines, slots, products, assignments] = await Promise.all([
     admin.from("payter_credentials").select("org_id").eq("org_id", orgId).maybeSingle(),
+    admin.from("organizations").select("is_demo").eq("id", orgId).maybeSingle(),
     admin.from("machines").select("id, name, payter_serial_number").eq("org_id", orgId).eq("excluded", false),
     admin.from("slots").select("machine_id").eq("org_id", orgId),
     admin.from("products").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("archived", false),
@@ -666,7 +667,8 @@ export async function getSetupState(orgId: string): Promise<SetupState> {
   const withLayout = new Set((slots.data ?? []).map((s) => s.machine_id)).size;
 
   const state = {
-    payterConnected: Boolean(credentials.data),
+    // A demo has invented sales and no Payter login, and is set up all the same.
+    payterConnected: Boolean(credentials.data) || Boolean(org.data?.is_demo),
     machines: all.length,
     namedMachines: named,
     withLayout,

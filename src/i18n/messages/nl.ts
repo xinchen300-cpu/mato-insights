@@ -509,6 +509,7 @@ export const nl: Messages = {
     presetPlaceholder: "Verse maaltijd",
     presetDays: "Dagen",
     addPreset: "Categorie toevoegen",
+    demoNote: "Dit is een demo-account. De verkopen zijn verzonnen en komen niet van een echte Payter-terminal; er komen er elk uur een paar bij.",
   },
   auth: {
     signIn: "Inloggen",

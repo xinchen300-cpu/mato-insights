@@ -509,6 +509,7 @@ export const en = {
     presetPlaceholder: "Fresh meal",
     presetDays: "Days",
     addPreset: "Add category",
+    demoNote: "This is a demo account. The sales are made up and do not come from a real Payter terminal; a few more arrive every hour.",
   },
   auth: {
     signIn: "Sign in",

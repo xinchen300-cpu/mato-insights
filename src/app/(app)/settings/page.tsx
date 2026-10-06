@@ -38,7 +38,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const admin = createAdminClient();
 
   const { data: vendor } = orgId
-    ? await admin.from("organizations").select("is_vendor").eq("id", orgId).maybeSingle()
+    ? await admin.from("organizations").select("is_vendor, is_demo").eq("id", orgId).maybeSingle()
     : { data: null };
 
   const [{ data: credentials }, { data: syncLogs }, templates, businesses, machines, presets, { data: org }] = orgId
@@ -100,14 +100,16 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           title={m.settings.payter}
           hint={m.settings.payterHint}
           actions={
-            credentials ? (
+            credentials || vendor?.is_demo ? (
               <Badge className="bg-positive/15 text-positive">{m.settings.connected}</Badge>
             ) : (
               <Badge variant="outline">{m.settings.notConnected}</Badge>
             )
           }
         >
-          {credentials ? (
+          {vendor?.is_demo && !credentials ? (
+            <p className="max-w-[60ch] text-sm text-muted-foreground">{m.settings.demoNote}</p>
+          ) : credentials ? (
             <div className="flex flex-col gap-4">
               <p className="text-sm text-muted-foreground">
                 {fmt(m.settings.lastUpdate, {

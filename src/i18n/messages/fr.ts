@@ -509,6 +509,7 @@ export const fr: Messages = {
     presetPlaceholder: "Plat frais",
     presetDays: "Jours",
     addPreset: "Ajouter une catégorie",
+    demoNote: "Ceci est un compte de démonstration. Les ventes sont inventées et ne viennent pas d'un vrai terminal Payter ; quelques-unes s'ajoutent chaque heure.",
   },
   auth: {
     signIn: "Se connecter",
