@@ -124,13 +124,11 @@
 }
 
 @layer components {
+  /* A quiet label above a value: sentence case, no mono, no tracking. */
   .eyebrow {
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--heading);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted-foreground);
   }
   .tabular {
     font-variant-numeric: tabular-nums;

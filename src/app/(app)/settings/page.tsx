@@ -25,6 +25,7 @@ import { NotifyToggle } from "./notify-toggle";
 import { ShelfLifePresets } from "./shelf-life-presets";
 import { SubscriptionPanel } from "./subscription-panel";
 import { SyncNowButton } from "./sync-now-button";
+import { LanguageToggle } from "@/components/shell/language-toggle";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -70,7 +71,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
   return (
     <>
-      <PageHeader title={m.settings.title} />
+      <PageHeader title={m.settings.title} actions={<LanguageToggle />} />
 
       <div className="grid max-w-3xl gap-6">
         {billing && (

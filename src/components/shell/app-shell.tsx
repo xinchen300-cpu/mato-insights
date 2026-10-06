@@ -4,7 +4,6 @@ import { MatoWordmark } from "@/components/brand/mato-mark";
 import { getI18n } from "@/i18n/server";
 import { createClient } from "@/lib/supabase/server";
 import { HideNumbers } from "./hide-numbers";
-import { LanguageToggle } from "./language-toggle";
 import { DesktopNav, MobileNav } from "./nav";
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
@@ -18,11 +17,10 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4 sm:px-6">
           <Link href="/" aria-label={m.nav.overview}>
-            <MatoWordmark subtitle={m.brand.subtitle} />
+            <MatoWordmark />
           </Link>
           <DesktopNav />
           <div className="ml-auto flex items-center gap-2">
-            <LanguageToggle />
             <HideNumbers />
             <Link
               href="/settings"

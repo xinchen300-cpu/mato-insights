@@ -79,6 +79,8 @@ export default async function MachinesPage() {
           const s = summary.get(mc.id);
           const lastSale = lastSales.get(mc.id);
           const overall = s && s.counted ? fillLevel(s.stock, s.capacity) : "unknown";
+          // Online is the normal case and goes unsaid; only a problem gets a word.
+          const status = terminalStatus(mc.last_connected_at, mc.last_disconnected_at);
           // A card that is missing something points straight at the screen that fixes it.
           const todo =
             mc.type === "other"
@@ -92,7 +94,7 @@ export default async function MachinesPage() {
             <li key={mc.id}>
               <Link
                 href={todo?.href ?? `/machines/${mc.id}`}
-                className="flex h-full flex-col gap-3 border bg-card p-5 shadow-[0_8px_22px_rgb(28_24_18/0.06)] transition-transform hover:-translate-y-1"
+                className="flex h-full flex-col gap-3 border bg-card p-5 transition-colors hover:border-primary/40"
               >
                 <div className="flex items-start gap-3">
                   {mc.business_logo_path && (
@@ -102,11 +104,9 @@ export default async function MachinesPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
                       <p className="truncate font-heading text-lg font-semibold text-foreground">{mc.name}</p>
-                      <StatusBadge
-                        status={terminalStatus(mc.last_connected_at, mc.last_disconnected_at)}
-                        label={statusLabel(mc)}
-                        className="shrink-0"
-                      />
+                      {status !== "online" && (
+                        <StatusBadge status={status} label={statusLabel(mc)} className="shrink-0" />
+                      )}
                     </div>
                     <p className="truncate text-sm text-muted-foreground">
                       {[
@@ -121,12 +121,14 @@ export default async function MachinesPage() {
 
                 {s && s.slots > 0 && mc.type !== "other" ? (
                   <div className="flex flex-col gap-1.5">
-                    <div className="h-2 bg-level-empty/60">
-                      <div
-                        className={cn("h-full", levelColor[overall])}
-                        style={{ width: s.counted ? `${Math.min(100, (s.stock / s.capacity) * 100)}%` : "0%" }}
-                      />
-                    </div>
+                    {s.counted && (
+                      <div className="h-1.5 bg-level-empty/60">
+                        <div
+                          className={cn("h-full", levelColor[overall])}
+                          style={{ width: `${Math.min(100, (s.stock / s.capacity) * 100)}%` }}
+                        />
+                      </div>
+                    )}
                     {todo ? (
                       <p className="inline-flex items-center gap-1 text-sm font-semibold text-accent-foreground">
                         {todo.label}

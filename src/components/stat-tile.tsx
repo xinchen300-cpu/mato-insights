@@ -12,6 +12,7 @@ export function StatTile({
   verdict,
   verdictNotes,
   f,
+  bare,
 }: {
   label: string;
   value: string;
@@ -23,12 +24,14 @@ export function StatTile({
   verdict?: Verdict;
   verdictNotes?: { tooFew: string; noise: string };
   f: Formatters;
+  /** Inside a shared band: no border of its own. */
+  bare?: boolean;
 }) {
   const canCompare = current !== undefined && previous !== undefined && previous > 0;
   const tooFew = canCompare && verdict === "tooFew";
 
   return (
-    <div className="border bg-card p-5 shadow-[0_8px_22px_rgb(28_24_18/0.06)]">
+    <div className={bare ? "px-4 py-4 sm:p-6" : "border bg-card p-5"}>
       <p className="eyebrow">{label}</p>
       <p className="tabular mt-3 font-heading text-[1.5rem] font-semibold leading-none tracking-tight text-foreground sm:text-[1.6rem] md:text-[1.75rem] lg:text-[2rem]">
         {value}
@@ -41,9 +44,6 @@ export function StatTile({
         {tooFew && verdictNotes && <span>{verdictNotes.tooFew}</span>}
         {detail && <span className="tabular">{detail}</span>}
       </div>
-      {canCompare && verdict === "noise" && verdictNotes && (
-        <p className="mt-1.5 text-xs text-muted-foreground">{verdictNotes.noise}</p>
-      )}
     </div>
   );
 }

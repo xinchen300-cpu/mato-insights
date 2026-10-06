@@ -12,7 +12,7 @@ export function TipsPanel({ m, count, title }: { m: Messages; count: number; tit
   const categories = m.tips.categories as Record<string, string>;
 
   return (
-    <section className="border bg-card p-5 shadow-[0_8px_22px_rgb(28_24_18/0.06)] sm:p-6">
+    <section className="border bg-card p-5 sm:p-6">
       <p className="eyebrow mb-3 flex items-center gap-2">
         <Sparkles className="size-3.5" />
         {title}

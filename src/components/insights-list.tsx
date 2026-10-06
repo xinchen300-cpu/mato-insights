@@ -32,9 +32,8 @@ export function InsightsList({ insights, m, f }: { insights: Insight[]; m: Messa
   if (insights.length === 0) return null;
 
   return (
-    <section className="border border-primary/25 bg-accent p-5 sm:p-6">
-      <p className="eyebrow mb-3">{m.insights.title}</p>
-      <ul className="flex flex-col gap-3">
+    <section aria-label={m.insights.title}>
+      <ul className="flex flex-col gap-2">
         {insights.map((insight, i) => {
           const Icon =
             insight.kind === "quietMachine"
@@ -45,9 +44,10 @@ export function InsightsList({ insights, m, f }: { insights: Insight[]; m: Messa
                   ? TrendingUp
                   : Lightbulb;
           return (
-            <li key={i} className="figure flex gap-3 text-[15px] leading-snug">
+            <li key={i} className="figure flex gap-2.5 text-sm leading-snug text-muted-foreground">
               <Icon
-                className={`mt-0.5 size-[18px] shrink-0 ${insight.kind === "quietMachine" ? "text-negative" : "text-accent-foreground"}`}
+                aria-hidden="true"
+                className={`mt-px size-4 shrink-0 ${insight.kind === "quietMachine" ? "text-negative" : "text-muted-foreground"}`}
               />
               <span>{sentence(insight, m, f)}</span>
             </li>

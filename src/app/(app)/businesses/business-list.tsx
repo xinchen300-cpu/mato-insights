@@ -37,7 +37,7 @@ export function BusinessList({ businesses }: { businesses: Row[] }) {
             <li key={b.id}>
               <Link
                 href={`/businesses/${b.id}`}
-                className="flex w-full items-center gap-4 border bg-card p-4 text-left shadow-[0_8px_22px_rgb(28_24_18/0.06)] transition-transform hover:-translate-y-0.5"
+                className="flex w-full items-center gap-4 border bg-card p-4 text-left transition-transform hover:-translate-y-0.5"
               >
                 <span className="grid h-14 w-20 shrink-0 place-items-center bg-surface">
                   {b.logo_path ? (

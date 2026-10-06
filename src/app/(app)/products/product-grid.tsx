@@ -111,21 +111,25 @@ export function ProductGrid({
                 <span className="tabular text-sm font-normal text-muted-foreground">{group.items.length}</span>
               </h2>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                {group.items.map((p) => (
+                {group.items.map((p) => {
+                  const framed = group.items.some((item) => item.photo_path);
+                  return (
                   <button
                     key={p.id}
                     type="button"
                     onClick={() => setEditing(p)}
-                    className={`group flex flex-col border bg-card text-left shadow-[0_8px_22px_rgb(28_24_18/0.06)] transition-transform hover:-translate-y-1 ${p.archived ? "opacity-60" : ""}`}
+                    className={`group flex flex-col border bg-card text-left transition-colors hover:border-primary/40 ${p.archived ? "opacity-60" : ""}`}
                   >
-                    <div className="grid h-32 place-items-center bg-surface p-3">
-                      {p.photo_path ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={mediaUrl(p.photo_path)!} alt="" className="max-h-full max-w-full object-contain" />
-                      ) : (
-                        <ImageIcon className="size-7 text-muted-foreground/60" />
-                      )}
-                    </div>
+                    {framed && (
+                      <div className="grid h-32 place-items-center bg-surface p-3">
+                        {p.photo_path ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={mediaUrl(p.photo_path)!} alt="" className="max-h-full max-w-full object-contain" />
+                        ) : (
+                          <ImageIcon className="size-7 text-muted-foreground/60" />
+                        )}
+                      </div>
+                    )}
                     <div className="flex flex-1 flex-col gap-1 p-3">
                       <span className="line-clamp-2 font-semibold leading-snug">{p.name}</span>
                       <span className="mt-auto flex items-center justify-between gap-2 text-sm text-muted-foreground">
@@ -138,7 +142,8 @@ export function ProductGrid({
                       </span>
                     </div>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             </section>
           ))}

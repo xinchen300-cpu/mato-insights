@@ -1,14 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, CalendarClock, Link2, PackageOpen, WifiOff, type LucideIcon } from "lucide-react";
+import { ArrowRight, CalendarClock, CircleDashed, Link2, PackageOpen, WifiOff, type LucideIcon } from "lucide-react";
 import { RevenueChart } from "@/components/charts/revenue-chart";
-import { StatusBadge } from "@/components/machine/status-badge";
 import { Delta } from "@/components/delta";
 import { InsightsList } from "@/components/insights-list";
-import { SetupGuide } from "@/components/setup-guide";
+import { SetupGuide, nextSetupStep } from "@/components/setup-guide";
 import { EmptyState, PageHeader, Panel } from "@/components/page-header";
 import { StatTile } from "@/components/stat-tile";
-import { TipsPanel } from "@/components/tips-panel";
 import { buttonVariants } from "@/components/ui/button";
 import { DISPLAY_TIME_ZONE, fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
@@ -27,7 +25,7 @@ import { buildInsights } from "@/lib/insights";
 import { compareCounts, fillDays, lastFullWeeks } from "@/lib/stats";
 import { terminalStatus } from "@/lib/terminal-status";
 import { getCurrentOrgId, isOperator } from "@/lib/org";
-import { fillLevel, levelColor, needsAttention } from "@/lib/stock";
+import { fillLevel, needsAttention } from "@/lib/stock";
 import { cn } from "@/lib/utils";
 
 const RECENT_MS = 90 * 24 * 60 * 60 * 1000;
@@ -124,15 +122,6 @@ export default async function OverviewPage() {
       lowByMachine.set(slot.machine_id, (lowByMachine.get(slot.machine_id) ?? 0) + 1);
     }
   }
-  const stockByMachine = new Map<string, { stock: number; capacity: number }>();
-  for (const slot of stock) {
-    if (slot.stock === null) continue;
-    const entry = stockByMachine.get(slot.machine_id) ?? { stock: 0, capacity: 0 };
-    entry.stock += slot.stock;
-    entry.capacity += slot.capacity;
-    stockByMachine.set(slot.machine_id, entry);
-  }
-
 
   // One number and the machine worst off; the list lives on its own page.
   const expiringUnits = expiring.reduce((sum, a) => sum + a.qty_expired + a.qty_expiring_24h, 0);
@@ -150,6 +139,7 @@ export default async function OverviewPage() {
   // three separate banners further down the page.
   const machineName = new Map(machines.map((mc) => [mc.id, mc.name]));
   const lowSorted = [...lowByMachine.entries()].sort((a, b) => b[1] - a[1]);
+  const setupStep = operator && !setup.done ? nextSetupStep(setup, m) : null;
   const todos: { key: string; icon: LucideIcon; tone: Tone; text: string; href: string }[] = [
     ...offline.map((mc) => ({
       key: `offline-${mc.id}`,
@@ -187,6 +177,17 @@ export default async function OverviewPage() {
           },
         ]
       : []),
+    ...(setupStep
+      ? [
+          {
+            key: "setup",
+            icon: CircleDashed,
+            tone: "muted" as const,
+            text: setupStep.state ? `${setupStep.title} — ${setupStep.state}` : setupStep.title,
+            href: setupStep.href,
+          },
+        ]
+      : []),
     ...(recentUnassigned.length > 0
       ? [
           {
@@ -215,22 +216,40 @@ export default async function OverviewPage() {
   return (
     <>
       <PageHeader
-        eyebrow={f.date(new Date())}
         title={m.overview.title}
         subtitle={syncedAt ? fmt(m.overview.updated, { time: f.relative(syncedAt) }) : undefined}
       />
 
-      <div className="flex flex-col gap-6">
-        {/* Still being set up: what to do next comes before what happened. */}
-        {operator && !setup.done && <SetupGuide setup={setup} m={m} />}
+      <div className="flex flex-col gap-8">
+        {/* What the app is opened for, first and side by side. */}
+        <section className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 divide-y border bg-card sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            {tiles.map(({ label, report, compare }) => (
+              <StatTile
+                key={label}
+                bare
+                label={label}
+                value={f.euro(report.totals.revenue)}
+                current={report.totals.revenue}
+                previous={report.totals.prev_revenue}
+                compareLabel={compare}
+                detail={plural(report.totals.units, m.common.salesOne, m.common.salesOther)}
+                verdict={compareCounts(report.totals.units, report.totals.prev_units)}
+                verdictNotes={{ tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise }}
+                f={f}
+              />
+            ))}
+          </div>
+          <InsightsList insights={insights} m={m} f={f} />
+        </section>
 
         {todos.length > 0 && (
           <Panel title={m.overview.todo}>
-            <ul className="flex flex-col divide-y">
+            <ul className="-my-1 flex flex-col divide-y">
               {todos.map((t) => (
                 <li key={t.key}>
                   <Link href={t.href} className="group flex items-center gap-3 py-3">
-                    <t.icon className={cn("size-[18px] shrink-0", toneColor[t.tone])} />
+                    <t.icon className={cn("size-[18px] shrink-0", toneColor[t.tone])} aria-hidden="true" />
                     <span className="flex-1 text-[15px]">{t.text}</span>
                     <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-accent-foreground" />
                   </Link>
@@ -240,89 +259,17 @@ export default async function OverviewPage() {
           </Panel>
         )}
 
-        <Panel title={m.nav.machines} hint={m.overview.machinesHint}>
-          <ul className="flex flex-col divide-y">
-            {machines
-              .filter((mc) => mc.type !== "other")
-              .map((mc) => {
-                const level = stockByMachine.get(mc.id);
-                const pct = level && level.capacity > 0 ? level.stock / level.capacity : null;
-                const low = lowByMachine.get(mc.id) ?? 0;
-                const status = terminalStatus(mc.last_connected_at, mc.last_disconnected_at);
-                return (
-                  <li key={mc.id}>
-                    <Link
-                      href={`/machines/${mc.id}`}
-                      className="flex flex-col gap-1.5 py-3 hover:text-accent-foreground"
-                    >
-                      <span className="flex items-baseline justify-between gap-3">
-                        <span className="truncate font-semibold">{mc.name}</span>
-                        <span className="flex shrink-0 items-center gap-3">
-                          <StatusBadge
-                            status={status}
-                            label={
-                              status === "online"
-                                ? m.status.online
-                                : status === "offline"
-                                  ? fmt(m.status.offlineSince, { when: f.relative(mc.last_disconnected_at!) })
-                                  : m.status.unknown
-                            }
-                          />
-                          <span className="tabular text-sm font-semibold">
-                            {pct === null ? (
-                              <span className="font-normal text-muted-foreground">{m.overview.stockUnknown}</span>
-                            ) : (
-                              f.percent(pct)
-                            )}
-                          </span>
-                        </span>
-                      </span>
-                      {pct !== null && (
-                        <span className="block h-2 bg-level-empty/60">
-                          <span
-                            className={cn("block h-full", levelColor[fillLevel(level!.stock, level!.capacity)])}
-                            style={{ width: `${Math.min(100, Math.round(pct * 100))}%` }}
-                          />
-                        </span>
-                      )}
-                      {low > 0 && <span className="text-xs text-negative">{fmt(m.overview.slotsLow, { count: low })}</span>}
-                    </Link>
-                  </li>
-                );
-              })}
-          </ul>
-        </Panel>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {tiles.map(({ label, report, compare }) => (
-            <StatTile
-              key={label}
-              label={label}
-              value={f.euro(report.totals.revenue)}
-              current={report.totals.revenue}
-              previous={report.totals.prev_revenue}
-              compareLabel={compare}
-              detail={plural(report.totals.units, m.common.salesOne, m.common.salesOther)}
-              verdict={compareCounts(report.totals.units, report.totals.prev_units)}
-              verdictNotes={{ tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise }}
-              f={f}
-            />
-          ))}
-        </div>
-
-        <InsightsList insights={insights} m={m} f={f} />
-
         <Panel title={m.overview.revenueChart}>
           <RevenueChart data={chartData} />
         </Panel>
 
-        <Panel title={m.overview.byMachine} hint={m.overview.byMachineHint}>
-          <ul className="flex flex-col divide-y">
+        <Panel title={m.overview.byMachine}>
+          <ul className="-my-1 flex flex-col divide-y">
             {month.by_machine.map((row) => (
               <li key={row.machine_id}>
                 <Link
                   href={`/machines/${row.machine_id}`}
-                  className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-0.5 py-3 sm:grid-cols-[1fr_8rem_6rem]"
+                  className="grid grid-cols-[1fr_auto_4.5rem] items-baseline gap-x-4 py-3 hover:text-accent-foreground"
                 >
                   <span className="min-w-0">
                     <span className="block truncate font-semibold">{row.machine_name}</span>
@@ -331,7 +278,7 @@ export default async function OverviewPage() {
                     </span>
                   </span>
                   <span className="tabular text-right font-semibold">{f.euro(row.revenue)}</span>
-                  <span className="col-span-2 text-right sm:col-span-1">
+                  <span className="text-right">
                     <Delta
                       current={row.revenue}
                       previous={row.prev_revenue}
@@ -344,10 +291,8 @@ export default async function OverviewPage() {
               </li>
             ))}
           </ul>
-          <p className="mt-3 border-t pt-3 text-xs text-muted-foreground">{m.stats.deltaLegend}</p>
+          <p className="mt-4 text-xs text-muted-foreground">{m.stats.deltaLegend}</p>
         </Panel>
-
-        <TipsPanel m={m} count={1} title={m.tips.title} />
       </div>
     </>
   );

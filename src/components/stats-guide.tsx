@@ -17,7 +17,7 @@ export function StatsGuide({ m, f }: { m: Messages; f: Formatters }) {
   ];
 
   return (
-    <details className="group border bg-card p-5 shadow-[0_8px_22px_rgb(28_24_18/0.06)] sm:p-6">
+    <details className="group border bg-card p-5 sm:p-6">
       <summary className="flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
         <GraduationCap className="size-5 shrink-0 text-accent-foreground" />
         <span className="flex-1">
