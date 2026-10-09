@@ -35,7 +35,7 @@ export default async function ProducersPage() {
 
   return (
     <>
-      <PageHeader title={m.producers.title} subtitle={m.producers.subtitle} />
+      <PageHeader title={m.producers.title} />
       <ProducerList producers={rows} />
     </>
   );

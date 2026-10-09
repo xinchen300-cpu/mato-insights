@@ -152,6 +152,27 @@
   .hover-surface:hover {
     background-color: var(--surface);
   }
+  /* A page arrives: a short fade and a few pixels of rise, nothing more. */
+  .page-enter {
+    animation: page-in 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  /* Rows settle in one after another, the first dozen only. */
+  .stagger > * {
+    animation: row-in 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .stagger > :nth-child(2) { animation-delay: 25ms; }
+  .stagger > :nth-child(3) { animation-delay: 50ms; }
+  .stagger > :nth-child(4) { animation-delay: 75ms; }
+  .stagger > :nth-child(5) { animation-delay: 100ms; }
+  .stagger > :nth-child(6) { animation-delay: 125ms; }
+  .stagger > :nth-child(7) { animation-delay: 150ms; }
+  .stagger > :nth-child(8) { animation-delay: 175ms; }
+  .stagger > :nth-child(9) { animation-delay: 200ms; }
+  .stagger > :nth-child(n + 10) { animation-delay: 225ms; }
+  /* Online: a soft ring that grows and fades, every two seconds. */
+  .status-pulse {
+    animation: status-pulse 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
   /* Loading placeholders: a calm shimmer in the shape of what is coming. */
   .skeleton {
     border-radius: var(--radius-md);
@@ -247,6 +268,38 @@
   }
 }
 
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes status-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  70%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
 @keyframes skeleton-shimmer {
   from {
     background-position: 200% 0;
@@ -258,7 +311,10 @@
 
 /* Wie beweging liever niet heeft, krijgt ze niet. */
 @media (prefers-reduced-motion: reduce) {
-  .skeleton {
+  .skeleton,
+  .page-enter,
+  .stagger > *,
+  .status-pulse {
     animation: none;
   }
   .step-enter,

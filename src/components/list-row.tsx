@@ -44,7 +44,7 @@ export function ListRow({
   );
   const classes = cn("flex min-h-16 items-center gap-3.5 rounded-xl px-3 py-3", className);
   return href ? (
-    <Link href={href} className={cn(classes, "hover-surface")}>
+    <Link href={href} className={cn(classes, "hover-surface transition-transform duration-150 active:scale-[0.99]")}>
       {body}
     </Link>
   ) : (
@@ -54,7 +54,7 @@ export function ListRow({
 
 /** A list of rows inside one card. */
 export function RowList({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <ul className={cn("surface-card flex flex-col p-2", className)}>{children}</ul>;
+  return <ul className={cn("surface-card stagger flex flex-col p-2", className)}>{children}</ul>;
 }
 
 /** A round token at the start of a row: an icon, or the first letter of a name. */

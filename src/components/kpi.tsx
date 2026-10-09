@@ -70,9 +70,12 @@ export function MiniStat({
   detail,
   f,
   className,
+  leading,
 }: {
   label: string;
   value: string;
+  /** A small mark before the value, such as a status dot. */
+  leading?: React.ReactNode;
   compare?: Compare;
   detail?: string;
   f: Formatters;
@@ -81,7 +84,12 @@ export function MiniStat({
   return (
     <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
       <p className="truncate text-[13px] font-medium text-muted-foreground">{label}</p>
-      <p className="tabular truncate text-[20px] font-semibold leading-none tracking-[-0.03em] sm:text-[22px]">{value}</p>
+      <p className="flex items-center gap-2">
+        {leading}
+        <span className="tabular truncate text-[20px] font-semibold leading-none tracking-[-0.03em] sm:text-[22px]">
+          {value}
+        </span>
+      </p>
       {(compare || detail) && <ChangeLine compare={compare} detail={detail} f={f} />}
     </div>
   );

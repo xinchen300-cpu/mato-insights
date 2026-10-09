@@ -144,7 +144,7 @@ export default async function RefillPage() {
 
   return (
     <>
-      <PageHeader title={m.refill.title} subtitle={m.refill.subtitle} />
+      <PageHeader title={m.refill.title} />
 
       <div className="flex flex-col gap-10">
         {!(await isOperator()) ? (

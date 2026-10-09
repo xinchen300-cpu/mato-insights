@@ -4,6 +4,7 @@ import { ArrowRight, CalendarClock, CircleDashed, Link2, PackageOpen, WifiOff, t
 import { RevenueChart } from "@/components/charts/revenue-chart";
 import { Delta } from "@/components/delta";
 import { KpiHero, MiniStat } from "@/components/kpi";
+import { StatusDot } from "@/components/machine/status-badge";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { InsightsList } from "@/components/insights-list";
 import { SetupGuide, nextSetupStep } from "@/components/setup-guide";
@@ -246,7 +247,12 @@ export default async function OverviewPage() {
               value={month.totals.units > 0 ? f.euro(month.totals.revenue / month.totals.units) : "—"}
               f={f}
             />
-            <MiniStat label={m.overview.machinesOnline} value={`${onlineCount} / ${counted.length}`} f={f} />
+            <MiniStat
+              label={m.overview.machinesOnline}
+              value={`${onlineCount} / ${counted.length}`}
+              leading={<StatusDot status={onlineCount === counted.length ? "online" : "offline"} />}
+              f={f}
+            />
           </div>
           <div className="-mx-2 mt-7 sm:-mx-3">
             <RevenueChart data={chartData} height={220} />

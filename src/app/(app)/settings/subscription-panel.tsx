@@ -66,7 +66,7 @@ export function SubscriptionPanel({
     return (
       // The anchor wraps the title too, so a link to #abonnement lands on the heading.
       <div id="abonnement" className="scroll-mt-20">
-        <Section title={m.billing.title} hint={m.billing.hint}>
+        <Section title={m.billing.title}>
           <div className="surface-card flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
             <p className="text-[15px] text-muted-foreground">{m.billing.statusNone}</p>
             <Link href="/welkom" className={cn(buttonVariants(), "w-fit")}>
@@ -93,7 +93,7 @@ export function SubscriptionPanel({
 
   return (
     <div id="abonnement" className="scroll-mt-20">
-      <Section title={m.billing.title} hint={m.billing.hint}>
+      <Section title={m.billing.title}>
         <div className="surface-card">
           {/* What you have: the one big thing on this page. */}
           <div className="flex flex-col gap-5 px-5 pb-6 pt-6 sm:px-7 sm:pt-7">

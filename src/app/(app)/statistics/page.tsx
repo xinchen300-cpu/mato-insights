@@ -75,13 +75,12 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
     Object.entries({ period, from, to, business, machine, product }).filter(([, v]) => v) as [string, string][],
   );
 
-  const { headline, product: productLine } = summary(report, m, f, compare);
+  const { product: productLine } = summary(report, m, f, compare);
 
   return (
     <>
       <PageHeader
         title={m.stats.title}
-        subtitle={m.stats.subtitle}
         actions={
           <a href={`/statistics/csv?${exportParams}`} className={buttonVariants({ variant: "outline" })}>
             <Download />
@@ -129,10 +128,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                 f={f}
               />
 
-              <div className="mt-5 max-w-2xl">
-                <p className="figure text-[15px] font-medium leading-relaxed text-foreground sm:text-base">{headline}</p>
-                {productLine && <p className="figure mt-1 text-sm text-muted-foreground">{productLine}</p>}
-              </div>
+              {productLine && <p className="figure mt-4 max-w-2xl text-sm text-muted-foreground">{productLine}</p>}
 
               <div className="mt-7 grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-3">
                 <MiniStat
@@ -141,7 +137,6 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                   compare={{
                     current: totals.units,
                     previous: totals.prev_units,
-                    label: compare,
                     verdict: unitsVerdict,
                     notes: verdictNotes,
                   }}
@@ -155,11 +150,9 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                 />
               </div>
 
-              <div className="mt-8">
-                <h2 className="text-[14px] font-medium tracking-normal text-muted-foreground">
-                  {m.stats.revenueOverTime}
-                </h2>
-                <div className="-mx-2 mt-3 sm:-mx-3">
+              <div className="mt-7">
+                <h2 className="sr-only">{m.stats.revenueOverTime}</h2>
+                <div className="-mx-2 sm:-mx-3">
                   <RevenueChart
                     height={220}
                     data={

@@ -66,7 +66,6 @@ export default async function MachinesPage() {
     <>
       <PageHeader
         title={m.machines.title}
-        subtitle={m.machines.subtitle}
         actions={
           <Link href="/businesses" className={buttonVariants({ variant: "outline" })}>
             <Store />
@@ -126,9 +125,13 @@ export default async function MachinesPage() {
                       <span className="max-w-full truncate text-[15px] font-semibold tracking-[-0.01em]">
                         {mc.name}
                       </span>
-                      {status !== "online" && (
-                        <StatusBadge status={status} label={statusLabel(mc)} className="shrink-0" />
-                      )}
+                      {/* Online is a breathing green dot; anything else also says what is wrong. */}
+                      <StatusBadge
+                        status={status}
+                        label={statusLabel(mc)}
+                        hideLabel={status === "online"}
+                        className="shrink-0"
+                      />
                     </span>
                     {subline && (
                       <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">{subline}</span>

@@ -91,7 +91,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         )}
 
         {vendor?.is_vendor && (
-          <Section title={m.customers.title} hint={m.customers.subtitle}>
+          <Section title={m.customers.title}>
             <RowList>
               <li>
                 <ListRow
@@ -109,7 +109,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </Section>
         )}
 
-        <Section title={m.settings.payter} hint={m.settings.payterHint}>
+        <Section title={m.settings.payter}>
           <div className="surface-card flex flex-col p-2">
             {/* The connection itself, the way a bank shows a linked account. */}
             <SettingRow
@@ -212,7 +212,6 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
         <Section
           title={m.businesses.title}
-          hint={m.settings.businessesHint}
           actions={
             <Link href="/businesses" className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "-mr-2 shrink-0")}>
               {m.settings.allBusinesses}

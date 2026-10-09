@@ -36,7 +36,6 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   return (
     <ProductGrid
       title={m.products.title}
-      subtitle={m.products.subtitle}
       actions={
         <Link href="/producers" className={buttonVariants({ variant: "outline" })}>
           <Factory />

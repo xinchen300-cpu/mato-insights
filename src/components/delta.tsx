@@ -33,9 +33,10 @@ export function Delta({
     return (
       <span
         title={noiseLabel}
-        className={cn("tabular inline-flex items-center gap-0.5 text-sm font-semibold text-muted-foreground", className)}
+        className={cn("tabular inline-flex items-center gap-1 text-sm font-semibold text-muted-foreground", className)}
       >
-        ~{f.change(ratio)}
+        <span aria-hidden="true" className="font-normal opacity-70">≈</span>
+        {f.change(ratio).replace("-", "−")}
       </span>
     );
   }

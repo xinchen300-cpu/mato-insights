@@ -24,7 +24,6 @@ export default async function BusinessesPage() {
     <>
       <PageHeader
         title={m.businesses.title}
-        subtitle={m.businesses.subtitle}
         backHref="/machines"
         backLabel={m.nav.machines}
         actions={<AddBusiness />}
