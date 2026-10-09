@@ -3,22 +3,21 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-full border border-transparent bg-clip-padding text-sm font-semibold whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 items-center justify-center rounded-full border border-transparent bg-clip-padding text-sm font-semibold whitespace-nowrap transition-[background-color,color,box-shadow,transform] duration-150 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/40 active:not-aria-[haspopup]:scale-[0.98] disabled:pointer-events-none disabled:opacity-45 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default:
-          "bg-gradient-to-b from-[#c99a3d] to-[#a97a1f] text-primary-foreground shadow-[0_8px_22px_rgb(28_24_18/0.09)] hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgb(28_24_18/0.12)] active:translate-y-0",
+        default: "bg-foreground text-background hover:bg-foreground/85",
         outline:
-          "border-input bg-card text-foreground hover:border-primary hover:bg-accent aria-expanded:bg-accent",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-[#e8e0cf]",
-        ghost: "hover:bg-accent hover:text-foreground aria-expanded:bg-accent",
+          "border-input bg-card text-foreground hover:bg-surface aria-expanded:bg-surface",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-[#e6e6e9]",
+        ghost: "text-muted-foreground hover:bg-surface hover:text-foreground aria-expanded:bg-surface",
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20",
-        link: "text-accent-foreground underline-offset-4 hover:underline",
+        link: "text-foreground underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-10 gap-2 px-5",
+        default: "h-10 gap-2 px-4.5",
         xs: "h-7 gap-1 px-2.5 text-xs [&_svg:not([class*='size-'])]:size-3",
         sm: "h-8 gap-1.5 px-3.5 text-[0.8rem] [&_svg:not([class*='size-'])]:size-3.5",
         lg: "h-12 gap-2 px-7 text-[0.95rem]",

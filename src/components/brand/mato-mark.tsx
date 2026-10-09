@@ -26,10 +26,10 @@ export function MatoMark({ className }: { className?: string }) {
 export function MatoWordmark({ subtitle }: { subtitle?: string }) {
   return (
     <span className="flex items-center gap-2.5">
-      <MatoMark className="size-8 shrink-0" />
+      <MatoMark className="size-7 shrink-0" />
       <span className="flex flex-col leading-none">
-        <span className="whitespace-nowrap font-heading text-[19px] font-bold tracking-[-0.01em] text-foreground">
-          MATO <span className="font-medium text-heading">Insights</span>
+        <span className="whitespace-nowrap font-heading text-[17px] font-bold tracking-[-0.02em] text-foreground">
+          MATO <span className="font-medium text-muted-foreground">Insights</span>
         </span>
         {subtitle && (
           <span className="mt-1 hidden whitespace-nowrap font-mono text-[8.5px] font-bold uppercase tracking-[0.2em] text-heading lg:block">

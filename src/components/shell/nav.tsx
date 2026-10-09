@@ -26,47 +26,64 @@ function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function DesktopNav() {
+/** The left rail on large screens: icon and word, the current page on a soft grey. */
+export function SidebarNav() {
   const pathname = usePathname();
   const { m } = useI18n();
 
   return (
-    <nav className="hidden items-center gap-1 md:flex">
-      {items.map(({ href, label }) => (
-        <Link
-          key={href}
-          href={href}
-          className={cn(
-            "rounded-full px-3.5 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground",
-            isActive(pathname, href) && "bg-card text-foreground shadow-sm",
-          )}
-        >
-          {m.nav[label]}
-        </Link>
-      ))}
+    <nav className="flex flex-col gap-1">
+      {items.map(({ href, label, icon: Icon }) => {
+        const active = isActive(pathname, href);
+        return (
+          <Link
+            key={href}
+            href={href}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "flex h-10 items-center gap-3 rounded-xl px-3 text-[14.5px] transition-colors duration-150",
+              active
+                ? "bg-surface font-semibold text-foreground"
+                : "font-medium text-muted-foreground hover:bg-surface/70 hover:text-foreground",
+            )}
+          >
+            <Icon className="size-[18px] shrink-0" strokeWidth={active ? 2.25 : 1.9} aria-hidden="true" />
+            {m.nav[label]}
+          </Link>
+        );
+      })}
     </nav>
   );
 }
 
+/** Phones and tablets: a tab bar at the thumb, like a native app. */
 export function MobileNav() {
   const pathname = usePathname();
   const { m } = useI18n();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-      <div className="grid grid-cols-5">
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
+      <div className="mx-auto grid max-w-xl grid-cols-5 px-2">
         {items.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href);
           return (
             <Link
               key={href}
               href={href}
+              aria-current={active ? "page" : undefined}
               className={cn(
-                "flex flex-col items-center gap-1 py-2.5 text-[10.5px] font-semibold text-muted-foreground",
-                active && "text-accent-foreground",
+                "flex flex-col items-center gap-1 py-2 text-[10.5px] transition-colors",
+                active ? "font-semibold text-foreground" : "font-medium text-muted-foreground",
               )}
             >
-              <Icon className={cn("size-5", active && "text-primary")} />
+              <span
+                className={cn(
+                  "grid h-7 w-12 place-items-center rounded-full transition-colors duration-150",
+                  active && "bg-surface",
+                )}
+              >
+                <Icon className="size-5" strokeWidth={active ? 2.25 : 1.9} aria-hidden="true" />
+              </span>
               {m.nav[label]}
             </Link>
           );

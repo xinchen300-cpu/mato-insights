@@ -86,6 +86,7 @@ export const en = {
     stockHint: "Of what fits in the machine.",
     machinesHint: "Status, and how full they are of what fits.",
     stockUnknown: "Not counted yet",
+    machinesOnline: "Machines online",
   },
   insights: {
     title: "Worth knowing",

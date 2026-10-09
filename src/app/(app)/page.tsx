@@ -3,10 +3,11 @@ import { redirect } from "next/navigation";
 import { ArrowRight, CalendarClock, CircleDashed, Link2, PackageOpen, WifiOff, type LucideIcon } from "lucide-react";
 import { RevenueChart } from "@/components/charts/revenue-chart";
 import { Delta } from "@/components/delta";
+import { KpiHero, MiniStat } from "@/components/kpi";
+import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { InsightsList } from "@/components/insights-list";
 import { SetupGuide, nextSetupStep } from "@/components/setup-guide";
-import { EmptyState, PageHeader, Panel } from "@/components/page-header";
-import { StatTile } from "@/components/stat-tile";
+import { EmptyState, PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { DISPLAY_TIME_ZONE, fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
@@ -32,10 +33,10 @@ const RECENT_MS = 90 * 24 * 60 * 60 * 1000;
 
 // Urgency of a to-do row, worst first: a dead terminal outranks a stale label.
 type Tone = "negative" | "warning" | "muted";
-const toneColor: Record<Tone, string> = {
-  negative: "text-negative",
-  warning: "text-warning",
-  muted: "text-muted-foreground",
+const toneAvatar: Record<Tone, "negative" | "warning" | "neutral"> = {
+  negative: "negative",
+  warning: "warning",
+  muted: "neutral",
 };
 const LOW_ROWS = 3;
 
@@ -207,11 +208,18 @@ export default async function OverviewPage() {
     revenue: d.revenue,
   }));
 
-  const tiles = [
-    { label: m.overview.today, report: today, compare: m.periods.compareToday },
-    { label: m.overview.week, report: week, compare: m.periods.compareWeek },
-    { label: m.overview.month, report: month, compare: m.periods.compareMonth },
-  ];
+  const counted = machines.filter((mc) => mc.type !== "other");
+  const onlineCount = counted.filter(
+    (mc) => terminalStatus(mc.last_connected_at, mc.last_disconnected_at) === "online",
+  ).length;
+  const notes = { tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise };
+  const compareOf = (report: typeof month, label?: string) => ({
+    current: report.totals.revenue,
+    previous: report.totals.prev_revenue,
+    label,
+    verdict: compareCounts(report.totals.units, report.totals.prev_units),
+    notes,
+  });
 
   return (
     <>
@@ -220,79 +228,84 @@ export default async function OverviewPage() {
         subtitle={syncedAt ? fmt(m.overview.updated, { time: f.relative(syncedAt) }) : undefined}
       />
 
-      <div className="flex flex-col gap-8">
-        {/* What the app is opened for, first and side by side. */}
-        <section className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 divide-y border bg-card sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-            {tiles.map(({ label, report, compare }) => (
-              <StatTile
-                key={label}
-                bare
-                label={label}
-                value={f.euro(report.totals.revenue)}
-                current={report.totals.revenue}
-                previous={report.totals.prev_revenue}
-                compareLabel={compare}
-                detail={plural(report.totals.units, m.common.salesOne, m.common.salesOther)}
-                verdict={compareCounts(report.totals.units, report.totals.prev_units)}
-                verdictNotes={{ tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise }}
-                f={f}
-              />
-            ))}
+      <div className="flex flex-col gap-10">
+        {/* The balance, as a bank would show it: one figure, its trend, the curve. */}
+        <section className="surface-card px-5 pb-4 pt-6 sm:px-8 sm:pb-6 sm:pt-8">
+          <KpiHero
+            label={m.overview.month}
+            value={f.euro(month.totals.revenue)}
+            compare={compareOf(month, m.periods.compareMonth)}
+            detail={plural(month.totals.units, m.common.salesOne, m.common.salesOther)}
+            f={f}
+          />
+          <div className="mt-7 grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-4">
+            <MiniStat label={m.overview.today} value={f.euro(today.totals.revenue)} compare={compareOf(today)} f={f} />
+            <MiniStat label={m.overview.week} value={f.euro(week.totals.revenue)} compare={compareOf(week)} f={f} />
+            <MiniStat
+              label={m.stats.avgSale}
+              value={month.totals.units > 0 ? f.euro(month.totals.revenue / month.totals.units) : "—"}
+              f={f}
+            />
+            <MiniStat label={m.overview.machinesOnline} value={`${onlineCount} / ${counted.length}`} f={f} />
           </div>
-          <InsightsList insights={insights} m={m} f={f} />
+          <div className="-mx-2 mt-7 sm:-mx-3">
+            <RevenueChart data={chartData} height={220} />
+          </div>
         </section>
 
-        {todos.length > 0 && (
-          <Panel title={m.overview.todo}>
-            <ul className="-my-1 flex flex-col divide-y">
-              {todos.map((t) => (
-                <li key={t.key}>
-                  <Link href={t.href} className="group flex items-center gap-3 py-3">
-                    <t.icon className={cn("size-[18px] shrink-0", toneColor[t.tone])} aria-hidden="true" />
-                    <span className="flex-1 text-[15px]">{t.text}</span>
-                    <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-accent-foreground" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </Panel>
+        {insights.length > 0 && (
+          <div className="px-1">
+            <InsightsList insights={insights} m={m} f={f} />
+          </div>
         )}
 
-        <Panel title={m.overview.revenueChart}>
-          <RevenueChart data={chartData} />
-        </Panel>
+        {todos.length > 0 && (
+          <Section title={m.overview.todo}>
+            <RowList>
+              {todos.map((t) => (
+                <li key={t.key}>
+                  <ListRow
+                    href={t.href}
+                    leading={
+                      <Avatar tone={toneAvatar[t.tone]}>
+                        <t.icon />
+                      </Avatar>
+                    }
+                    title={<span className="whitespace-normal font-medium">{t.text}</span>}
+                    chevron
+                  />
+                </li>
+              ))}
+            </RowList>
+          </Section>
+        )}
 
-        <Panel title={m.overview.byMachine}>
-          <ul className="-my-1 flex flex-col divide-y">
+        <Section title={m.overview.byMachine}>
+          <RowList>
             {month.by_machine.map((row) => (
               <li key={row.machine_id}>
-                <Link
+                <ListRow
                   href={`/machines/${row.machine_id}`}
-                  className="grid grid-cols-[1fr_auto_4.5rem] items-baseline gap-x-4 py-3 hover:text-accent-foreground"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate font-semibold">{row.machine_name}</span>
-                    <span className="tabular block text-xs text-muted-foreground">
-                      {plural(row.units, m.common.salesOne, m.common.salesOther)}
-                    </span>
-                  </span>
-                  <span className="tabular text-right font-semibold">{f.euro(row.revenue)}</span>
-                  <span className="text-right">
+                  leading={<Avatar>{initial(row.machine_name)}</Avatar>}
+                  title={row.machine_name}
+                  subtitle={<span className="tabular">{plural(row.units, m.common.salesOne, m.common.salesOther)}</span>}
+                  value={f.euro(row.revenue)}
+                  valueSub={
                     <Delta
                       current={row.revenue}
                       previous={row.prev_revenue}
                       f={f}
                       verdict={compareCounts(row.units, row.prev_units)}
                       noiseLabel={m.stats.withinNoise}
+                      className="text-[13px]"
                     />
-                  </span>
-                </Link>
+                  }
+                />
               </li>
             ))}
-          </ul>
-          <p className="mt-4 text-xs text-muted-foreground">{m.stats.deltaLegend}</p>
-        </Panel>
+          </RowList>
+          <p className="px-1 text-xs text-muted-foreground">{m.stats.deltaLegend}</p>
+        </Section>
       </div>
     </>
   );

@@ -7,7 +7,7 @@
 
 @theme inline {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-heading: var(--font-space-grotesk), var(--font-inter), ui-sans-serif, sans-serif;
+  --font-heading: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
 
   --color-background: var(--background);
@@ -43,57 +43,62 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
 
-  /* Sharp panels like matoautomaat.be; pills are opted into per component. */
-  --radius-sm: var(--radius);
-  --radius-md: var(--radius);
-  --radius-lg: var(--radius);
-  --radius-xl: var(--radius);
-  --radius-2xl: var(--radius);
-  --radius-3xl: var(--radius);
-  --radius-4xl: var(--radius);
+  /* Soft, rounded surfaces: small controls are gently rounded, cards more so. */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
+  --radius-4xl: 28px;
 }
 
 :root {
-  --radius: 0px;
+  --radius: 12px;
 
-  /* The palette of matoautomaat.be: a warm near-white ground, white panels,
-     and gold used generously rather than as a sliver. */
-  --background: #faf7f1;
-  --surface: #f5efe1;
-  --foreground: #1c1812;
+  /* Calm and neutral, like a good banking app: a near-white ground, white
+     surfaces, near-black type. MATO's gold stays, but as an accent — the
+     mark, the chart line, the focus ring, the one thing that is selected. */
+  --background: #f6f6f7;
+  --surface: #f0f0f2;
+  --foreground: #0e0e10;
   --card: #ffffff;
-  --card-foreground: #1c1812;
+  --card-foreground: #0e0e10;
   --popover: #ffffff;
-  --popover-foreground: #1c1812;
-  --primary: #a97a1f; /* gold */
-  --primary-foreground: #211a0d;
-  --secondary: #f2ece0;
-  --secondary-foreground: #1c1812;
-  --muted: #f2ece0;
-  --muted-foreground: rgb(28 24 18 / 0.64);
-  --accent: rgb(169 122 31 / 0.1);
-  --accent-foreground: #8a6117;
-  --destructive: #b4432f;
-  --border: rgb(28 24 18 / 0.12);
-  --input: rgb(28 24 18 / 0.2);
-  --ring: #a97a1f;
-  --heading: #8a6117;
+  --popover-foreground: #0e0e10;
+  --primary: #b5862a; /* MATO gold */
+  --primary-foreground: #ffffff;
+  --secondary: #f0f0f2;
+  --secondary-foreground: #0e0e10;
+  --muted: #f0f0f2;
+  --muted-foreground: #6b6b74;
+  --accent: #efeff1;
+  --accent-foreground: #0e0e10;
+  --destructive: #d0433b;
+  --border: rgb(14 14 16 / 0.07);
+  --input: rgb(14 14 16 / 0.13);
+  --ring: #b5862a;
+  --heading: #0e0e10;
 
-  --positive: #3f7d4e;
-  --negative: #b4432f;
-  --warning: #b86e14;
+  --positive: #16a05a;
+  --negative: #d0433b;
+  --warning: #c77a12;
 
-  /* Stock fill levels: green / orange / red / empty. */
-  --level-full: #4a8a58;
-  --level-half: #d08a2a;
-  --level-low: #c0452f;
-  --level-empty: #e4dccb;
+  /* Stock fill levels: green / amber / red / empty. */
+  --level-full: #1fa463;
+  --level-half: #e09a2b;
+  --level-low: #dd5240;
+  --level-empty: #ebebee;
 
-  --chart-1: #a97a1f;
+  --chart-1: #b5862a;
   --chart-2: #8a6117;
-  --chart-3: #3f7d4e;
-  --chart-4: #b4432f;
-  --chart-5: #bdb098;
+  --chart-3: #16a05a;
+  --chart-4: #d0433b;
+  --chart-5: #d9d9de;
+
+  /* One soft lift for surfaces that float above the page, nothing heavier. */
+  --shadow-card: 0 1px 2px rgb(14 14 16 / 0.04), 0 1px 1px rgb(14 14 16 / 0.02);
+  --shadow-pop: 0 12px 32px rgb(14 14 16 / 0.12), 0 2px 6px rgb(14 14 16 / 0.06);
 }
 
 @layer base {
@@ -106,7 +111,8 @@
   }
   body {
     @apply bg-background text-foreground;
-    letter-spacing: -0.008em;
+    letter-spacing: -0.011em;
+    font-feature-settings: "cv11", "ss01";
   }
   h1,
   h2,
@@ -114,12 +120,12 @@
   h4 {
     font-family: var(--font-heading);
     font-weight: 600;
-    letter-spacing: -0.02em;
-    line-height: 1.08;
+    letter-spacing: -0.025em;
+    line-height: 1.12;
     color: var(--heading);
   }
   ::selection {
-    background: rgb(166 117 44 / 0.2);
+    background: rgb(181 134 42 / 0.2);
   }
 }
 
@@ -132,6 +138,26 @@
   }
   .tabular {
     font-variant-numeric: tabular-nums;
+  }
+  /* The one card: white, softly rounded, a hairline instead of a border. */
+  .surface-card {
+    background: var(--card);
+    border-radius: var(--radius-2xl);
+    box-shadow: 0 0 0 1px var(--border), var(--shadow-card);
+  }
+  /* A clickable row or card lifts its background a touch, nothing jumps. */
+  .hover-surface {
+    transition: background-color 0.15s ease;
+  }
+  .hover-surface:hover {
+    background-color: var(--surface);
+  }
+  /* Loading placeholders: a calm shimmer in the shape of what is coming. */
+  .skeleton {
+    border-radius: var(--radius-md);
+    background: linear-gradient(90deg, var(--surface) 25%, #f8f8fa 50%, var(--surface) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
   }
   /* Showing the app to someone without showing the money: every figure and the
      revenue chart go unreadable, the layout stays exactly as it is. A figure
@@ -221,8 +247,20 @@
   }
 }
 
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
 /* Wie beweging liever niet heeft, krijgt ze niet. */
 @media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
   .step-enter,
   .step-leave,
   .step-enter > * {

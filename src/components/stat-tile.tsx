@@ -31,12 +31,12 @@ export function StatTile({
   const tooFew = canCompare && verdict === "tooFew";
 
   return (
-    <div className={bare ? "px-4 py-4 sm:p-6" : "border bg-card p-5"}>
-      <p className="eyebrow">{label}</p>
-      <p className="tabular mt-3 font-heading text-[1.5rem] font-semibold leading-none tracking-tight text-foreground sm:text-[1.6rem] md:text-[1.75rem] lg:text-[2rem]">
+    <div className={bare ? "px-4 py-4 sm:p-6" : "surface-card p-5 sm:p-6"}>
+      <p className="text-[13px] font-medium text-muted-foreground">{label}</p>
+      <p className="tabular mt-2.5 text-[26px] font-semibold leading-none tracking-[-0.035em] text-foreground sm:text-[30px]">
         {value}
       </p>
-      <div className="mt-3 flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+      <div className="mt-3 flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] text-muted-foreground">
         {canCompare && !tooFew && (
           <Delta current={current} previous={previous} f={f} verdict={verdict} noiseLabel={verdictNotes?.noise} />
         )}

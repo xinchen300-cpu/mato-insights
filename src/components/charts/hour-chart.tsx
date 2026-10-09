@@ -17,7 +17,7 @@ export function HourChart({ data, height = 200 }: { data: HourPoint[]; height?: 
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={full} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
-        <CartesianGrid vertical={false} stroke="var(--border)" />
+        <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 4" />
         <XAxis
           dataKey="label"
           interval={1}
@@ -26,19 +26,23 @@ export function HourChart({ data, height = 200 }: { data: HourPoint[]; height?: 
           tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
         />
         <Tooltip
-          cursor={{ fill: "var(--surface)" }}
+          cursor={{ fill: "var(--surface)", radius: 6 }}
           formatter={(value) => [f.euro(Number(value)), ""]}
           labelFormatter={(label) => `${String(label)}:00`}
           separator=""
           contentStyle={{
             background: "var(--card)",
-            border: "1px solid var(--border)",
-            borderRadius: 0,
+            border: "none",
+            borderRadius: 12,
+            boxShadow: "var(--shadow-pop)",
+            padding: "8px 12px",
             fontSize: 13,
             color: "var(--foreground)",
           }}
+          labelStyle={{ color: "var(--muted-foreground)", marginBottom: 2 }}
+          itemStyle={{ color: "var(--foreground)", fontWeight: 600 }}
         />
-        <Bar dataKey="revenue" fill="var(--chart-1)" />
+        <Bar dataKey="revenue" fill="var(--chart-1)" radius={[5, 5, 2, 2]} maxBarSize={18} />
       </BarChart>
     </ResponsiveContainer>
   );

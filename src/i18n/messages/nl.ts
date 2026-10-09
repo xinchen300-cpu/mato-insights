@@ -86,6 +86,7 @@ export const nl: Messages = {
     stockHint: "Van wat er in de automaat past.",
     machinesHint: "Status, en hoe vol ze staan van wat erin past.",
     stockUnknown: "Nog niet geteld",
+    machinesOnline: "Automaten online",
   },
   insights: {
     title: "Goed om te weten",

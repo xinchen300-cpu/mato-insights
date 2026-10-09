@@ -86,6 +86,7 @@ export const fr: Messages = {
     stockHint: "De ce que contient le distributeur.",
     machinesHint: "État, et à quel point ils sont remplis.",
     stockUnknown: "Pas encore compté",
+    machinesOnline: "Distributeurs en ligne",
   },
   insights: {
     title: "Bon à savoir",
