@@ -95,46 +95,71 @@ export function SetupGuide({ setup, m }: { setup: SetupState; m: Messages }) {
   const next = steps.findIndex((s) => !s.done);
 
   return (
-    <section className="border bg-card p-5 sm:p-6">
+    <section className="surface-card px-5 pb-4 pt-6 sm:px-7 sm:pb-5 sm:pt-7">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 className="font-heading text-xl font-semibold text-heading">{m.setup.title}</h2>
-        <span className="tabular text-sm text-muted-foreground">
+        <h2 className="text-[22px] font-semibold tracking-[-0.025em]">{m.setup.title}</h2>
+        <span className="tabular text-[13.5px] font-medium text-muted-foreground">
           {fmt(m.setup.stepOf, { done, total: steps.length })}
         </span>
       </div>
-      <p className="mt-1 text-sm text-muted-foreground">{m.setup.hint}</p>
+      <p className="mt-1.5 max-w-xl text-[15px] text-muted-foreground">{m.setup.hint}</p>
 
-      <div className="mt-4 flex gap-1" aria-hidden="true">
+      <div className="mt-5 flex gap-1.5" aria-hidden="true">
         {steps.map((step, i) => (
-          <span key={i} className={cn("h-1 flex-1", step.done ? "bg-primary" : "bg-border")} />
+          <span key={i} className={cn("h-1.5 flex-1 rounded-full", step.done ? "bg-primary" : "bg-surface")} />
         ))}
       </div>
 
-      <ol className="mt-4 flex flex-col divide-y">
+      {/* One row per step; the step to do now sits on a soft ground with its button. */}
+      <ol className="-mx-2 mt-5 flex flex-col gap-1 sm:-mx-3">
         {steps.map((step, i) => (
-          <li key={i} className="flex flex-wrap items-start gap-3 py-3.5">
-            <span
-              className={cn(
-                "mt-0.5 grid size-6 shrink-0 place-items-center rounded-full",
-                step.done ? "bg-positive text-white" : i === next ? "bg-primary/15 text-primary" : "text-muted-foreground/50",
-              )}
-            >
-              {step.done ? <Check className="size-3.5" strokeWidth={3} /> : <CircleDashed className="size-4" />}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className={cn("block font-semibold", step.done && "font-normal text-muted-foreground")}>
-                {step.title}
+          <li
+            key={i}
+            className={cn(
+              "flex flex-col gap-3 rounded-2xl px-3 py-3 sm:flex-row sm:items-start sm:gap-4",
+              !step.done && i === next && "bg-surface/70 py-4",
+            )}
+          >
+            <span className="flex min-w-0 flex-1 items-start gap-3.5">
+              <span
+                className={cn(
+                  "grid size-8 shrink-0 place-items-center rounded-full",
+                  step.done
+                    ? "bg-positive/12 text-positive"
+                    : i === next
+                      ? "bg-primary/12 text-[#8a6117]"
+                      : "bg-surface text-muted-foreground/70",
+                )}
+              >
+                {step.done ? <Check className="size-4" strokeWidth={3} /> : <CircleDashed className="size-4" />}
               </span>
-              {!step.done && <span className="mt-0.5 block text-sm text-muted-foreground">{step.why}</span>}
-              {!step.done && i === next && step.how && (
-                <span className="mt-2 block bg-surface px-3 py-2 text-sm">{step.how}</span>
-              )}
-              {!step.done && step.state && (
-                <span className="mt-1 block text-sm text-accent-foreground">{step.state}</span>
-              )}
+              <span className="min-w-0 flex-1 pt-1">
+                <span
+                  className={cn(
+                    "block text-[15px] font-semibold tracking-[-0.01em]",
+                    step.done && "font-normal text-muted-foreground",
+                  )}
+                >
+                  {step.title}
+                </span>
+                {!step.done && (
+                  <span className="mt-0.5 block text-[13.5px] leading-snug text-muted-foreground">{step.why}</span>
+                )}
+                {!step.done && i === next && step.how && (
+                  <span className="mt-3 block rounded-xl bg-card px-3.5 py-2.5 text-[13.5px] leading-relaxed">
+                    {step.how}
+                  </span>
+                )}
+                {!step.done && step.state && (
+                  <span className="mt-1.5 block text-[13.5px] font-medium text-foreground">{step.state}</span>
+                )}
+              </span>
             </span>
             {!step.done && i === next && (
-              <Link href={step.href} className={buttonVariants({ size: "sm" })}>
+              <Link
+                href={step.href}
+                className={cn(buttonVariants(), "w-fit shrink-0 ml-[46px] sm:ml-0")}
+              >
                 {step.action}
               </Link>
             )}

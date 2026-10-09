@@ -41,16 +41,16 @@ export function ImagePicker({
   return (
     <div className="flex items-center gap-4">
       <div
-        className={`grid shrink-0 place-items-center overflow-hidden border bg-surface ${square ? "size-20" : "h-16 w-28"}`}
+        className={`grid shrink-0 place-items-center overflow-hidden rounded-2xl bg-surface p-1.5 shadow-[inset_0_0_0_1px_var(--border)] ${square ? "size-20" : "h-16 w-28"}`}
       >
         {preview ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={preview} alt="" className="max-h-full max-w-full object-contain" />
+          <img src={preview} alt="" className="max-h-full max-w-full rounded-lg object-contain" />
         ) : (
-          <ImageIcon className="size-6 text-muted-foreground" />
+          <ImageIcon className="size-6 text-muted-foreground/70" />
         )}
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex min-w-0 flex-wrap gap-2">
         <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => inputRef.current?.click()}>
           {preview ? changeLabel : chooseLabel}
         </Button>

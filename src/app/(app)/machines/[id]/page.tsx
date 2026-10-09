@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ClipboardList, LayoutGrid, Pencil } from "lucide-react";
+import { Avatar, RowList } from "@/components/list-row";
 import { FrontView, OWNER_TONES, OwnerLegend, StockLegend } from "@/components/machine/front-view";
-import { EmptyState, PageHeader, Panel } from "@/components/page-header";
+import { EmptyState, PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { fmt, weekdayIndex } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
@@ -18,8 +19,10 @@ import {
 import { toFrontRows } from "@/lib/layout";
 import { mediaUrl } from "@/lib/media";
 import { requireOrgId } from "@/lib/org";
+import { fillLevel, levelColor } from "@/lib/stock";
+import { cn } from "@/lib/utils";
 import { MachineDetailsForm } from "./machine-details-form";
-import { TerminalPanel } from "./terminal-panel";
+import { MachineStatus, TerminalPanel } from "./terminal-panel";
 
 const PAYMENT_WINDOW_DAYS = 30;
 
@@ -81,17 +84,24 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
           <span className="flex items-center gap-3">
             {machine.business_logo_path && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={mediaUrl(machine.business_logo_path)!} alt="" className="h-10 w-14 object-contain" />
+              <img src={mediaUrl(machine.business_logo_path)!} alt="" className="h-9 w-12 object-contain" />
             )}
             {machine.name}
           </span>
         }
-        subtitle={[
-          machine.type ? m.machines.types[machine.type] : m.machines.typeNotSet,
-          machine.payter_serial_number && `${m.machines.terminal} ${machine.payter_serial_number}`,
-        ]
-          .filter(Boolean)
-          .join(" · ")}
+        subtitle={
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span>
+              {[
+                machine.type ? m.machines.types[machine.type] : m.machines.typeNotSet,
+                machine.payter_serial_number && `${m.machines.terminal} ${machine.payter_serial_number}`,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+            <MachineStatus machine={machine} m={m} className="text-[14px]" />
+          </span>
+        }
         actions={
           <>
             {hasLayout && tracksStock && (
@@ -116,13 +126,14 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
         }
       />
 
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-10">
         {!tracksStock ? (
-          <p className="border border-dashed border-input bg-surface p-6 text-sm text-muted-foreground">
+          <p className="rounded-2xl bg-surface px-5 py-4 text-[14px] text-muted-foreground sm:px-6">
             {m.machines.otherTypeHint}
           </p>
         ) : !hasLayout ? (
           <EmptyState
+            icon={<LayoutGrid className="size-5" />}
             title={m.machines.noLayout}
             hint={m.machines.noLayoutHint}
             action={
@@ -133,15 +144,37 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
             }
           />
         ) : (
-          <Panel
-            title={m.machines.stock}
-            hint={
-              counted.length > 0
-                ? fmt(m.machines.inMachine, { stock: totalStock, capacity: totalCapacity })
-                : m.machines.stockUnknown
-            }
-          >
-            <FrontView rows={toFrontRows(slots, shared ? toneOf : undefined)} />
+          // The balance of a machine is what is in it: the count, big, then the machine itself.
+          <section className="surface-card px-5 pb-5 pt-6 sm:px-8 sm:pb-7 sm:pt-8">
+            <h2 className="text-[14px] font-medium tracking-normal text-muted-foreground">{m.machines.stock}</h2>
+            {counted.length > 0 ? (
+              <>
+                <p className="mt-2 text-[40px] font-semibold leading-none tracking-[-0.04em] tabular-nums sm:text-[48px]">
+                  {totalStock}
+                  <span className="text-[22px] font-medium tracking-[-0.02em] text-muted-foreground sm:text-[26px]">
+                    {" "}
+                    / {totalCapacity}
+                  </span>
+                </p>
+                <div className="mt-4 h-1.5 max-w-sm overflow-hidden rounded-full bg-level-empty">
+                  <div
+                    className={cn("h-full rounded-full", levelColor[fillLevel(totalStock, totalCapacity)])}
+                    style={{ width: `${totalCapacity > 0 ? Math.min(100, (totalStock / totalCapacity) * 100) : 0}%` }}
+                  />
+                </div>
+                <p className="mt-2.5 text-[13.5px] text-muted-foreground">
+                  {fmt(m.machines.inMachine, { stock: totalStock, capacity: totalCapacity })}
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-muted-foreground">
+                {m.machines.stockUnknown}
+              </p>
+            )}
+
+            <div className="mt-7 sm:mt-8">
+              <FrontView rows={toFrontRows(slots, shared ? toneOf : undefined)} />
+            </div>
             <div className="mt-4 flex flex-col gap-2">
               {shared && <OwnerLegend owners={owners} />}
               <StockLegend
@@ -154,48 +187,55 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
                 }}
               />
             </div>
-          </Panel>
+          </section>
         )}
 
         <TerminalPanel machine={machine} health={health.get(id)} payments={payments} split={split} m={m} f={f} />
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Panel title={m.machines.settings}>
-            <MachineDetailsForm machine={machine} businesses={businesses} />
-          </Panel>
-
-          {tracksStock && (
-            <Panel title={m.machines.history}>
-              {history.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{m.machines.historyEmpty}</p>
-              ) : (
-                <ul className="flex flex-col divide-y">
-                  {history.map((event) => (
-                    <li key={`${event.occurred_at}-${event.type}`} className="flex items-baseline justify-between gap-4 py-2.5">
-                      <span>
-                        <span className="block font-semibold">
+        {tracksStock && (
+          <Section title={m.machines.history}>
+            {history.length === 0 ? (
+              <p className="surface-card px-5 py-4 text-[14px] text-muted-foreground">{m.machines.historyEmpty}</p>
+            ) : (
+              <RowList>
+                {history.map((event) => (
+                  <li
+                    key={`${event.occurred_at}-${event.type}`}
+                    className="flex min-h-14 items-center gap-3.5 rounded-xl px-3 py-2.5"
+                  >
+                    <Avatar>{event.type === "refill" ? <ClipboardList /> : <Pencil />}</Avatar>
+                    {/* Phones read the event under the date; wider screens put it on the right. */}
+                    <div className="min-w-0 flex-1 sm:flex sm:items-center sm:justify-between sm:gap-4">
+                      <div className="min-w-0">
+                        <p className="truncate text-[15px] font-semibold tracking-[-0.01em]">
                           {m.weekdays[weekdayIndex(event.occurred_at)]} · {f.dateTime(event.occurred_at)}
-                        </span>
+                        </p>
                         {(event.filled_by || event.refill_sheet_id) && (
-                          <span className="text-xs text-muted-foreground">
+                          <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
                             {[event.filled_by, event.refill_sheet_id ? m.machines.viaSheet : null]
                               .filter(Boolean)
                               .join(" · ")}
-                          </span>
+                          </p>
                         )}
-                      </span>
-                      <span className="text-sm text-muted-foreground">
+                      </div>
+                      <p className="mt-0.5 text-[13px] text-muted-foreground sm:mt-0 sm:shrink-0 sm:text-right">
                         {event.type === "refill"
                           ? fmt(m.machines.historyItems, { count: event.added })
                           : m.machines.correction}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Panel>
-          )}
-        </div>
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </RowList>
+            )}
+          </Section>
+        )}
+
+        <Section title={m.machines.settings}>
+          <div className="surface-card p-5 sm:p-6">
+            <MachineDetailsForm machine={machine} businesses={businesses} />
+          </div>
+        </Section>
       </div>
     </>
   );

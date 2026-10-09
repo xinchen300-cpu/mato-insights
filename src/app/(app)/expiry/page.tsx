@@ -1,3 +1,4 @@
+import { CalendarCheck } from "lucide-react";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { getI18n } from "@/i18n/server";
 import { getExpiryAlerts, getSlowMovers, getWasteReport } from "@/lib/data";
@@ -23,9 +24,13 @@ export default async function ExpiryPage() {
     <>
       <PageHeader title={m.expiry.title} subtitle={m.expiry.subtitle} backHref="/" backLabel={m.nav.overview} />
       {alerts.length === 0 && slowMovers.filter((s) => s.always_expires).length === 0 && waste.length === 0 ? (
-        <EmptyState title={m.expiry.empty} hint={m.expiry.emptyHint} />
+        <EmptyState
+          icon={<CalendarCheck className="size-5" />}
+          title={m.expiry.empty}
+          hint={m.expiry.emptyHint}
+        />
       ) : (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-10">
           <ExpiryList alerts={alerts} slowMovers={slowMovers.filter((s) => s.always_expires)} />
           {waste.length > 0 && <WasteList rows={waste} />}
         </div>

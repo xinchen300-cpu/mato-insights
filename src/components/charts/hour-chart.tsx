@@ -42,7 +42,7 @@ export function HourChart({ data, height = 200 }: { data: HourPoint[]; height?: 
           labelStyle={{ color: "var(--muted-foreground)", marginBottom: 2 }}
           itemStyle={{ color: "var(--foreground)", fontWeight: 600 }}
         />
-        <Bar dataKey="revenue" fill="var(--chart-1)" radius={[5, 5, 2, 2]} maxBarSize={18} />
+        <Bar dataKey="revenue" fill="var(--chart-1)" radius={[5, 5, 2, 2]} maxBarSize={18} animationDuration={500} />
       </BarChart>
     </ResponsiveContainer>
   );

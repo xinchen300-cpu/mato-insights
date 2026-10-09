@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Check, CircleCheck, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Avatar, initial } from "@/components/list-row";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
@@ -199,9 +200,11 @@ export function FillerView({
 
   if (status === "done" || status === "already_done") {
     return (
-      <div className="flex flex-col items-center gap-3 border bg-card p-10 text-center">
-        <CircleCheck className="size-10 text-positive" />
-        <p className="font-heading text-xl font-semibold text-heading">
+      <div className="surface-card flex flex-col items-center gap-4 px-6 py-14 text-center">
+        <span className="grid size-16 place-items-center rounded-full bg-positive/12 text-positive">
+          <CircleCheck className="size-8" />
+        </span>
+        <p className="max-w-xs text-[22px] font-semibold leading-snug tracking-[-0.02em] text-heading">
           {status === "done" ? m.refill.done : m.refill.alreadyDone}
         </p>
       </div>
@@ -222,25 +225,35 @@ export function FillerView({
   const setAllDates = (date: string) =>
     setDates(Object.fromEntries(dated.map((l) => [lineKey(l), date])));
 
+  // One look for every section title on this page: big enough to find with a
+  // thumb on the screen and a crate under the other arm.
+  const sectionTitle = "text-[22px] font-semibold tracking-[-0.025em]";
+
   return (
-    <div className="show-numbers flex flex-col gap-8 pb-28">
+    <div className="show-numbers flex flex-col gap-10 pb-40">
       {notes && (
-        <div className="border border-primary/30 bg-accent p-4 text-[15px]">
-          <p className="eyebrow mb-1">{m.refill.notes}</p>
-          <p className="whitespace-pre-wrap">{notes}</p>
-        </div>
+        <section className="surface-card px-5 py-4">
+          <p className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold text-muted-foreground">
+            <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
+            {m.refill.notes}
+          </p>
+          <p className="whitespace-pre-wrap text-[16px] leading-relaxed">{notes}</p>
+        </section>
       )}
 
       {soldTotal > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border border-primary/40 bg-accent p-4">
-          <p className="text-[15px]">
-            <span className="font-semibold">{fmt(m.refill.soldMeanwhile, { count: soldTotal })}</span>{" "}
-            <span className="text-muted-foreground">{m.refill.soldMeanwhileHint}</span>
+        <div className="surface-card flex items-center gap-3.5 px-4 py-3.5">
+          <Avatar tone="gold">
+            <RefreshCw />
+          </Avatar>
+          <p className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold">{fmt(m.refill.soldMeanwhile, { count: soldTotal })}</span>{" "}
+            <span className="mt-0.5 block text-[13px] text-muted-foreground">{m.refill.soldMeanwhileHint}</span>
           </p>
           <button
             type="button"
             onClick={() => setSold({})}
-            className="text-xs font-semibold text-muted-foreground underline underline-offset-2"
+            className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "h-9 shrink-0")}
           >
             {m.refill.soldSeen}
           </button>
@@ -248,35 +261,47 @@ export function FillerView({
       )}
 
       {dated.length > 1 && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border bg-card p-4">
+        <div className="surface-card flex flex-wrap items-center justify-between gap-x-3 gap-y-2.5 px-4 py-3.5">
           <span className="text-[15px] font-semibold">{m.refill.sameDateForAll}</span>
           <ExpiryPicker value={sharedDate} onChange={setAllDates} shelfLifeDays={shortest} />
         </div>
       )}
 
-      <section>
-        <h2 className="text-xl">{m.refill.combined}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">{m.refill.shortHint}</p>
-        <ul className="mt-3 flex flex-col divide-y border bg-card">
+      <section className="flex flex-col gap-3">
+        <div className="px-1">
+          <h2 className={sectionTitle}>{m.refill.combined}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{m.refill.shortHint}</p>
+        </div>
+        <ul className="surface-card flex flex-col p-2">
           {combined.map((row) => (
-            <li key={row.productId} className="flex items-center gap-3 px-4 py-3">
-              {row.photoPath && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={mediaUrl(row.photoPath)!} alt="" className="size-8 object-contain" />
+            <li
+              key={row.productId}
+              className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 rounded-xl px-2 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:px-3"
+            >
+              {row.photoPath ? (
+                <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-full bg-surface">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={mediaUrl(row.photoPath)!} alt="" className="size-8 object-contain" />
+                </span>
+              ) : (
+                <Avatar className="size-11">{initial(row.name)}</Avatar>
               )}
-              <span className="min-w-0 flex-1">
-                <span className="block truncate">{row.name}</span>
+              <span className="min-w-0">
+                <span className="block truncate text-[16px] font-medium">{row.name}</span>
                 {(short[row.productId] ?? 0) > 0 && (
                   <button
                     type="button"
                     onClick={() => setShort((sh) => ({ ...sh, [row.productId]: 0 }))}
-                    className="text-xs font-semibold text-negative underline underline-offset-2"
+                    className="mt-0.5 inline-flex min-h-8 items-center gap-1.5 text-[13px] font-semibold text-negative"
                   >
-                    {fmt(m.refill.shortCount, { count: short[row.productId] })} &middot; {m.refill.shortClear}
+                    <span className="size-1.5 rounded-full bg-negative" aria-hidden="true" />
+                    {fmt(m.refill.shortCount, { count: short[row.productId] })} &middot;{" "}
+                    <span className="underline underline-offset-2">{m.refill.shortClear}</span>
                   </button>
                 )}
               </span>
-              <span className="tabular font-heading text-lg font-semibold">{row.quantity}</span>
+              <span className="tabular text-[22px] font-semibold tracking-[-0.02em]">{row.quantity}</span>
+              {/* On a phone the button drops under the name, so the name keeps its room. */}
               <button
                 type="button"
                 onClick={() =>
@@ -285,7 +310,7 @@ export function FillerView({
                     [row.productId]: Math.min(row.quantity, (sh[row.productId] ?? 0) + 1),
                   }))
                 }
-                className="shrink-0 border px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:border-negative hover:text-negative"
+                className="col-start-2 row-start-2 h-10 justify-self-start rounded-full bg-surface px-4 text-[13px] font-semibold text-muted-foreground transition-colors duration-150 hover:bg-negative/10 hover:text-negative sm:col-start-4 sm:row-start-1"
               >
                 {m.refill.shortAdd}
               </button>
@@ -297,76 +322,105 @@ export function FillerView({
       {machines.map((machine) => {
         const done = machine.lines.filter((l) => ticked.has(lineKey(l))).length;
         return (
-          <section key={machine.machineId}>
-            <div className="flex items-baseline justify-between gap-3">
-              <h2 className="text-xl">{machine.name}</h2>
-              <span className="text-sm text-muted-foreground">
-                {fmt(m.refill.progress, { done, total: machine.lines.length })}
-              </span>
+          <section key={machine.machineId} className="flex flex-col gap-3">
+            <div className="px-1">
+              <div className="flex items-baseline justify-between gap-3">
+                <h2 className={cn(sectionTitle, "min-w-0")}>{machine.name}</h2>
+                <span className="tabular shrink-0 text-sm font-medium text-muted-foreground">
+                  {fmt(m.refill.progress, { done, total: machine.lines.length })}
+                </span>
+              </div>
+              <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-foreground/[0.07]" aria-hidden="true">
+                <div
+                  className="rail-fill h-full w-full rounded-full bg-positive"
+                  style={{ transform: `scaleX(${machine.lines.length ? done / machine.lines.length : 0})` }}
+                />
+              </div>
             </div>
-            <ul className="mt-3 flex flex-col divide-y border bg-card">
+            <ul className="surface-card flex flex-col p-2">
               {machine.lines.map((line) => {
                 const key = lineKey(line);
                 const isTicked = ticked.has(key);
                 const amount = amounts[key] ?? line.to_add;
+                const hasMeta = line.qty_expired > 0 || (sold[key] ?? 0) > 0 || Boolean(suggestedDate(line));
                 return (
                   <li
                     key={key}
                     className={cn(
-                      "flex flex-wrap items-center gap-3 px-3 py-3",
-                      isTicked && "bg-positive/10",
-                      line.qty_expired > 0 && "border-l-4 border-l-negative",
+                      "rounded-xl px-2 py-3 transition-colors duration-150 sm:px-3",
+                      isTicked && "bg-positive/[0.07]",
                     )}
                   >
-                    <button
-                      type="button"
-                      onClick={() => toggle(key)}
-                      aria-pressed={isTicked}
-                      className={cn(
-                        "grid size-9 shrink-0 place-items-center border-2 transition-colors",
-                        isTicked ? "border-positive bg-positive text-white" : "border-input bg-card",
-                      )}
-                    >
-                      {isTicked && <Check className="size-5" strokeWidth={3} />}
-                    </button>
-                    <span className="w-8 shrink-0 font-mono text-sm font-bold">{line.selection_number}</span>
-                    <span className={cn("min-w-0 flex-1 text-[15px]", isTicked && "text-muted-foreground line-through")}>
-                      {line.product_name}
-                    </span>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      max={999}
-                      value={amount}
-                      aria-label={m.refill.addedInstead}
-                      onChange={(e) =>
-                        setAmounts((a) => ({ ...a, [key]: Math.max(0, Math.min(999, Number(e.target.value) || 0)) }))
-                      }
-                      className={cn(
-                        "tabular h-10 w-16 border border-input bg-card text-center font-heading text-lg font-semibold",
-                        amount !== line.to_add && "border-primary text-accent-foreground",
-                      )}
-                    />
-                    <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 pl-12 text-xs">
-                      {line.qty_expired > 0 && (
-                        <span className="font-semibold text-negative">
-                          {fmt(m.refill.pullFirst, { count: line.qty_expired })}
-                        </span>
-                      )}
-                      {(sold[key] ?? 0) > 0 && (
-                        <span className="font-semibold text-accent-foreground">
-                          {fmt(m.refill.soldHere, { count: sold[key] })}
-                        </span>
-                      )}
-                      {suggestedDate(line) && (
-                        <ExpiryPicker
-                          value={dates[key] ?? suggestedDate(line)!}
-                          onChange={(date) => setDates((d) => ({ ...d, [key]: date }))}
-                          shelfLifeDays={line.shelf_life_days}
-                        />
-                      )}
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => toggle(key)}
+                        aria-pressed={isTicked}
+                        aria-label={line.product_name}
+                        className={cn(
+                          "grid size-11 shrink-0 place-items-center rounded-full transition-colors duration-150",
+                          isTicked
+                            ? "bg-positive text-white"
+                            : "bg-card shadow-[inset_0_0_0_1.5px_var(--input)] hover:bg-surface",
+                        )}
+                      >
+                        {isTicked && <Check className="size-5" strokeWidth={3} />}
+                      </button>
+                      <span
+                        className={cn(
+                          "inline-grid h-7 min-w-9 shrink-0 place-items-center rounded-lg px-1.5 font-mono text-[13px] font-semibold",
+                          line.qty_expired > 0 ? "bg-negative/10 text-negative" : "bg-surface",
+                        )}
+                      >
+                        {line.selection_number}
+                      </span>
+                      <span
+                        className={cn(
+                          "min-w-0 flex-1 text-[16px] font-medium leading-snug",
+                          isTicked && "text-muted-foreground line-through",
+                        )}
+                      >
+                        {line.product_name}
+                      </span>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        max={999}
+                        value={amount}
+                        aria-label={m.refill.addedInstead}
+                        onChange={(e) =>
+                          setAmounts((a) => ({ ...a, [key]: Math.max(0, Math.min(999, Number(e.target.value) || 0)) }))
+                        }
+                        className={cn(
+                          "tabular h-11 w-16 shrink-0 rounded-xl border border-input bg-card text-center text-[18px] font-semibold outline-none transition-[border-color,box-shadow] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25",
+                          amount !== line.to_add && "border-primary bg-primary/[0.06]",
+                        )}
+                      />
                     </div>
+                    {hasMeta && (
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 pl-14 text-[13px]">
+                        {line.qty_expired > 0 && (
+                          <span className="inline-flex items-center gap-1.5 font-semibold text-negative">
+                            <span className="size-1.5 rounded-full bg-negative" aria-hidden="true" />
+                            {fmt(m.refill.pullFirst, { count: line.qty_expired })}
+                          </span>
+                        )}
+                        {(sold[key] ?? 0) > 0 && (
+                          <span className="inline-flex items-center gap-1.5 font-semibold text-foreground">
+                            <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
+                            {fmt(m.refill.soldHere, { count: sold[key] })}
+                          </span>
+                        )}
+                        {suggestedDate(line) && (
+                          <ExpiryPicker
+                            value={dates[key] ?? suggestedDate(line)!}
+                            onChange={(date) => setDates((d) => ({ ...d, [key]: date }))}
+                            shelfLifeDays={line.shelf_life_days}
+                          />
+                        )}
+                      </div>
+                    )}
                   </li>
                 );
               })}
@@ -375,10 +429,12 @@ export function FillerView({
         );
       })}
 
-      <section className={cn("border bg-card p-4", expiryMissing && "border-negative")}>
-        <h2 className="text-xl">{m.refill.expiryTitle}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">{m.refill.expiryHint}</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      <section className="flex flex-col gap-3">
+        <div className="px-1">
+          <h2 className={sectionTitle}>{m.refill.expiryTitle}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{m.refill.expiryHint}</p>
+        </div>
+        <div className="grid gap-2.5 sm:grid-cols-2">
           {(["none", "found"] as const).map((choice) => (
             <button
               key={choice}
@@ -389,46 +445,46 @@ export function FillerView({
                 setExpiryMissing(false);
               }}
               className={cn(
-                "flex items-center gap-2.5 border px-4 py-3 text-left text-[15px] font-semibold",
-                expiry === choice
-                  ? choice === "none"
-                    ? "border-positive bg-positive/10"
-                    : "border-negative bg-negative/10"
-                  : "bg-card",
+                "surface-card hover-surface flex min-h-16 items-center gap-3 px-4 py-3 text-left text-[16px] font-semibold",
+                expiryMissing && "ring-[1.5px] ring-negative/60",
+                expiry === choice &&
+                  (choice === "none"
+                    ? "bg-positive/10 ring-[1.5px] ring-positive"
+                    : "bg-negative/10 ring-[1.5px] ring-negative"),
               )}
             >
               <span
                 className={cn(
-                  "grid size-5 shrink-0 place-items-center rounded-full border",
+                  "grid size-6 shrink-0 place-items-center rounded-full border-[1.5px] border-input bg-card",
                   expiry === choice && (choice === "none" ? "border-positive" : "border-negative"),
                 )}
               >
                 {expiry === choice && (
-                  <span className={cn("size-2.5 rounded-full", choice === "none" ? "bg-positive" : "bg-negative")} />
+                  <span className={cn("size-3 rounded-full", choice === "none" ? "bg-positive" : "bg-negative")} />
                 )}
               </span>
               {choice === "none" ? m.refill.expiryNone : m.refill.expiryFound}
             </button>
           ))}
         </div>
-        {expiryMissing && <p className="mt-2 text-sm text-negative">{m.refill.expiryRequired}</p>}
+        {expiryMissing && <p className="px-1 text-sm font-medium text-negative">{m.refill.expiryRequired}</p>}
       </section>
 
-      <section className="border bg-card p-4">
-        <h2 className="text-xl">{m.refill.checklistTitle}</h2>
-        <ul className="mt-3 flex flex-col divide-y">
+      <section className="flex flex-col gap-3">
+        <h2 className={cn(sectionTitle, "px-1")}>{m.refill.checklistTitle}</h2>
+        <ul className="surface-card flex flex-col p-2">
           {CHECK_KEYS.map((key) => (
             <li key={key}>
               <button
                 type="button"
                 onClick={() => setChecks((c) => ({ ...c, [key]: !c[key] }))}
                 aria-pressed={!!checks[key]}
-                className="flex w-full items-center gap-3 py-3 text-left text-[15px]"
+                className="hover-surface flex min-h-14 w-full items-center gap-3.5 rounded-xl px-3 py-3 text-left text-[16px]"
               >
                 <span
                   className={cn(
-                    "grid size-6 shrink-0 place-items-center border",
-                    checks[key] ? "border-primary bg-primary text-primary-foreground" : "bg-card",
+                    "grid size-7 shrink-0 place-items-center rounded-lg transition-colors duration-150",
+                    checks[key] ? "bg-foreground text-background" : "bg-card shadow-[inset_0_0_0_1.5px_var(--input)]",
                   )}
                 >
                   {checks[key] && <Check className="size-4" strokeWidth={3} />}
@@ -439,53 +495,55 @@ export function FillerView({
           ))}
         </ul>
 
-        <label className="mt-4 block">
-          <span className="text-[15px] font-semibold">{m.refill.kmLabel}</span>
-          <input
-            value={km}
-            onChange={(e) => setKm(e.target.value.replace(/[^0-9.,]/g, ""))}
-            inputMode="decimal"
-            className="mt-1.5 w-32 border bg-card px-3 py-2 text-base outline-none focus-visible:border-ring"
-          />
-          <span className="mt-1 block text-xs text-muted-foreground">{m.refill.kmHint}</span>
-        </label>
+        <div className="surface-card mt-2 flex flex-col gap-6 p-5">
+          <label className="block">
+            <span className="text-[15px] font-semibold">{m.refill.kmLabel}</span>
+            <input
+              value={km}
+              onChange={(e) => setKm(e.target.value.replace(/[^0-9.,]/g, ""))}
+              inputMode="decimal"
+              className="tabular mt-2 block h-12 w-36 rounded-xl border border-input bg-card px-4 text-base outline-none transition-[border-color,box-shadow] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25"
+            />
+            <span className="mt-1.5 block text-[13px] text-muted-foreground">{m.refill.kmHint}</span>
+          </label>
 
-        <label className="mt-4 block">
-          <span className="text-[15px] font-semibold">{m.refill.filler}</span>
-          <input
-            value={filler}
-            onChange={(e) => {
-              setFiller(e.target.value);
-              setNameMissing(false);
-            }}
-            autoComplete="name"
-            className={cn(
-              "mt-1.5 w-full border bg-card px-3 py-2 text-base outline-none focus-visible:border-ring",
-              nameMissing && "border-negative",
-            )}
-          />
-          <span className={cn("mt-1 block text-xs", nameMissing ? "text-negative" : "text-muted-foreground")}>
-            {nameMissing ? m.refill.fillerRequired : m.refill.fillerHint}
-          </span>
-        </label>
+          <label className="block">
+            <span className="text-[15px] font-semibold">{m.refill.filler}</span>
+            <input
+              value={filler}
+              onChange={(e) => {
+                setFiller(e.target.value);
+                setNameMissing(false);
+              }}
+              autoComplete="name"
+              className={cn(
+                "mt-2 block h-12 w-full rounded-xl border border-input bg-card px-4 text-base outline-none transition-[border-color,box-shadow] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25",
+                nameMissing && "border-negative focus-visible:border-negative focus-visible:ring-negative/20",
+              )}
+            />
+            <span className={cn("mt-1.5 block text-[13px]", nameMissing ? "font-medium text-negative" : "text-muted-foreground")}>
+              {nameMissing ? m.refill.fillerRequired : m.refill.fillerHint}
+            </span>
+          </label>
+        </div>
       </section>
 
-      <div className="fixed inset-x-0 bottom-0 border-t bg-card/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur">
-        <div className="mx-auto flex max-w-2xl flex-col gap-2">
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/90 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-2xl flex-col gap-2.5 sm:px-2">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-xs text-muted-foreground">{m.refill.adjustHint}</p>
+            <p className="text-[13px] text-muted-foreground">{m.refill.adjustHint}</p>
             <button
               type="button"
               onClick={() => void refresh()}
               disabled={refreshing}
-              className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-muted-foreground underline underline-offset-2 disabled:no-underline"
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold text-muted-foreground transition-colors duration-150 hover:bg-surface hover:text-foreground disabled:pointer-events-none"
             >
               <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
               {refreshing ? m.refill.refreshing : m.refill.refresh}
             </button>
           </div>
-          {status === "error" && <p className="text-sm text-negative">{m.common.error}</p>}
-          <Button size="lg" onClick={confirm} disabled={isPending} className="w-full">
+          {status === "error" && <p className="text-sm font-medium text-negative">{m.common.error}</p>}
+          <Button size="lg" onClick={confirm} disabled={isPending} className="h-14 w-full text-base">
             <CircleCheck />
             {isPending ? m.refill.confirming : m.refill.filledAsPlanned}
           </Button>

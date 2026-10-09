@@ -12,8 +12,10 @@ import { updateMachineDetails } from "../actions";
 
 const NEW_BUSINESS = "__new__";
 
+// Same height, rounding and focus ring as the Input next to it.
 const selectClass =
-  "h-10 w-full border border-input bg-card px-3 text-base outline-none focus-visible:border-ring md:text-sm";
+  "h-11 w-full rounded-xl border border-input bg-card px-3.5 text-base outline-none transition-[border-color,box-shadow] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25 md:text-sm";
+const hintClass = "text-[13px] leading-snug text-muted-foreground";
 
 export function MachineDetailsForm({ machine, businesses }: { machine: Machine; businesses: Business[] }) {
   const { m } = useI18n();
@@ -55,29 +57,29 @@ export function MachineDetailsForm({ machine, businesses }: { machine: Machine; 
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className="grid gap-x-4 gap-y-6 sm:grid-cols-2">
       <fieldset className="grid gap-2 sm:col-span-2">
-        <legend className="mb-2 text-sm font-semibold">{m.machines.ownership}</legend>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <legend className="mb-3 text-[15px] font-semibold tracking-[-0.01em]">{m.machines.ownership}</legend>
+        <div className="grid gap-2.5 sm:grid-cols-2">
           {[false, true].map((option) => (
             <label
               key={String(option)}
               className={cn(
-                "flex cursor-pointer flex-col gap-0.5 border p-3 transition-colors",
-                shared === option ? "border-foreground bg-surface" : "hover:border-foreground/40",
+                "flex cursor-pointer flex-col gap-1 rounded-xl border p-4 transition-[background-color,border-color,box-shadow] duration-150 has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/25",
+                shared === option ? "border-foreground/80 bg-surface" : "border-input bg-card hover:bg-surface/60",
               )}
             >
-              <span className="flex items-center gap-2 font-semibold">
+              <span className="flex items-center gap-2.5 text-[14.5px] font-semibold">
                 <input
                   type="radio"
                   name="ownership"
                   checked={shared === option}
                   onChange={() => setShared(option)}
-                  className="accent-[var(--primary)]"
+                  className="size-4 shrink-0 accent-[var(--primary)]"
                 />
                 {option ? m.machines.ownershipShared : m.machines.ownershipFull}
               </span>
-              <span className="pl-5 text-xs text-muted-foreground">
+              <span className="pl-[26px] text-[13px] leading-snug text-muted-foreground">
                 {option ? m.machines.ownershipSharedHint : m.machines.ownershipFullHint}
               </span>
             </label>
@@ -130,7 +132,7 @@ export function MachineDetailsForm({ machine, businesses }: { machine: Machine; 
           <Input id="new-business" value={newBusiness} onChange={(e) => setNewBusiness(e.target.value)} autoFocus />
         </div>
       )}
-      {shared && <p className="text-xs text-muted-foreground sm:col-span-2">{m.machines.sharedSlotsHint}</p>}
+      {shared && <p className={cn(hintClass, "-mt-2 sm:col-span-2")}>{m.machines.sharedSlotsHint}</p>}
 
       <div className="grid gap-2">
         <Label htmlFor="machine-name">{m.machines.name}</Label>
@@ -161,7 +163,7 @@ export function MachineDetailsForm({ machine, businesses }: { machine: Machine; 
           onChange={(e) => setDataSince(e.target.value)}
           className="w-fit"
         />
-        <p className="text-xs text-muted-foreground">{m.machines.dataSinceHint}</p>
+        <p className={hintClass}>{m.machines.dataSinceHint}</p>
       </div>
 
       <div className="grid gap-2">
@@ -173,14 +175,18 @@ export function MachineDetailsForm({ machine, businesses }: { machine: Machine; 
           inputMode="decimal"
           className="w-32"
         />
-        <p className="text-xs text-muted-foreground">{m.machines.kmRoundTripHint}</p>
+        <p className={hintClass}>{m.machines.kmRoundTripHint}</p>
       </div>
-      <div className="flex items-center gap-3 sm:col-span-2">
-        <Button onClick={save} disabled={isPending || !name.trim() || sharedIncomplete}>
+      <div className="flex flex-col gap-3 border-t pt-5 sm:col-span-2 sm:flex-row sm:items-center">
+        <Button
+          onClick={save}
+          disabled={isPending || !name.trim() || sharedIncomplete}
+          className="w-full sm:w-auto"
+        >
           {isPending ? m.common.saving : m.common.save}
         </Button>
-        {status === "saved" && <span className="text-sm text-positive">{m.common.saved}</span>}
-        {status === "error" && <span className="text-sm text-negative">{m.common.error}</span>}
+        {status === "saved" && <span className="text-sm font-medium text-positive">{m.common.saved}</span>}
+        {status === "error" && <span className="text-sm font-medium text-negative">{m.common.error}</span>}
       </div>
     </div>
   );

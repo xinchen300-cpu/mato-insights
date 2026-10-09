@@ -3,12 +3,14 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Trash2, TriangleAlert } from "lucide-react";
-import { Panel } from "@/components/page-header";
+import { CalendarClock, Hourglass, Trash2, TriangleAlert } from "lucide-react";
+import { Avatar, ListRow, RowList } from "@/components/list-row";
+import { Section } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/client";
 import { fmt, plural } from "@/i18n/format";
 import type { ExpiryAlert, SlowMover } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { pullExpired } from "./actions";
 
 export function ExpiryList({ alerts, slowMovers }: { alerts: ExpiryAlert[]; slowMovers: SlowMover[] }) {
@@ -31,91 +33,110 @@ export function ExpiryList({ alerts, slowMovers }: { alerts: ExpiryAlert[]; slow
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-10">
       {alerts.length > 0 && (
-        <Panel title={m.expiry.toPull} hint={m.expiry.toPullHint}>
-          <ul className="flex flex-col divide-y">
+        <Section title={m.expiry.toPull} hint={m.expiry.toPullHint}>
+          <RowList>
             {alerts.map((alert) => {
               const key = `${alert.machine_id}:${alert.selection_number}`;
+              const expired = alert.qty_expired > 0;
+              // Like a payment: what it is on the left, how many on the right,
+              // and on a phone the one action under it, with room for a thumb.
               return (
-                <li key={key} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                  <span className="min-w-0">
-                    <span className="flex items-center gap-2 font-semibold">
-                      {alert.qty_expired > 0 && <TriangleAlert className="size-4 shrink-0 text-negative" />}
-                      {alert.product_name ?? fmt(m.expiry.selection, { number: alert.selection_number })}
-                    </span>
-                    <Link
-                      href={`/machines/${alert.machine_id}`}
-                      className="block truncate text-sm text-muted-foreground hover:text-foreground"
-                    >
-                      {alert.machine_name} · {fmt(m.expiry.selection, { number: alert.selection_number })}
-                      {alert.business_name && alert.business_name !== alert.machine_name && ` · ${alert.business_name}`}
-                    </Link>
-                  </span>
-                  <span className="flex items-center gap-4">
-                    <span className="text-right text-sm">
-                      {alert.qty_expired > 0 ? (
-                        <span className="block font-semibold text-negative">
-                          {fmt(m.expiry.expiredCount, { count: alert.qty_expired })}
-                        </span>
-                      ) : (
-                        <span className="block font-semibold text-warning">
-                          {fmt(m.expiry.expiringCount, { count: alert.qty_expiring_24h })}
-                        </span>
-                      )}
+                <li key={key} className="flex flex-col gap-2.5 rounded-xl px-3 py-3 sm:flex-row sm:items-center sm:gap-4">
+                  <div className="flex min-w-0 flex-1 items-center gap-3.5">
+                    <Avatar tone={expired ? "negative" : "warning"}>
+                      {expired ? <TriangleAlert /> : <CalendarClock />}
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[15px] font-semibold tracking-[-0.01em]">
+                        {alert.product_name ?? fmt(m.expiry.selection, { number: alert.selection_number })}
+                      </p>
+                      <Link
+                        href={`/machines/${alert.machine_id}`}
+                        className="mt-0.5 block truncate text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        {alert.machine_name} · {fmt(m.expiry.selection, { number: alert.selection_number })}
+                        {alert.business_name && alert.business_name !== alert.machine_name && ` · ${alert.business_name}`}
+                      </Link>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      {/* A status the size of a word: a dot and the count, red only when it is really over. */}
+                      <p
+                        className={cn(
+                          "inline-flex items-center gap-1.5 text-[14px] font-semibold",
+                          expired ? "text-negative" : "text-foreground",
+                        )}
+                      >
+                        <span className={cn("size-1.5 rounded-full", expired ? "bg-negative" : "bg-warning")} />
+                        {expired
+                          ? fmt(m.expiry.expiredCount, { count: alert.qty_expired })
+                          : fmt(m.expiry.expiringCount, { count: alert.qty_expiring_24h })}
+                      </p>
                       {alert.next_expires_at && (
-                        <span className="block text-xs text-muted-foreground">{f.date(alert.next_expires_at)}</span>
+                        <p className="mt-0.5 text-[13px] text-muted-foreground">{f.date(alert.next_expires_at)}</p>
                       )}
-                    </span>
-                    {alert.qty_expired > 0 && (
+                    </div>
+                  </div>
+                  {expired && (
+                    <div className="pl-[54px] sm:shrink-0 sm:pl-0">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => pull(alert)}
                         disabled={isPending && busy === key}
+                        className="h-10 sm:h-8"
                       >
                         <Trash2 />
                         {m.expiry.pull}
                       </Button>
-                    )}
-                  </span>
+                    </div>
+                  )}
                 </li>
               );
             })}
-          </ul>
-        </Panel>
+          </RowList>
+        </Section>
       )}
 
       {slowMovers.length > 0 && (
-        <Panel title={m.expiry.alwaysExpires} hint={m.expiry.alwaysExpiresHint}>
-          <ul className="flex flex-col divide-y">
+        <Section title={m.expiry.alwaysExpires} hint={m.expiry.alwaysExpiresHint}>
+          <RowList>
             {slowMovers.map((slot) => (
-              <li
-                key={`${slot.machine_id}:${slot.selection_number}`}
-                className="flex flex-wrap items-baseline justify-between gap-3 py-3"
-              >
-                <span className="min-w-0">
-                  <span className="block truncate font-semibold">{slot.product_name}</span>
-                  <span className="block truncate text-sm text-muted-foreground">
-                    {slot.machine_name} · {fmt(m.expiry.selection, { number: slot.selection_number })}
-                  </span>
-                </span>
-                <span className="text-right text-sm text-muted-foreground">
-                  {slot.days_to_sell_full === null
-                    ? fmt(m.expiry.sellsNothing, { days: slot.shelf_life_days ?? 0 })
-                    : fmt(m.expiry.daysToSellFull, {
-                        days: f.number(Math.round(slot.days_to_sell_full)),
-                        shelf: slot.shelf_life_days ?? 0,
-                        capacity: slot.capacity,
-                      })}
-                  <span className="block text-xs">
-                    {plural(slot.capacity, m.expiry.capacityOne, m.expiry.capacityOther)}
-                  </span>
-                </span>
+              <li key={`${slot.machine_id}:${slot.selection_number}`}>
+                <ListRow
+                  leading={
+                    <Avatar>
+                      <Hourglass />
+                    </Avatar>
+                  }
+                  title={slot.product_name}
+                  subtitle={
+                    <>
+                      <span className="block truncate">
+                        {slot.machine_name} · {fmt(m.expiry.selection, { number: slot.selection_number })}
+                      </span>
+                      <span className="mt-1 block whitespace-normal text-[13.5px] leading-snug text-foreground">
+                        {slot.days_to_sell_full === null
+                          ? fmt(m.expiry.sellsNothing, { days: slot.shelf_life_days ?? 0 })
+                          : fmt(m.expiry.daysToSellFull, {
+                              days: f.number(Math.round(slot.days_to_sell_full)),
+                              shelf: slot.shelf_life_days ?? 0,
+                              capacity: slot.capacity,
+                            })}
+                      </span>
+                    </>
+                  }
+                  valueSub={
+                    <span className="text-muted-foreground">
+                      {plural(slot.capacity, m.expiry.capacityOne, m.expiry.capacityOther)}
+                    </span>
+                  }
+                />
               </li>
             ))}
-          </ul>
-        </Panel>
+          </RowList>
+        </Section>
       )}
     </div>
   );

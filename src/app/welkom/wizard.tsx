@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, Clock, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Avatar, initial } from "@/components/list-row";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n/client";
@@ -27,6 +28,19 @@ type Pick = {
 
 const STEPS = ["hello", "payter", "machines", "plan", "confirm", "ready"] as const;
 type Step = (typeof STEPS)[number];
+
+// One voice for every step: a title that carries it, a quiet paragraph, a soft
+// grey note where something needs explaining, and the actions in one row (one
+// column of big targets on a phone).
+const heroTitleClass = "text-[32px] font-semibold leading-[1.08] tracking-[-0.035em]";
+const titleClass = "text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] sm:text-[32px]";
+const bodyClass = "mt-3 max-w-[58ch] text-[15px] leading-relaxed text-muted-foreground sm:text-[16px]";
+const noteClass = "max-w-[58ch] rounded-2xl bg-surface px-5 py-4 text-[15px] leading-relaxed";
+const inputClass = "h-12 px-4 text-base md:text-[15px]";
+const actionsClass = "mt-8 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3";
+const quietButtonClass = cn(buttonVariants({ variant: "ghost", size: "lg" }), "w-full font-medium sm:w-auto");
+const inlineLinkClass =
+  "font-semibold text-foreground underline decoration-foreground/25 underline-offset-4 transition-colors hover:decoration-foreground";
 
 export function Wizard({
   payterConnected,
@@ -186,32 +200,32 @@ export function Wizard({
   }
 
   return (
-    <div className="mx-auto flex min-h-[calc(100svh-5.5rem)] w-full max-w-2xl flex-col px-5 py-8 sm:py-12">
+    <div className="mx-auto flex min-h-[calc(100svh-4rem)] w-full max-w-3xl flex-col px-5 pb-10 pt-3 sm:px-8 sm:pb-14 sm:pt-6">
       <Rail index={index} total={STEPS.length} />
       <p ref={liveRegion} aria-live="polite" className="sr-only" />
 
       <div key={step} className={cn("flex flex-1 flex-col justify-center py-10", leaving ? "step-leave" : "step-enter")}>
         {step === "hello" && (
           <>
-            <h1 style={{ "--i": 0 } as React.CSSProperties} className="text-4xl sm:text-5xl">
+            <h1 style={{ "--i": 0 } as React.CSSProperties} className={heroTitleClass}>
               {m.welcome.helloTitle}
             </h1>
-            <p style={{ "--i": 1 } as React.CSSProperties} className="mt-4 max-w-[58ch] text-[17px] leading-relaxed text-muted-foreground">
+            <p style={{ "--i": 1 } as React.CSSProperties} className={cn(bodyClass, "mt-4")}>
               {m.welcome.helloBody}
             </p>
-            <p style={{ "--i": 2 } as React.CSSProperties} className="mt-3 text-sm text-muted-foreground">
+            <p
+              style={{ "--i": 2 } as React.CSSProperties}
+              className="mt-4 flex items-start gap-2 text-[13.5px] text-muted-foreground"
+            >
+              <Clock className="mt-[3px] size-3.5 shrink-0" aria-hidden="true" />
               {m.welcome.helloTime}
             </p>
-            <div style={{ "--i": 3 } as React.CSSProperties} className="mt-8 flex flex-wrap items-center gap-4">
-              <Button size="lg" onClick={() => go(connected ? "machines" : "payter")}>
+            <div style={{ "--i": 3 } as React.CSSProperties} className={actionsClass}>
+              <Button size="lg" onClick={() => go(connected ? "machines" : "payter")} className="w-full sm:w-auto">
                 {m.welcome.helloStart}
                 <ArrowRight />
               </Button>
-              <button
-                type="button"
-                onClick={() => leave("/")}
-                className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
-              >
+              <button type="button" onClick={() => leave("/")} className={quietButtonClass}>
                 {m.welcome.skip}
               </button>
             </div>
@@ -220,57 +234,71 @@ export function Wizard({
 
         {step === "payter" && (
           <>
-            <h1 style={{ "--i": 0 } as React.CSSProperties} className="text-4xl">
+            <h1 style={{ "--i": 0 } as React.CSSProperties} className={titleClass}>
               {m.welcome.payterTitle}
             </h1>
-            <p style={{ "--i": 1 } as React.CSSProperties} className="mt-4 max-w-[58ch] text-[17px] leading-relaxed text-muted-foreground">
+            <p style={{ "--i": 1 } as React.CSSProperties} className={bodyClass}>
               {m.welcome.payterBody}
             </p>
 
             {connected ? (
               <div style={{ "--i": 2 } as React.CSSProperties} className="mt-8">
-                <p className="flex items-center gap-2 font-semibold text-positive">
-                  <Check className="size-5" strokeWidth={3} />
+                <p className="flex items-center gap-3 text-[15px] font-semibold">
+                  <Avatar tone="positive">
+                    <Check strokeWidth={3} />
+                  </Avatar>
                   {m.welcome.payterDone}
                 </p>
-                <div className="mt-6 flex flex-wrap gap-4">
-                  <Button size="lg" onClick={() => go("machines")}>
+                <div className={actionsClass}>
+                  <Button size="lg" onClick={() => go("machines")} className="w-full sm:w-auto">
                     {m.welcome.next}
                     <ArrowRight />
                   </Button>
-                  <button
-                    type="button"
-                    onClick={() => setConnected(false)}
-                    className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
-                  >
+                  <button type="button" onClick={() => setConnected(false)} className={quietButtonClass}>
                     {m.welcome.payterChange}
                   </button>
                 </div>
               </div>
             ) : (
               <>
-                <p style={{ "--i": 2 } as React.CSSProperties} className="mt-6 max-w-[58ch] bg-surface p-4 text-[15px] leading-relaxed">
+                <p style={{ "--i": 2 } as React.CSSProperties} className={cn(noteClass, "mt-6")}>
                   {m.welcome.payterWhere}
                 </p>
-                <form style={{ "--i": 3 } as React.CSSProperties} action={submitPayter} className="mt-6 grid max-w-md gap-4">
+                <form
+                  style={{ "--i": 3 } as React.CSSProperties}
+                  action={submitPayter}
+                  className="mt-7 grid max-w-md gap-5"
+                >
                   <div className="grid gap-2">
                     <Label htmlFor="username">{m.settings.username}</Label>
-                    <Input id="username" name="username" required autoComplete="username" />
+                    <Input id="username" name="username" required autoComplete="username" className={inputClass} />
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="password">{m.settings.password}</Label>
-                    <Input id="password" name="password" type="password" required autoComplete="current-password" />
+                    <Input
+                      id="password"
+                      name="password"
+                      type="password"
+                      required
+                      autoComplete="current-password"
+                      className={inputClass}
+                    />
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="domain">{m.settings.domain}</Label>
-                    <Input id="domain" name="domain" required />
+                    <Input id="domain" name="domain" required className={inputClass} />
                   </div>
-                  <p className="flex items-start gap-2 text-sm text-muted-foreground">
-                    <ShieldCheck className="mt-0.5 size-4 shrink-0 text-positive" />
+                  <p className="flex items-start gap-2 text-[13.5px] leading-snug text-muted-foreground">
+                    <ShieldCheck className="mt-px size-4 shrink-0 text-positive" />
                     {m.welcome.payterSafe}
                   </p>
-                  {error && <p className="text-sm text-negative">{error}</p>}
-                  <Button type="submit" size="lg" disabled={isPending} className="mt-1 justify-self-start">
+                  {error && <p className="text-[13.5px] font-medium text-negative">{error}</p>}
+                  <Button
+                    type="submit"
+                    size="lg"
+                    disabled={isPending}
+                    className="mt-1 w-full sm:w-auto sm:justify-self-start"
+                  >
                     {isPending ? <Loader2 className="animate-spin" /> : null}
                     {m.welcome.next}
                     {!isPending && <ArrowRight />}
@@ -283,10 +311,10 @@ export function Wizard({
 
         {step === "machines" && (
           <>
-            <h1 style={{ "--i": 0 } as React.CSSProperties} className="text-4xl">
+            <h1 style={{ "--i": 0 } as React.CSSProperties} className={titleClass}>
               {terminals === null || loadingTerminals ? m.welcome.machinesWaiting : m.welcome.machinesTitle}
             </h1>
-            <p style={{ "--i": 1 } as React.CSSProperties} className="mt-4 max-w-[58ch] text-[17px] leading-relaxed text-muted-foreground">
+            <p style={{ "--i": 1 } as React.CSSProperties} className={bodyClass}>
               {terminals === null || loadingTerminals
                 ? m.welcome.machinesWaitingBody
                 : terminals.length === 0
@@ -296,27 +324,28 @@ export function Wizard({
 
             <div style={{ "--i": 2 } as React.CSSProperties} className="mt-7">
               {terminals === null || loadingTerminals ? (
-                <ul className="flex flex-col divide-y border bg-card" aria-hidden="true">
+                <ul className="surface-card flex flex-col p-2" aria-hidden="true">
                   {[0, 1, 2].map((i) => (
-                    <li key={i} className="flex items-center gap-4 p-4">
-                      <span className="size-9 shrink-0 bg-muted" />
+                    <li key={i} className="flex min-h-16 items-center gap-3.5 px-3 py-3">
+                      <span className="skeleton size-10 shrink-0 rounded-full" />
                       <span className="flex flex-1 flex-col gap-2">
-                        <span className="h-3 w-40 bg-muted" />
-                        <span className="h-2.5 w-24 bg-muted/70" />
+                        <span className="skeleton h-3.5 w-40 max-w-full" />
+                        <span className="skeleton h-3 w-24" />
                       </span>
                     </li>
                   ))}
                 </ul>
               ) : terminals.length === 0 ? (
-                <Button variant="outline" onClick={() => void loadTerminals()}>
+                <Button variant="outline" size="lg" onClick={() => void loadTerminals()}>
                   <RefreshCw />
                   {m.welcome.machinesRetry}
                 </Button>
               ) : (
                 <>
-                  <ul className="flex flex-col divide-y border bg-card">
+                  <ul className="surface-card flex flex-col divide-y p-2">
                     {terminals.map((t) => (
-                      <li key={t.serial} className={cn("flex flex-wrap items-center gap-4 p-4", t.mine && "bg-accent/40")}>
+                      <li key={t.serial} className="flex items-start gap-3.5 px-3 py-3 sm:items-center">
+                        {/* The tick is the whole row's decision, so it is a big round target. */}
                         <button
                           type="button"
                           aria-pressed={t.mine}
@@ -327,38 +356,46 @@ export function Wizard({
                             )
                           }
                           className={cn(
-                            "grid size-9 shrink-0 place-items-center border-2 transition-colors",
-                            t.mine ? "border-positive bg-positive text-white" : "border-input bg-card",
+                            "grid size-10 shrink-0 place-items-center rounded-full outline-none transition-[background-color,color,box-shadow,transform] duration-150 focus-visible:ring-3 focus-visible:ring-ring/40 active:scale-[0.96]",
+                            t.mine
+                              ? "bg-foreground text-background"
+                              : "bg-card shadow-[inset_0_0_0_1.5px_var(--input)] hover:bg-surface",
                           )}
                         >
-                          {t.mine && <Check className="size-5" strokeWidth={3} />}
+                          {t.mine && <Check className="size-[18px]" strokeWidth={3} />}
                         </button>
-                        <span className="min-w-0 flex-1">
-                          <span className="block font-mono text-sm font-semibold">{t.serial}</span>
-                          {(t.model || t.orphan) && (
-                            <span className="block truncate text-xs text-muted-foreground">
-                              {t.orphan ? m.billing.orphan : t.model}
+                        <span className="flex min-w-0 flex-1 flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-4">
+                          <span className="min-w-0 flex-1 pt-0.5 sm:pt-0">
+                            <span className="block break-all text-[15px] font-semibold tracking-[-0.01em]">
+                              {t.serial}
                             </span>
-                          )}
+                            {(t.model || t.orphan) && (
+                              <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">
+                                {t.orphan ? m.billing.orphan : t.model}
+                              </span>
+                            )}
+                          </span>
+                          <Input
+                            value={t.name}
+                            disabled={!t.mine}
+                            placeholder={m.terminals.namePlaceholder}
+                            aria-label={m.terminals.nameLabel}
+                            onChange={(e) =>
+                              setTerminals((cur) =>
+                                (cur ?? []).map((x) => (x.serial === t.serial ? { ...x, name: e.target.value } : x)),
+                              )
+                            }
+                            className="w-full sm:w-56"
+                          />
                         </span>
-                        <Input
-                          value={t.name}
-                          disabled={!t.mine}
-                          placeholder={m.terminals.namePlaceholder}
-                          aria-label={m.terminals.nameLabel}
-                          onChange={(e) =>
-                            setTerminals((cur) =>
-                              (cur ?? []).map((x) => (x.serial === t.serial ? { ...x, name: e.target.value } : x)),
-                            )
-                          }
-                          className="w-full sm:w-52"
-                        />
                       </li>
                     ))}
                   </ul>
-                  <p className="mt-4 max-w-[58ch] text-sm text-muted-foreground">{m.welcome.machinesForeign}</p>
+                  <p className="mt-4 max-w-[58ch] px-1 text-[13.5px] leading-relaxed text-muted-foreground">
+                    {m.welcome.machinesForeign}
+                  </p>
                   {upgrade && (
-                    <p role="status" className="mt-4 max-w-[58ch] bg-surface p-4 text-sm">
+                    <p role="status" className={cn(noteClass, "mt-4 text-sm")}>
                       {upgrade}
                     </p>
                   )}
@@ -380,14 +417,14 @@ export function Wizard({
 
         {step === "plan" && (
           <>
-            <h1 style={{ "--i": 0 } as React.CSSProperties} className="text-4xl">
+            <h1 style={{ "--i": 0 } as React.CSSProperties} className={titleClass}>
               {m.welcome.planTitle}
             </h1>
-            <p style={{ "--i": 1 } as React.CSSProperties} className="mt-4 max-w-[58ch] text-[17px] leading-relaxed text-muted-foreground">
+            <p style={{ "--i": 1 } as React.CSSProperties} className={bodyClass}>
               {chosen > 0 ? plural(chosen, m.welcome.planBodyOne, m.welcome.planBody) : m.welcome.planBodyNone}
             </p>
 
-            <ul style={{ "--i": 2 } as React.CSSProperties} className="mt-7 grid gap-px bg-border sm:grid-cols-3">
+            <ul style={{ "--i": 2 } as React.CSSProperties} className="mt-7 grid gap-3 md:grid-cols-3">
               {PLANS.map((p) => {
                 const fits = planFits(p, chosen);
                 const best = chosen > 0 && !needsQuote(chosen) && planFor(chosen).id === p.id;
@@ -397,51 +434,61 @@ export function Wizard({
                   <li
                     key={p.id}
                     aria-current={picked || undefined}
-                    className={cn("flex flex-col gap-1 p-5", picked ? "bg-accent" : "bg-card")}
+                    className={cn(
+                      "surface-card flex flex-col p-5 transition-shadow duration-150 sm:p-6",
+                      // Chosen reads as chosen; the one that fits you is ringed in gold.
+                      picked ? "ring-2 ring-foreground" : best && "ring-[1.5px] ring-primary",
+                    )}
                   >
-                    <h2 className={cn("font-heading text-lg font-semibold text-heading", !fits && "opacity-55")}>
+                    <h2 className={cn("text-[17px] font-semibold tracking-[-0.02em]", !fits && "opacity-55")}>
                       {m.plans[p.id]}
                     </h2>
-                    <p className={cn("tabular font-heading text-3xl font-bold", !fits && "opacity-55")}>
+                    <p
+                      className={cn(
+                        "tabular mt-3 text-[34px] font-semibold leading-none tracking-[-0.04em]",
+                        !fits && "opacity-55",
+                      )}
+                    >
                       {f.euroRound(p.pricePerMonth)}
                     </p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="mt-2 text-[13px] text-muted-foreground">
                       {m.welcome.planPerMonth} · {m.welcome.planExcl}
                     </p>
-                    <ul className={cn("mt-4 flex flex-col gap-1.5 text-sm", !fits && "opacity-55")}>
+                    <ul className={cn("mt-5 flex flex-col gap-2 text-sm leading-snug", !fits && "opacity-55")}>
                       {planFeatureLines(m, p, PLANS).map((line) => (
                         <li key={line.text} className={cn("flex gap-2", line.soon && "text-muted-foreground")}>
                           {line.soon ? (
                             <Clock className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
                           ) : (
-                            <Check className="mt-0.5 size-3.5 shrink-0 text-positive" strokeWidth={3} aria-hidden="true" />
+                            <Check
+                              className="mt-0.5 size-3.5 shrink-0 text-foreground/70"
+                              strokeWidth={3}
+                              aria-hidden="true"
+                            />
                           )}
                           {line.text}
                         </li>
                       ))}
                     </ul>
-                    <div className="mt-auto flex flex-col items-start gap-3 pt-4">
+                    <div className="mt-auto flex flex-col items-start gap-3 pt-6">
                       {!fits ? (
-                        <span id={why} className="text-xs font-semibold text-muted-foreground">
+                        <span id={why} className="text-[13px] font-medium text-muted-foreground">
                           {fmt(m.billing.tooSmall, { count: chosen })}
                         </span>
                       ) : best ? (
-                        <span
-                          id={why}
-                          className="inline-flex rounded-full bg-primary/15 px-2.5 py-1 text-xs font-semibold text-accent-foreground"
-                        >
+                        <span id={why} className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#8a6117]">
+                          <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
                           {plural(chosen, m.billing.fitsOne, m.billing.fits)}
                         </span>
                       ) : null}
                       {/* Coming back to this step, the chosen package still leads on. */}
                       <Button
                         variant={picked || p.featured ? "default" : "outline"}
-                        size="sm"
                         onClick={() => pickPlan(p)}
                         disabled={isPending}
                         aria-disabled={!fits || undefined}
                         aria-describedby={!fits || best ? why : undefined}
-                        className={cn(!fits && "cursor-not-allowed opacity-55")}
+                        className={cn("w-full", !fits && "cursor-not-allowed opacity-55")}
                       >
                         {picked && <Check aria-hidden="true" />}
                         {picked ? m.welcome.planChosen : m.welcome.planChoose}
@@ -453,14 +500,9 @@ export function Wizard({
             </ul>
 
             {needsQuote(chosen) && (
-              <p style={{ "--i": 3 } as React.CSSProperties} className="mt-5 max-w-[58ch] text-sm">
+              <p style={{ "--i": 3 } as React.CSSProperties} className="mt-5 max-w-[58ch] px-1 text-sm leading-relaxed">
                 {fmt(m.billing.quote, { count: LARGEST_PLAN.maxMachines })}{" "}
-                <a
-                  href="https://www.matoautomaat.be/contact"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-semibold underline underline-offset-4"
-                >
+                <a href="https://www.matoautomaat.be/contact" target="_blank" rel="noreferrer" className={inlineLinkClass}>
                   {m.billing.quoteLink}
                 </a>
               </p>
@@ -477,20 +519,29 @@ export function Wizard({
 
         {step === "confirm" && pickedPlan && (
           <>
-            <h1 style={{ "--i": 0 } as React.CSSProperties} className="text-4xl">
+            <h1 style={{ "--i": 0 } as React.CSSProperties} className={titleClass}>
               {m.welcome.confirmTitle}
             </h1>
-            <p style={{ "--i": 1 } as React.CSSProperties} className="mt-4 text-[17px] text-muted-foreground">
-              <span className="font-semibold text-foreground">{m.plans[pickedPlan.id]}</span>
-              {" · "}
-              <span className="tabular">{f.euroRound(pickedPlan.pricePerMonth)}</span> {m.welcome.planPerMonth} ·{" "}
-              {m.welcome.planExcl}
+            {/* What you are starting, the way a bank shows a payment: name left, amount right. */}
+            <p style={{ "--i": 1 } as React.CSSProperties} className="mt-6 flex max-w-[60ch] items-center gap-3.5 px-1">
+              <Avatar tone="gold">{initial(m.plans[pickedPlan.id])}</Avatar>
+              <span className="min-w-0 flex-1 truncate text-[17px] font-semibold tracking-[-0.02em]">
+                {m.plans[pickedPlan.id]}
+              </span>
+              <span className="shrink-0 text-right">
+                <span className="tabular block text-[22px] font-semibold leading-tight tracking-[-0.03em]">
+                  {f.euroRound(pickedPlan.pricePerMonth)}
+                </span>
+                <span className="mt-0.5 block text-[13px] text-muted-foreground">
+                  {m.welcome.planPerMonth} · {m.welcome.planExcl}
+                </span>
+              </span>
             </p>
 
             {/* Every term on this screen itself, not behind a link: the card schemes ask for it. */}
             <ul
               style={{ "--i": 2 } as React.CSSProperties}
-              className="mt-6 flex max-w-[60ch] flex-col gap-3 border bg-card p-5 text-[15px] leading-relaxed"
+              className="surface-card mt-5 flex max-w-[60ch] flex-col gap-3 p-5 text-[15px] leading-relaxed sm:p-6"
             >
               {disclosureLines(m, f, pickedPlan, trialEnd, paymentsEnabled).map((line) => (
                 <li key={line}>{line}</li>
@@ -500,7 +551,7 @@ export function Wizard({
             {paymentsEnabled && (
               <label
                 style={{ "--i": 3 } as React.CSSProperties}
-                className="mt-5 flex max-w-[60ch] cursor-pointer items-start gap-3 text-[15px]"
+                className="hover-surface mt-4 flex max-w-[60ch] cursor-pointer items-start gap-3 rounded-2xl px-4 py-3.5 text-[15px] leading-relaxed"
               >
                 <input
                   type="checkbox"
@@ -513,7 +564,7 @@ export function Wizard({
             )}
 
             {error && (
-              <p role="alert" className="mt-4 text-sm text-negative">
+              <p role="alert" className="mt-4 text-[13.5px] font-medium text-negative">
                 {error}
               </p>
             )}
@@ -532,26 +583,22 @@ export function Wizard({
 
         {step === "ready" && (
           <>
-            <h1 style={{ "--i": 0 } as React.CSSProperties} className="text-4xl sm:text-5xl">
+            <h1 style={{ "--i": 0 } as React.CSSProperties} className={heroTitleClass}>
               {m.welcome.readyTitle}
             </h1>
-            <p style={{ "--i": 1 } as React.CSSProperties} className="mt-4 max-w-[58ch] text-[17px] leading-relaxed text-muted-foreground">
+            <p style={{ "--i": 1 } as React.CSSProperties} className={cn(bodyClass, "mt-4")}>
               {m.welcome.readyBody}
             </p>
-            <p style={{ "--i": 2 } as React.CSSProperties} className="mt-6 max-w-[58ch] bg-surface p-4 text-[15px] leading-relaxed">
+            <p style={{ "--i": 2 } as React.CSSProperties} className={cn(noteClass, "mt-7")}>
               {m.welcome.readyNext}
               <span className="mt-2 block text-muted-foreground">{m.welcome.readyLater}</span>
             </p>
-            <div style={{ "--i": 3 } as React.CSSProperties} className="mt-8 flex flex-wrap items-center gap-4">
-              <Button size="lg" onClick={() => leave("/")} disabled={isPending}>
+            <div style={{ "--i": 3 } as React.CSSProperties} className={actionsClass}>
+              <Button size="lg" onClick={() => leave("/")} disabled={isPending} className="w-full sm:w-auto">
                 {m.welcome.readyToDashboard}
                 <ArrowRight />
               </Button>
-              <button
-                type="button"
-                onClick={() => leave("/machines")}
-                className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
-              >
+              <button type="button" onClick={() => leave("/machines")} className={quietButtonClass}>
                 {m.welcome.readyContinue}
               </button>
             </div>
@@ -571,13 +618,13 @@ function Rail({ index, total }: { index: number; total: number }) {
   const { m } = useI18n();
   return (
     <div className="flex items-center gap-4">
-      <div className="h-1 flex-1 overflow-hidden bg-border">
+      <div className="h-1 flex-1 overflow-hidden rounded-full bg-border">
         <div
           className="rail-fill h-full w-full bg-primary"
           style={{ transform: `scaleX(${(index + 1) / total})` }}
         />
       </div>
-      <p className="tabular shrink-0 font-mono text-xs font-semibold text-muted-foreground">
+      <p className="tabular shrink-0 text-[13px] font-medium text-muted-foreground">
         {index + 1}/{total}
       </p>
     </div>
@@ -602,20 +649,16 @@ function Nav({
   style?: React.CSSProperties;
 }) {
   return (
-    <div style={style} className="mt-8 flex flex-wrap items-center gap-4">
+    <div style={style} className={actionsClass}>
       {onNext && nextLabel && (
-        <Button size="lg" onClick={onNext} disabled={busy || disabled}>
+        <Button size="lg" onClick={onNext} disabled={busy || disabled} className="w-full sm:w-auto">
           {busy ? <Loader2 className="animate-spin" /> : null}
           {nextLabel}
           {!busy && <ArrowRight />}
         </Button>
       )}
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" />
+      <button type="button" onClick={onBack} className={quietButtonClass}>
+        <ArrowLeft className="size-4" />
         {backLabel}
       </button>
     </div>

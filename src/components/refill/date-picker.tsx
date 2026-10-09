@@ -49,10 +49,15 @@ export function ExpiryPicker({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
         className={cn(
-          "inline-flex items-center gap-1.5 border px-2.5 py-1.5 text-xs font-semibold",
-          open ? "border-foreground bg-surface" : "bg-card",
-          away < 0 && "border-negative text-negative",
+          "inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold transition-colors duration-150",
+          // Past its date stays red whether the chips are open or not.
+          away < 0
+            ? cn("bg-negative/10 text-negative hover:bg-negative/15", open && "ring-1 ring-inset ring-negative/40")
+            : open
+              ? "bg-foreground text-background"
+              : "bg-surface text-foreground hover:bg-[#e6e6e9]",
         )}
       >
         <CalendarDays className="size-3.5" />
@@ -70,8 +75,10 @@ export function ExpiryPicker({
                 setOpen(false);
               }}
               className={cn(
-                "border px-2 py-1.5 text-xs font-semibold",
-                chip.value === value ? "border-foreground bg-foreground text-background" : "bg-card",
+                "inline-flex h-9 min-w-11 items-center justify-center rounded-full px-3 text-[13px] font-semibold transition-colors duration-150",
+                chip.value === value
+                  ? "bg-foreground text-background"
+                  : "bg-card text-foreground shadow-[0_0_0_1px_var(--border)] hover:bg-surface",
               )}
             >
               {chip.label}
@@ -82,13 +89,13 @@ export function ExpiryPicker({
             value={value}
             aria-label={m.refill.expiryDate}
             onChange={(e) => e.target.value && onChange(e.target.value)}
-            className="h-8 border border-input bg-card px-2 text-xs"
+            className="h-9 rounded-full border border-input bg-card px-3 text-[13px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25"
           />
         </div>
       )}
 
       {!open && away >= 0 && (
-        <span className="text-xs text-muted-foreground">{fmt(m.refill.daysLeft, { days: away })}</span>
+        <span className="text-[13px] text-muted-foreground">{fmt(m.refill.daysLeft, { days: away })}</span>
       )}
     </div>
   );

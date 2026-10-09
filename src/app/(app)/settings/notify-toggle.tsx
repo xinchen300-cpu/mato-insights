@@ -2,8 +2,10 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { Bell, BellOff } from "lucide-react";
+import { Avatar } from "@/components/list-row";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/client";
+import { cn } from "@/lib/utils";
 import { forgetDevice, rememberDevice } from "./actions";
 
 /** base64url from the server to the byte array the browser wants. */
@@ -75,25 +77,49 @@ export function NotifyToggle({ publicKey }: { publicKey: string }) {
     });
   }
 
-  if (state === "unsupported") return <p className="text-sm text-muted-foreground">{m.settings.notifyUnsupported}</p>;
-  if (state === "blocked") return <p className="text-sm text-muted-foreground">{m.settings.notifyBlocked}</p>;
-
-  return (
-    <div className="flex flex-wrap items-center gap-3">
-      {state === "on" ? (
-        <Button variant="outline" onClick={turnOff} disabled={isPending}>
+  if (state === "unsupported" || state === "blocked") {
+    return (
+      <div className="flex min-h-16 items-center gap-3.5 rounded-xl px-3 py-3">
+        <Avatar>
           <BellOff />
-          {m.settings.notifyOff}
-        </Button>
-      ) : (
-        <Button onClick={turnOn} disabled={isPending || state === "unknown"}>
-          <Bell />
-          {m.settings.notifyOn}
-        </Button>
-      )}
-      <span className="text-sm text-muted-foreground">
-        {state === "on" ? m.settings.notifyOnHere : m.settings.notifyIos}
-      </span>
+        </Avatar>
+        <p className="min-w-0 text-[14px] text-muted-foreground">
+          {state === "unsupported" ? m.settings.notifyUnsupported : m.settings.notifyBlocked}
+        </p>
+      </div>
+    );
+  }
+
+  // What this device does now on the left, the switch for it on the right;
+  // on a phone the button drops under the sentence.
+  return (
+    <div className="flex flex-col gap-3 rounded-xl px-3 py-3 sm:min-h-16 sm:flex-row sm:items-center sm:gap-4">
+      <div className="flex min-w-0 flex-1 items-center gap-3.5">
+        <Avatar tone={state === "on" ? "positive" : "neutral"}>{state === "on" ? <Bell /> : <BellOff />}</Avatar>
+        <p
+          className={cn(
+            "min-w-0",
+            state === "on"
+              ? "text-[15px] font-semibold tracking-[-0.01em]"
+              : "text-[14px] leading-snug text-muted-foreground",
+          )}
+        >
+          {state === "on" ? m.settings.notifyOnHere : m.settings.notifyIos}
+        </p>
+      </div>
+      <div className="shrink-0 pl-[54px] sm:pl-0">
+        {state === "on" ? (
+          <Button variant="secondary" onClick={turnOff} disabled={isPending}>
+            <BellOff />
+            {m.settings.notifyOff}
+          </Button>
+        ) : (
+          <Button onClick={turnOn} disabled={isPending || state === "unknown"}>
+            <Bell />
+            {m.settings.notifyOn}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

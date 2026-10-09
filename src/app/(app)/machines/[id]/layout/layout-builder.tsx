@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, LayoutTemplate, Plus, Square, Trash2 } from "lucide-react";
 import { FrontView, OWNER_TONES, OwnerLegend, type FrontSlot } from "@/components/machine/front-view";
+import { Panel, Section } from "@/components/page-header";
 import { ProductPicker } from "@/components/product-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -311,71 +312,95 @@ export function LayoutBuilder({
     });
   }
 
-  const numberInput = "h-10 w-full border border-input bg-card px-2 text-base tabular outline-none focus-visible:border-ring md:text-sm";
+  // One field style for every box on this screen, at a size a thumb can hit.
+  const numberInput =
+    "h-11 w-full rounded-xl border border-input bg-card px-3 text-base tabular outline-none transition-[border-color,box-shadow] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25 md:text-sm";
+  const fieldLabel = "text-[13px] font-medium text-muted-foreground";
 
   return (
-    <div className="flex flex-col gap-6">
-      <section className="flex flex-col gap-3">
-        <p className="eyebrow">{m.layout.machineType}</p>
-        <div className="flex flex-wrap gap-2">
-          {BUILDER_TYPES.map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setType(t)}
-              className={cn(
-                "rounded-full border px-4 py-2 text-sm font-semibold transition-colors",
-                type === t ? "border-foreground bg-foreground text-background" : "bg-card hover:border-primary",
-              )}
-            >
-              {m.machines.types[t]}
-            </button>
-          ))}
-        </div>
-      </section>
+    <div className="flex flex-col gap-10">
+      <div className="grid gap-6 sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-10">
+        <section className="flex flex-col gap-2.5">
+          <p className="eyebrow px-1">{m.layout.machineType}</p>
+          <div className="flex w-full gap-1 rounded-full bg-surface p-1 sm:w-auto sm:self-start">
+            {BUILDER_TYPES.map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setType(t)}
+                aria-pressed={type === t}
+                className={cn(
+                  "min-h-10 min-w-0 flex-auto rounded-full px-3 py-1.5 text-[14px] font-medium leading-tight transition-[background-color,color,box-shadow] duration-150 sm:flex-none sm:px-4",
+                  type === t
+                    ? "bg-card text-foreground shadow-[0_1px_3px_rgb(14_14_16/0.1)]"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {m.machines.types[t]}
+              </button>
+            ))}
+          </div>
+        </section>
 
-      <section className="flex flex-col gap-3">
-        <p className="eyebrow">{m.layout.start}</p>
-        <div className="flex flex-wrap gap-2">
-          {templates.map((t) => (
-            <Button key={t.id} variant="outline" size="sm" onClick={() => applyRows(rowsFromTemplate(t.layout), t.machine_type)}>
-              <LayoutTemplate />
-              {t.name}
+        <section className="flex min-w-0 flex-col gap-2.5">
+          <p className="eyebrow px-1">{m.layout.start}</p>
+          {/* Choices wrap onto further lines, so every one stays in view on a phone too. */}
+          <div className="flex flex-wrap gap-2">
+            {templates.map((t) => (
+              <Button
+                key={t.id}
+                variant="outline"
+                onClick={() => applyRows(rowsFromTemplate(t.layout), t.machine_type)}
+              >
+                <LayoutTemplate />
+                {t.name}
+              </Button>
+            ))}
+            {copySources.map((source) => (
+              <Button
+                key={source.id}
+                variant="outline"
+                onClick={() => applyRows(rowsFromSlots(source.slots), source.type)}
+              >
+                <Copy />
+                {fmt(m.layout.copyFrom, { machine: source.name })}
+              </Button>
+            ))}
+            <Button
+              variant="ghost"
+              onClick={() =>
+                applyRows([{ key: newKey(), size: "small", depth: 5, step: 1, first: 1, selections: numberRow(0, 5, 1) }])
+              }
+            >
+              <Square />
+              {m.layout.startEmpty}
             </Button>
-          ))}
-          {copySources.map((source) => (
-            <Button key={source.id} variant="outline" size="sm" onClick={() => applyRows(rowsFromSlots(source.slots), source.type)}>
-              <Copy />
-              {fmt(m.layout.copyFrom, { machine: source.name })}
-            </Button>
-          ))}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() =>
-              applyRows([{ key: newKey(), size: "small", depth: 5, step: 1, first: 1, selections: numberRow(0, 5, 1) }])
-            }
-          >
-            <Square />
-            {m.layout.startEmpty}
-          </Button>
-        </div>
-      </section>
+          </div>
+        </section>
+      </div>
 
       {rows.length > 0 && (
-        <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
-          <section className="flex flex-col gap-3">
+        <div className="grid gap-10 lg:grid-cols-[1fr_1.1fr] lg:gap-8">
+          <section className="flex flex-col gap-4">
             {rows.map((row, index) => (
-              <div key={row.key} className="border bg-card p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <h3 className="text-base">{fmt(m.layout.row, { number: index + 1 })}</h3>
-                  <Button variant="ghost" size="icon-sm" onClick={() => removeRow(index)} aria-label={m.layout.removeRow}>
+              <Panel
+                key={row.key}
+                title={fmt(m.layout.row, { number: index + 1 })}
+                actions={
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeRow(index)}
+                    aria-label={m.layout.removeRow}
+                    className="-my-2 -mr-2"
+                  >
                     <Trash2 />
                   </Button>
-                </div>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-                    {m.layout.slots}
+                }
+              >
+                <div className="grid grid-cols-3 gap-2.5">
+                  <label className="grid min-w-0 gap-1.5">
+                    <span className={cn(fieldLabel, "truncate")}>{m.layout.slots}</span>
                     <input
                       type="number"
                       min={1}
@@ -385,8 +410,8 @@ export function LayoutBuilder({
                       className={numberInput}
                     />
                   </label>
-                  <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-                    {m.layout.slotSize}
+                  <label className="grid min-w-0 gap-1.5">
+                    <span className={cn(fieldLabel, "truncate")}>{m.layout.slotSize}</span>
                     <select
                       value={row.size}
                       onChange={(e) => updateRow(index, { size: e.target.value as SlotSize })}
@@ -399,8 +424,8 @@ export function LayoutBuilder({
                       ))}
                     </select>
                   </label>
-                  <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground" title={m.layout.depthHint}>
-                    {m.layout.depth}
+                  <label className="grid min-w-0 gap-1.5" title={m.layout.depthHint}>
+                    <span className={cn(fieldLabel, "truncate")}>{m.layout.depth}</span>
                     <input
                       type="number"
                       min={1}
@@ -411,8 +436,9 @@ export function LayoutBuilder({
                     />
                   </label>
                 </div>
-                <div className="mt-3 grid gap-1.5">
-                  <span className="text-xs font-semibold text-muted-foreground">{m.layout.numbers}</span>
+
+                <div className="mt-5 grid gap-2">
+                  <span className={fieldLabel}>{m.layout.numbers}</span>
                   <div className="flex flex-wrap gap-2">
                     {row.selections.map((selection, slotIndex) => (
                       <input
@@ -421,22 +447,30 @@ export function LayoutBuilder({
                         value={selection}
                         aria-label={fmt(m.layout.editSlot, { number: selection || "?" })}
                         onChange={(e) => setSelectionAt(index, slotIndex, e.target.value)}
-                        className={cn(numberInput, "w-14 text-center")}
+                        className={cn(numberInput, "w-12 px-1 text-center sm:w-14")}
                       />
                     ))}
                   </div>
-                  <span className="text-xs text-muted-foreground">{m.layout.numbersHint}</span>
+                  <span className="text-[13px] text-muted-foreground">{m.layout.numbersHint}</span>
                 </div>
+
                 {shared && (
-                  <label className="mt-3 grid gap-1.5 text-xs font-semibold text-muted-foreground">
-                    {m.layout.rowOwner}
+                  <label className="mt-5 grid gap-1.5">
+                    <span className={cn(fieldLabel, "flex items-center gap-2")}>
+                      {/* The owner's colour, the same one the preview and its legend use. */}
+                      <span
+                        className="size-2 shrink-0 rounded-full"
+                        style={{ background: toneOf(ownerOf(row.selections[0])) }}
+                        aria-hidden="true"
+                      />
+                      {m.layout.rowOwner}
+                    </span>
                     <select
                       value={
                         new Set(row.selections.map(ownerOf)).size === 1 ? (ownerOf(row.selections[0]) ?? "") : MIXED
                       }
                       onChange={(e) => e.target.value !== MIXED && setOwner(row.selections, e.target.value)}
                       className={numberInput}
-                      style={{ borderLeft: `4px solid ${toneOf(ownerOf(row.selections[0]))}` }}
                     >
                       {owners.map((o) => (
                         <option key={o.id} value={o.id}>
@@ -449,35 +483,47 @@ export function LayoutBuilder({
                     </select>
                   </label>
                 )}
-              </div>
+              </Panel>
             ))}
-            <Button variant="outline" onClick={addRow} className="w-fit">
+            <Button variant="outline" size="lg" onClick={addRow} className="w-full sm:w-fit">
               <Plus />
               {m.layout.addRow}
             </Button>
           </section>
 
-          <section className="flex flex-col gap-4 lg:sticky lg:top-24 lg:self-start">
-            <div className="flex items-baseline justify-between">
-              <p className="eyebrow">{m.layout.preview}</p>
-              <p className="tabular text-sm font-semibold">{fmt(m.layout.totalCapacity, { count: totalCapacity })}</p>
+          <Section
+            title={m.layout.preview}
+            actions={
+              <p className="tabular shrink-0 text-[14px] font-semibold">
+                {fmt(m.layout.totalCapacity, { count: totalCapacity })}
+              </p>
+            }
+            className="gap-4 lg:sticky lg:top-24 lg:self-start"
+          >
+            <div className="overflow-hidden rounded-2xl">
+              <FrontView
+                rows={frontRows}
+                showStock={false}
+                selectedKey={selectedKey}
+                onSlotClick={(slot) => setSelectedKey(slot.key === selectedKey ? null : slot.key)}
+              />
             </div>
-            <FrontView
-              rows={frontRows}
-              showStock={false}
-              selectedKey={selectedKey}
-              onSlotClick={(slot) => setSelectedKey(slot.key === selectedKey ? null : slot.key)}
-            />
-            {shared && <OwnerLegend owners={owners.map((o) => ({ name: o.name, tone: toneOf(o.id) }))} />}
+            {shared && (
+              <div className="px-1">
+                <OwnerLegend owners={owners.map((o) => ({ name: o.name, tone: toneOf(o.id) }))} />
+              </div>
+            )}
 
             {selectedSelection !== undefined && (
-              <div className="grid gap-3 border border-primary/40 bg-card p-4">
-                <p className="font-heading font-semibold text-heading">
+              <div className="surface-card grid gap-5 p-5 ring-1 ring-primary/40 sm:p-6">
+                <p className="font-heading text-[18px] font-semibold tracking-[-0.02em] text-heading">
                   {fmt(m.layout.editSlot, { number: selectedSelection || "?" })}
                 </p>
-                <div className="grid gap-3 sm:grid-cols-[7rem_1fr]">
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="slot-selection">{m.layout.selection}</Label>
+                <div className="grid gap-4 sm:grid-cols-[7rem_minmax(0,1fr)]">
+                  <div className="grid gap-2">
+                    <Label htmlFor="slot-selection" className={fieldLabel}>
+                      {m.layout.selection}
+                    </Label>
                     <Input
                       id="slot-selection"
                       inputMode="numeric"
@@ -485,8 +531,8 @@ export function LayoutBuilder({
                       onChange={(e) => setSelection(e.target.value)}
                     />
                   </div>
-                  <div className="grid gap-1.5">
-                    <Label>{m.layout.product}</Label>
+                  <div className="grid min-w-0 gap-2">
+                    <Label className={fieldLabel}>{m.layout.product}</Label>
                     <ProductPicker
                       products={products}
                       value={selectedSelection ? (assignments[selectedSelection] ?? null) : null}
@@ -500,8 +546,10 @@ export function LayoutBuilder({
                     />
                   </div>
                   {shared && selectedSelection && (
-                    <div className="grid gap-1.5 sm:col-span-2">
-                      <Label htmlFor="slot-owner">{m.layout.slotOwner}</Label>
+                    <div className="grid gap-2 sm:col-span-2">
+                      <Label htmlFor="slot-owner" className={fieldLabel}>
+                        {m.layout.slotOwner}
+                      </Label>
                       <select
                         id="slot-owner"
                         value={ownerOf(selectedSelection) ?? ""}
@@ -519,25 +567,30 @@ export function LayoutBuilder({
                 </div>
               </div>
             )}
-          </section>
+          </Section>
         </div>
       )}
 
-      <div className="flex flex-col gap-4 border-t pt-6">
-        <p className="text-sm text-muted-foreground">{m.layout.historySafe}</p>
+      <div className="flex flex-col gap-5 border-t pt-8">
+        <p className="px-1 text-sm text-muted-foreground">{m.layout.historySafe}</p>
         {message && (
-          <p className={cn("text-sm font-semibold", message.tone === "error" ? "text-negative" : "text-positive")}>
+          <p
+            className={cn(
+              "px-1 text-sm font-semibold",
+              message.tone === "error" ? "text-negative" : "text-positive",
+            )}
+          >
             {message.text}
           </p>
         )}
-        <div className="flex flex-wrap items-end gap-3">
-          <Button size="lg" onClick={save} disabled={isPending || rows.length === 0}>
+        <div className="flex flex-col gap-6 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+          <Button size="lg" onClick={save} disabled={isPending || rows.length === 0} className="w-full sm:w-auto">
             {isPending ? m.common.saving : m.layout.save}
           </Button>
           {rows.length > 0 && (
-            <div className="flex items-end gap-2">
-              <div className="grid gap-1.5">
-                <Label htmlFor="template-name" className="text-xs text-muted-foreground">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="grid gap-2">
+                <Label htmlFor="template-name" className={fieldLabel}>
                   {m.layout.templateName}
                 </Label>
                 <Input
@@ -545,10 +598,15 @@ export function LayoutBuilder({
                   value={templateName}
                   onChange={(e) => setTemplateName(e.target.value)}
                   placeholder={machineName}
-                  className="w-48"
+                  className="w-full sm:w-56"
                 />
               </div>
-              <Button variant="outline" onClick={saveTemplate} disabled={isPending || !templateName.trim()}>
+              <Button
+                variant="outline"
+                onClick={saveTemplate}
+                disabled={isPending || !templateName.trim()}
+                className="h-11 w-full sm:w-auto"
+              >
                 {m.layout.saveAsTemplate}
               </Button>
             </div>

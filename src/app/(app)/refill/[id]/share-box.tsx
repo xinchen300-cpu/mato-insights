@@ -29,20 +29,21 @@ export function ShareBox({ token }: { token: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">{m.refill.shareHint}</p>
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2 rounded-xl bg-surface p-1 pl-3.5 focus-within:ring-3 focus-within:ring-ring/25">
         <input
           readOnly
           value={url}
+          aria-label={m.refill.share}
           onFocus={(e) => e.currentTarget.select()}
-          className="h-10 min-w-0 flex-1 border border-input bg-surface px-3 font-mono text-xs"
+          className="h-10 min-w-0 flex-1 bg-transparent font-mono text-xs text-muted-foreground outline-none"
         />
-        <Button variant="outline" size="icon" onClick={copy} aria-label={m.common.copy}>
+        <Button variant="outline" size="icon" onClick={copy} aria-label={m.common.copy} className="shrink-0">
           {copied ? <Check className="text-positive" /> : <Copy />}
         </Button>
       </div>
-      <Button onClick={share} className="w-fit">
+      <Button onClick={share} className="h-12 w-full sm:h-10 sm:w-fit">
         <Share2 />
         {m.refill.share}
       </Button>

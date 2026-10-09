@@ -2,8 +2,10 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ClipboardList } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Check, ClipboardList } from "lucide-react";
+import { Avatar, RowList, initial } from "@/components/list-row";
+import { Section } from "@/components/page-header";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
@@ -41,59 +43,78 @@ export function MachinePicker({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <p className="eyebrow">{m.refill.selectMachines}</p>
+    <Section
+      title={m.refill.selectMachines}
+      actions={
         <button
           type="button"
           onClick={() => setSelected(new Set(machines.map((mc) => mc.id)))}
-          className="text-sm font-semibold text-accent-foreground hover:underline"
+          className={buttonVariants({ variant: "ghost", size: "sm" })}
         >
           {m.refill.selectAll}
         </button>
-      </div>
-      <ul className="grid gap-2 sm:grid-cols-2">
+      }
+    >
+      {/* Each machine is one row you can tap anywhere on; the real checkbox
+          stays in the row for keyboards and screen readers. */}
+      <RowList>
         {machines.map((mc) => {
           const checked = selected.has(mc.id);
           return (
             <li key={mc.id}>
               <label
                 className={cn(
-                  "flex cursor-pointer items-center gap-3 border bg-card p-4 transition-colors",
-                  checked ? "border-primary bg-accent" : "hover:border-primary/50",
+                  "hover-surface flex min-h-[72px] cursor-pointer items-center gap-3.5 rounded-xl px-3 py-3",
+                  "has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/40",
                 )}
               >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggle(mc.id)}
-                  className="size-5 accent-[var(--primary)]"
-                />
-                <span className="min-w-0">
-                  <span className="block truncate font-semibold">{mc.name}</span>
-                  <span className={cn("figure block text-sm", mc.low ? "text-negative" : "text-muted-foreground")}>
-                    {mc.hint}
+                <input type="checkbox" checked={checked} onChange={() => toggle(mc.id)} className="sr-only" />
+                <Avatar>{initial(mc.name)}</Avatar>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-semibold tracking-[-0.01em]">{mc.name}</span>
+                  <span
+                    className={cn(
+                      "figure mt-0.5 flex items-start gap-1.5 text-[13px]",
+                      mc.low ? "text-negative" : "text-muted-foreground",
+                    )}
+                  >
+                    {mc.low && <span className="mt-[7px] size-1.5 shrink-0 rounded-full bg-negative" aria-hidden="true" />}
+                    <span className="min-w-0">{mc.hint}</span>
                   </span>
-                  {mc.note && <span className="figure block text-xs text-accent-foreground">{mc.note}</span>}
+                  {mc.note && <span className="figure mt-0.5 block text-[13px] text-foreground/80">{mc.note}</span>}
+                </span>
+                <span
+                  className={cn(
+                    "grid size-7 shrink-0 place-items-center rounded-full transition-colors duration-150",
+                    checked ? "bg-foreground text-background" : "shadow-[inset_0_0_0_1.5px_var(--input)]",
+                  )}
+                  aria-hidden="true"
+                >
+                  {checked && <Check className="size-4" strokeWidth={3} />}
                 </span>
               </label>
             </li>
           );
         })}
-      </ul>
-      {empty && <p className="text-sm text-muted-foreground">{m.refill.nothingToRefill}</p>}
-      <Button size="lg" onClick={make} disabled={isPending || selected.size === 0} className="w-fit">
+      </RowList>
+      {empty && <p className="px-1 text-sm text-muted-foreground">{m.refill.nothingToRefill}</p>}
+      <Button
+        size="lg"
+        onClick={make}
+        disabled={isPending || selected.size === 0}
+        className="mt-2 h-14 w-full text-base sm:h-12 sm:w-fit sm:text-[0.95rem]"
+      >
         <ClipboardList />
         {isPending ? m.refill.making : m.refill.make}
       </Button>
       {locked && (
-        <p role="status" className="text-sm">
+        <p role="status" className="px-1 text-sm">
           {fmt(m.billing.locked, { plan: m.plans[cheapestWith("refill").id] })}{" "}
           <Link href="/settings#abonnement" className="font-semibold underline underline-offset-4">
             {m.billing.lockedLink}
           </Link>
         </p>
       )}
-    </div>
+    </Section>
   );
 }

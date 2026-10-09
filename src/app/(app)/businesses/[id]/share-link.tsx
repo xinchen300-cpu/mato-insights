@@ -51,7 +51,7 @@ export function ShareLink({
   }
 
   const lockedNote = locked && (
-    <p role="status" className="text-sm">
+    <p role="status" className="text-[13.5px] leading-snug">
       {fmt(m.billing.locked, { plan: m.plans[cheapestWith("shareWithShops").id] })}{" "}
       {operator && (
         <Link href="/settings#abonnement" className="font-semibold underline underline-offset-4">
@@ -63,8 +63,8 @@ export function ShareLink({
 
   if (!token) {
     return (
-      <div className="flex flex-col items-start gap-3">
-        <Button onClick={() => set(true)} disabled={isPending}>
+      <div className="flex flex-col items-stretch gap-3 sm:items-start">
+        <Button onClick={() => set(true)} disabled={isPending} className="h-11 sm:h-10">
           <Link2 />
           {m.businesses.shareCreate}
         </Button>
@@ -74,15 +74,21 @@ export function ShareLink({
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex gap-2">
-        <Input readOnly value={url} onFocus={(e) => e.target.select()} className="font-mono text-xs" />
-        <Button type="button" variant="outline" onClick={copy} className="shrink-0">
+    <div className="flex flex-col gap-4">
+      {/* The link itself, quiet and read-only, with the one thing to do with it next to it. */}
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input
+          readOnly
+          value={url}
+          onFocus={(e) => e.target.select()}
+          className="border-transparent bg-surface font-mono text-[13px] md:text-[13px]"
+        />
+        <Button type="button" onClick={copy} className="h-11 shrink-0">
           {copied ? <Check /> : <Copy />}
           {copied ? m.businesses.shareCopied : m.businesses.shareCopy}
         </Button>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         <a href={url} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline", size: "sm" })}>
           <ExternalLink />
           {m.businesses.shareOpen}
@@ -95,7 +101,7 @@ export function ShareLink({
           {m.businesses.shareDisable}
         </Button>
       </div>
-      <p className="text-xs text-muted-foreground">{m.businesses.shareRegenerateHint}</p>
+      <p className="text-[13px] leading-snug text-muted-foreground">{m.businesses.shareRegenerateHint}</p>
       {lockedNote}
     </div>
   );

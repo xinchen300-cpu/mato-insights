@@ -1,12 +1,13 @@
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
-import { Building2 } from "lucide-react";
-import { PageHeader, Panel } from "@/components/page-header";
+import { Avatar, RowList, initial } from "@/components/list-row";
+import { PageHeader, Section } from "@/components/page-header";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { isOperator, requireOrgId } from "@/lib/org";
 import { planById } from "@/lib/plans";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { cn } from "@/lib/utils";
 import { CustomerForm } from "./customer-form";
 
 export async function generateMetadata() {
@@ -58,52 +59,60 @@ export default async function CustomersPage() {
   });
 
   return (
-    <>
+    <div className="max-w-3xl">
       <PageHeader title={m.customers.title} subtitle={m.customers.subtitle} />
 
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-9 sm:gap-10">
         <CustomerForm signupUrl={signupUrl} />
 
-        <Panel title={m.customers.listTitle}>
+        <Section title={m.customers.listTitle}>
           {customers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{m.customers.listEmpty}</p>
+            <p className="surface-card px-5 py-4 text-[14px] text-muted-foreground">{m.customers.listEmpty}</p>
           ) : (
-            <ul className="flex flex-col divide-y">
+            <RowList>
               {customers.map((c) => (
-                <li key={c.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3.5">
-                  <span className="min-w-0">
-                    <span className="flex items-center gap-2 font-semibold">
-                      <Building2 className="size-4 shrink-0 text-muted-foreground" />
-                      {c.name}
-                    </span>
-                    <span className="block truncate text-sm text-muted-foreground">
-                      {c.email ? fmt(m.customers.invitedTo, { email: c.email }) : f.date(c.since)}
+                // A customer as a bank shows a payee: who, how to reach them, what they
+                // have; whether they are in yet as a dot and a word. On a phone that
+                // word drops under the rest.
+                <li
+                  key={c.id}
+                  className="flex flex-col gap-2 rounded-xl px-3 py-3.5 sm:flex-row sm:items-center sm:gap-4"
+                >
+                  <span className="flex min-w-0 flex-1 items-center gap-3.5">
+                    <Avatar>{initial(c.name)}</Avatar>
+                    <span className="min-w-0">
+                      <span className="block truncate text-[15px] font-semibold tracking-[-0.01em]">{c.name}</span>
+                      <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">
+                        {c.email ? fmt(m.customers.invitedTo, { email: c.email }) : f.date(c.since)}
+                      </span>
+                      <span className="figure mt-0.5 block text-[13px] text-muted-foreground">
+                        {fmt(m.customers.machinesCount, { count: c.machines })}
+                        {" · "}
+                        {c.plan ? `${m.plans[c.plan.id]} · ${f.euroRound(c.plan.pricePerMonth)}` : m.customers.noPlan}
+                        {c.plan && c.cancelled && ` · ${m.billing.statusCancelled}`}
+                        {c.plan && !c.cancelled && c.trialEndsAt && new Date(c.trialEndsAt) > new Date() &&
+                          ` · ${fmt(m.billing.statusTrial, { date: f.date(c.trialEndsAt) })}`}
+                        {c.plan && !c.cancelled && c.trialEndsAt && new Date(c.trialEndsAt) <= new Date() &&
+                          !c.subscribed &&
+                          ` · ${m.billing.statusEnded}`}
+                      </span>
                     </span>
                   </span>
-                  <span className="text-right text-sm">
+                  <span className="inline-flex shrink-0 items-center gap-1.5 pl-[54px] text-[13px] font-medium sm:pl-0">
                     <span
-                      className={c.registered ? "block font-semibold text-positive" : "block text-muted-foreground"}
-                    >
+                      className={cn("size-1.5 rounded-full", c.registered ? "bg-positive" : "bg-muted-foreground/40")}
+                      aria-hidden="true"
+                    />
+                    <span className={c.registered ? "text-foreground" : "text-muted-foreground"}>
                       {c.registered ? m.customers.statusActive : m.customers.statusWaiting}
-                    </span>
-                    <span className="figure block text-xs text-muted-foreground">
-                      {fmt(m.customers.machinesCount, { count: c.machines })}
-                      {" · "}
-                      {c.plan ? `${m.plans[c.plan.id]} · ${f.euroRound(c.plan.pricePerMonth)}` : m.customers.noPlan}
-                      {c.plan && c.cancelled && ` · ${m.billing.statusCancelled}`}
-                      {c.plan && !c.cancelled && c.trialEndsAt && new Date(c.trialEndsAt) > new Date() &&
-                        ` · ${fmt(m.billing.statusTrial, { date: f.date(c.trialEndsAt) })}`}
-                      {c.plan && !c.cancelled && c.trialEndsAt && new Date(c.trialEndsAt) <= new Date() &&
-                        !c.subscribed &&
-                        ` · ${m.billing.statusEnded}`}
                     </span>
                   </span>
                 </li>
               ))}
-            </ul>
+            </RowList>
           )}
-        </Panel>
+        </Section>
       </div>
-    </>
+    </div>
   );
 }

@@ -22,18 +22,22 @@ export default async function SharedRefillSheetPage({ params }: { params: Promis
   const sheet = existing && !existing.completed_at ? await getRefillSheetByToken(token) : existing;
 
   return (
-    <div className="mx-auto min-h-svh max-w-2xl px-4 pt-5">
-      <header className="mb-6 flex items-center justify-between gap-3">
+    <div className="mx-auto min-h-svh max-w-2xl px-4 pt-4 sm:px-6 sm:pt-6">
+      <header className="mb-8 flex h-10 items-center justify-between gap-3">
         <MatoWordmark />
         <LanguageToggle />
       </header>
 
       {!sheet ? (
-        <p className="border bg-card p-8 text-center text-muted-foreground">{m.refill.notFound}</p>
+        <p className="surface-card px-6 py-12 text-center text-[15px] text-muted-foreground">{m.refill.notFound}</p>
       ) : (
         <>
-          <p className="eyebrow">{fmt(m.refill.createdAt, { date: f.dateTime(sheet.created_at) })}</p>
-          <h1 className="mb-6 mt-1 text-3xl">{m.refill.sheetTitle}</h1>
+          <p className="px-1 text-sm text-muted-foreground">
+            {fmt(m.refill.createdAt, { date: f.dateTime(sheet.created_at) })}
+          </p>
+          <h1 className="mb-8 mt-1.5 px-1 text-[28px] font-semibold leading-tight tracking-[-0.03em] sm:text-[32px]">
+            {m.refill.sheetTitle}
+          </h1>
           <FillerView
             token={sheet.share_token}
             lines={sheet.lines}

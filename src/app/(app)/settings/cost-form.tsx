@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Clock, Route } from "lucide-react";
+import { Avatar } from "@/components/list-row";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,25 +28,40 @@ export function CostForm({ perHour, perKm }: { perHour: number; perKm: number })
     });
   }
 
+  // Two settings rows, label left and the amount right, then one save for both.
   return (
-    <form action={submit} className="flex flex-wrap items-end gap-3">
-      <div className="grid gap-1.5">
-        <Label htmlFor="perHour" className="text-xs text-muted-foreground">
+    <form action={submit} className="surface-card flex flex-col p-2">
+      <div className="flex min-h-16 items-center gap-3.5 rounded-xl px-3 py-3">
+        <Avatar>
+          <Clock />
+        </Avatar>
+        <Label htmlFor="perHour" className="min-w-0 flex-1 text-[15px] font-semibold tracking-[-0.01em]">
           {m.settings.costHour}
         </Label>
-        <Input id="perHour" name="perHour" defaultValue={perHour} inputMode="decimal" className="w-28" />
+        <Input id="perHour" name="perHour" defaultValue={perHour} inputMode="decimal" className="w-28 text-right" />
       </div>
-      <div className="grid gap-1.5">
-        <Label htmlFor="perKm" className="text-xs text-muted-foreground">
+      <div className="flex min-h-16 items-center gap-3.5 rounded-xl px-3 py-3">
+        <Avatar>
+          <Route />
+        </Avatar>
+        <Label htmlFor="perKm" className="min-w-0 flex-1 text-[15px] font-semibold tracking-[-0.01em]">
           {m.settings.costKm}
         </Label>
-        <Input id="perKm" name="perKm" defaultValue={perKm} inputMode="decimal" className="w-28" />
+        <Input id="perKm" name="perKm" defaultValue={perKm} inputMode="decimal" className="w-28 text-right" />
       </div>
-      <Button type="submit" disabled={isPending}>
-        {isPending ? m.common.saving : m.common.save}
-      </Button>
-      {status === "saved" && <span className="text-sm text-positive">{m.settings.costSaved}</span>}
-      {status === "bad" && <span className="text-sm text-negative">{m.settings.costBad}</span>}
+      <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 px-3 pb-2 pt-2">
+        {status === "saved" && (
+          <span className="mr-auto text-[13.5px] font-medium text-positive">{m.settings.costSaved}</span>
+        )}
+        {status === "bad" && (
+          <span className="mr-auto min-w-0 flex-1 basis-56 text-[13.5px] font-medium text-negative">
+            {m.settings.costBad}
+          </span>
+        )}
+        <Button type="submit" disabled={isPending}>
+          {isPending ? m.common.saving : m.common.save}
+        </Button>
+      </div>
     </form>
   );
 }

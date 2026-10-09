@@ -247,6 +247,7 @@ export const fr: Messages = {
     archived: "Archivé",
     showArchived: "Afficher les archivés",
     inSlots: "Dans {count} cases",
+    inSlotsOne: "Dans 1 case",
     searchPlaceholder: "Rechercher ou créer un produit…",
     createNamed: "Créer « {name} »",
     noResults: "Aucun produit trouvé.",

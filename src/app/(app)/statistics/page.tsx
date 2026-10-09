@@ -1,11 +1,12 @@
 import { Suspense } from "react";
-import { Download } from "lucide-react";
+import { ArrowRight, ChartNoAxesColumn, Download, Link2, TriangleAlert } from "lucide-react";
 import { BarList } from "@/components/charts/bar-list";
 import { HourChart } from "@/components/charts/hour-chart";
 import { RevenueChart } from "@/components/charts/revenue-chart";
 import { Delta } from "@/components/delta";
-import { EmptyState, PageHeader, Panel } from "@/components/page-header";
-import { StatTile } from "@/components/stat-tile";
+import { KpiHero, MiniStat } from "@/components/kpi";
+import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
+import { EmptyState, PageHeader, Panel, Section } from "@/components/page-header";
 import { StatsGuide } from "@/components/stats-guide";
 import { buttonVariants } from "@/components/ui/button";
 import { changeRatio, fmt, plural } from "@/i18n/format";
@@ -89,7 +90,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
         }
       />
 
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-8 sm:gap-10">
         <Suspense>
           <StatsFilters
             period={period}
@@ -110,88 +111,74 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
         </Suspense>
 
         {totals.units === 0 ? (
-          <EmptyState title={m.stats.noSales} />
+          <EmptyState title={m.stats.noSales} icon={<ChartNoAxesColumn className="size-5" />} />
         ) : (
           <>
-            <div className="max-w-3xl">
-              <p className="figure font-heading text-xl leading-snug text-foreground sm:text-2xl">{headline}</p>
-              {productLine && <p className="figure mt-1.5 text-sm text-muted-foreground">{productLine}</p>}
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <StatTile
+            {/* The one figure this page is about, what it means, then the curve. */}
+            <section className="surface-card px-5 pb-4 pt-6 sm:px-8 sm:pb-6 sm:pt-8">
+              <KpiHero
                 label={m.stats.revenue}
                 value={f.euro(totals.revenue)}
-                current={totals.revenue}
-                previous={totals.prev_revenue}
-                compareLabel={compare}
-                verdict={unitsVerdict}
-                verdictNotes={verdictNotes}
+                compare={{
+                  current: totals.revenue,
+                  previous: totals.prev_revenue,
+                  label: compare,
+                  verdict: unitsVerdict,
+                  notes: verdictNotes,
+                }}
                 f={f}
               />
-              <StatTile
-                label={m.stats.units}
-                value={f.number(totals.units)}
-                current={totals.units}
-                previous={totals.prev_units}
-                compareLabel={compare}
-                verdict={unitsVerdict}
-                verdictNotes={verdictNotes}
-                f={f}
-              />
-              <StatTile
-                label={m.stats.avgSale}
-                value={f.euro(avg)}
-                detail={prevAvg > 0 ? fmt(m.stats.avgBefore, { amount: f.euro(prevAvg) }) : undefined}
-                f={f}
-              />
-            </div>
+
+              <div className="mt-5 max-w-2xl">
+                <p className="figure text-[15px] font-medium leading-relaxed text-foreground sm:text-base">{headline}</p>
+                {productLine && <p className="figure mt-1 text-sm text-muted-foreground">{productLine}</p>}
+              </div>
+
+              <div className="mt-7 grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-3">
+                <MiniStat
+                  label={m.stats.units}
+                  value={f.number(totals.units)}
+                  compare={{
+                    current: totals.units,
+                    previous: totals.prev_units,
+                    label: compare,
+                    verdict: unitsVerdict,
+                    notes: verdictNotes,
+                  }}
+                  f={f}
+                />
+                <MiniStat
+                  label={m.stats.avgSale}
+                  value={f.euro(avg)}
+                  detail={prevAvg > 0 ? fmt(m.stats.avgBefore, { amount: f.euro(prevAvg) }) : undefined}
+                  f={f}
+                />
+              </div>
+
+              <div className="mt-8">
+                <h2 className="text-[14px] font-medium tracking-normal text-muted-foreground">
+                  {m.stats.revenueOverTime}
+                </h2>
+                <div className="-mx-2 mt-3 sm:-mx-3">
+                  <RevenueChart
+                    height={220}
+                    data={
+                      report.period === "today"
+                        ? report.by_hour.map((h) => ({ key: String(h.hour), label: `${h.hour}:00`, revenue: h.revenue }))
+                        : fillDays(report).map((d) => ({
+                            key: d.day,
+                            label: f.dayMonth(`${d.day}T12:00:00Z`),
+                            revenue: d.revenue,
+                          }))
+                    }
+                  />
+                </div>
+              </div>
+            </section>
 
             <StatsGuide m={m} f={f} />
 
-            <Panel title={m.stats.revenueOverTime}>
-              <RevenueChart
-                data={
-                  report.period === "today"
-                    ? report.by_hour.map((h) => ({ key: String(h.hour), label: `${h.hour}:00`, revenue: h.revenue }))
-                    : fillDays(report).map((d) => ({
-                        key: d.day,
-                        label: f.dayMonth(`${d.day}T12:00:00Z`),
-                        revenue: d.revenue,
-                      }))
-                }
-              />
-            </Panel>
-
-            {scrambled.length > 0 && (
-              <div className="border border-warning/40 bg-card p-5">
-                <p className="font-heading text-lg font-semibold text-heading">{m.stats.mixedTitle}</p>
-                <p className="mt-1 max-w-[62ch] text-sm text-muted-foreground">
-                  {fmt(m.stats.mixedBody, { machines: scrambled.join(", ") })}
-                </p>
-                <Link
-                  href="/unassigned"
-                  className="mt-3 inline-block text-sm font-semibold text-accent-foreground underline underline-offset-4"
-                >
-                  {m.stats.mixedFix}
-                </Link>
-              </div>
-            )}
-
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Panel title={m.stats.bestSellers}>
-                <ProductRanking rows={best} m={m} f={f} />
-              </Panel>
-              <Panel title={m.stats.worstSellers} hint={longEnough ? m.stats.worstSellersHint : undefined}>
-                {longEnough ? (
-                  <ProductRanking rows={slowest} m={m} f={f} />
-                ) : (
-                  <p className="text-sm text-muted-foreground">{fmt(m.stats.worstSellersTooShort, { days })}</p>
-                )}
-              </Panel>
-            </div>
-
-            <div className="grid gap-6 lg:grid-cols-2">
+            <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
               <Panel
                 title={m.stats.busiestDays}
                 hint={
@@ -215,72 +202,103 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
               </Panel>
             </div>
 
-            <Panel title={m.stats.perMachine}>
-              <ul className="flex flex-col divide-y">
-                {report.by_machine.map((row) => (
-                  <li
-                    key={row.machine_id}
-                    className="grid grid-cols-[1fr_auto] items-center gap-x-4 py-3 sm:grid-cols-[1fr_7rem_8rem_5rem]"
+            {scrambled.length > 0 && (
+              <div className="surface-card flex items-start gap-3.5 p-5 sm:p-6">
+                <Avatar tone="warning">
+                  <TriangleAlert />
+                </Avatar>
+                <div className="min-w-0 pt-0.5">
+                  <p className="text-[16px] font-semibold tracking-[-0.015em] text-heading">{m.stats.mixedTitle}</p>
+                  <p className="mt-1 max-w-[62ch] text-sm text-muted-foreground">
+                    {fmt(m.stats.mixedBody, { machines: scrambled.join(", ") })}
+                  </p>
+                  <Link
+                    href="/unassigned"
+                    className="-mx-1 mt-2 inline-flex items-center gap-1 rounded-full px-1 py-1 text-sm font-semibold text-foreground underline-offset-4 hover:underline"
                   >
-                    <span className="min-w-0">
-                      <span className="block truncate font-semibold">{row.machine_name}</span>
-                      <span className="block text-xs text-muted-foreground sm:hidden">
-                        {plural(row.units, m.common.unitsOne, m.common.unitsOther)}
-                      </span>
-                    </span>
-                    <span className="tabular hidden text-right text-sm text-muted-foreground sm:block">
-                      {plural(row.units, m.common.unitsOne, m.common.unitsOther)}
-                    </span>
-                    <span className="tabular text-right font-semibold">{f.euro(row.revenue)}</span>
-                    <span className="col-span-2 text-right sm:col-span-1">
-                      <Delta
-                        current={row.revenue}
-                        previous={row.prev_revenue}
-                        f={f}
-                        verdict={compareCounts(row.units, row.prev_units)}
-                        noiseLabel={m.stats.withinNoise}
-                      />
-                    </span>
+                    {m.stats.mixedFix}
+                    <ArrowRight className="size-4" aria-hidden="true" />
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            <div className="grid gap-8 sm:gap-10 lg:grid-cols-2 lg:gap-6">
+              <Section title={m.stats.bestSellers}>
+                <ProductRanking rows={best} m={m} f={f} />
+              </Section>
+              <Section title={m.stats.worstSellers} hint={longEnough ? m.stats.worstSellersHint : undefined}>
+                {longEnough ? (
+                  <ProductRanking rows={slowest} m={m} f={f} />
+                ) : (
+                  <p className="surface-card px-5 py-5 text-sm text-muted-foreground">
+                    {fmt(m.stats.worstSellersTooShort, { days })}
+                  </p>
+                )}
+              </Section>
+            </div>
+
+            <Section title={m.stats.perMachine}>
+              <RowList>
+                {report.by_machine.map((row) => (
+                  <li key={row.machine_id}>
+                    <ListRow
+                      leading={<Avatar>{initial(row.machine_name)}</Avatar>}
+                      title={row.machine_name}
+                      subtitle={<span className="tabular">{plural(row.units, m.common.unitsOne, m.common.unitsOther)}</span>}
+                      value={f.euro(row.revenue)}
+                      valueSub={
+                        <Delta
+                          current={row.revenue}
+                          previous={row.prev_revenue}
+                          f={f}
+                          verdict={compareCounts(row.units, row.prev_units)}
+                          noiseLabel={m.stats.withinNoise}
+                          className="text-[13px]"
+                        />
+                      }
+                    />
                   </li>
                 ))}
-              </ul>
-            </Panel>
+              </RowList>
+            </Section>
 
-            <Panel title={m.stats.perProduct}>
-              <ul className="flex flex-col divide-y">
+            <Section title={m.stats.perProduct}>
+              <RowList>
                 {report.by_product
                   .filter((p) => p.units > 0)
                   .map((row) => (
-                    <li
-                      key={row.product_id ?? "unassigned"}
-                      className="grid grid-cols-[2rem_1fr_auto] items-center gap-x-3 py-2.5 sm:grid-cols-[2rem_1fr_7rem_8rem_5rem]"
-                    >
-                      <span className="grid size-8 place-items-center">
-                        {row.photo_path && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={mediaUrl(row.photo_path)!} alt="" className="max-h-8 max-w-8 object-contain" />
-                        )}
-                      </span>
-                      <span className={row.product_id ? "truncate font-semibold" : "truncate italic text-muted-foreground"}>
-                        {row.product_name ?? m.stats.unassignedProduct}
-                      </span>
-                      <span className="tabular hidden text-right text-sm text-muted-foreground sm:block">
-                        {plural(row.units, m.common.unitsOne, m.common.unitsOther)}
-                      </span>
-                      <span className="tabular text-right font-semibold">{f.euro(row.revenue)}</span>
-                      <span className="hidden text-right sm:block">
-                        <Delta
-                        current={row.revenue}
-                        previous={row.prev_revenue}
-                        f={f}
-                        verdict={compareCounts(row.units, row.prev_units)}
-                        noiseLabel={m.stats.withinNoise}
+                    <li key={row.product_id ?? "unassigned"}>
+                      <ListRow
+                        leading={<ProductAvatar row={row} />}
+                        title={
+                          row.product_id ? (
+                            (row.product_name ?? m.stats.unassignedProduct)
+                          ) : (
+                            <span className="font-medium italic text-muted-foreground">
+                              {row.product_name ?? m.stats.unassignedProduct}
+                            </span>
+                          )
+                        }
+                        subtitle={
+                          <span className="tabular">{plural(row.units, m.common.unitsOne, m.common.unitsOther)}</span>
+                        }
+                        value={f.euro(row.revenue)}
+                        valueSub={
+                          <Delta
+                            current={row.revenue}
+                            previous={row.prev_revenue}
+                            f={f}
+                            verdict={compareCounts(row.units, row.prev_units)}
+                            noiseLabel={m.stats.withinNoise}
+                            className="text-[13px]"
+                          />
+                        }
                       />
-                      </span>
                     </li>
                   ))}
-              </ul>
-            </Panel>
+              </RowList>
+            </Section>
           </>
         )}
       </div>
@@ -356,38 +374,52 @@ function ProductRanking({
   m: Awaited<ReturnType<typeof getI18n>>["m"];
   f: Awaited<ReturnType<typeof getI18n>>["f"];
 }) {
-  if (rows.length === 0) return <p className="text-sm text-muted-foreground">{m.stats.noSales}</p>;
+  if (rows.length === 0) return <p className="surface-card px-5 py-5 text-sm text-muted-foreground">{m.stats.noSales}</p>;
 
+  // Same card and rows as RowList, but an ordered list: the order is the point.
   return (
-    <ol className="flex flex-col gap-2.5">
+    <ol className="surface-card flex flex-col p-2">
       {rows.map((row, i) => (
-        <li key={row.product_id} className="grid grid-cols-[1.25rem_2rem_1fr_auto] items-center gap-3">
-          <span className="font-mono text-xs font-bold text-muted-foreground">{i + 1}</span>
-          <span className="grid size-8 place-items-center">
-            {row.photo_path && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={mediaUrl(row.photo_path)!} alt="" className="max-h-8 max-w-8 object-contain" />
-            )}
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate font-semibold">{row.product_name}</span>
-            <span className="block text-xs text-muted-foreground">
-              {plural(row.units, m.common.unitsOne, m.common.unitsOther)}
-            </span>
-          </span>
-          <span className="flex flex-col items-end">
-            <span className="tabular font-semibold">{f.euro(row.revenue)}</span>
-            <Delta
-              current={row.units}
-              previous={row.prev_units}
-              f={f}
-              verdict={compareCounts(row.units, row.prev_units)}
-              noiseLabel={m.stats.withinNoise}
-              className="text-xs"
-            />
-          </span>
+        <li key={row.product_id}>
+          <ListRow
+            leading={
+              <span className="flex shrink-0 items-center gap-2.5">
+                <span className="tabular-nums w-4 text-center text-[13px] font-semibold text-muted-foreground">{i + 1}</span>
+                <ProductAvatar row={row} />
+              </span>
+            }
+            title={row.product_name}
+            subtitle={<span className="tabular">{plural(row.units, m.common.unitsOne, m.common.unitsOther)}</span>}
+            value={f.euro(row.revenue)}
+            valueSub={
+              <Delta
+                current={row.units}
+                previous={row.prev_units}
+                f={f}
+                verdict={compareCounts(row.units, row.prev_units)}
+                noiseLabel={m.stats.withinNoise}
+                className="text-[13px]"
+              />
+            }
+          />
         </li>
       ))}
     </ol>
+  );
+}
+
+/** The product's photo in a round token; its first letter without one, a link icon when not yet linked. */
+function ProductAvatar({ row }: { row: StatsReport["by_product"][number] }) {
+  return (
+    <Avatar>
+      {row.photo_path ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={mediaUrl(row.photo_path)!} alt="" className="max-h-7 max-w-7 object-contain" />
+      ) : row.product_id ? (
+        initial(row.product_name ?? "")
+      ) : (
+        <Link2 />
+      )}
+    </Avatar>
   );
 }

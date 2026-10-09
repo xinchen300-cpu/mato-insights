@@ -4,14 +4,14 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CreditCard } from "lucide-react";
-import { Panel } from "@/components/page-header";
-import { Badge } from "@/components/ui/badge";
+import { Section } from "@/components/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
 import { PLANS, SUPPORT_PHONE, planById, planFits, priceInclVat, type Plan } from "@/lib/plans";
 import { planChangeLine } from "@/lib/billing-copy";
 import type { BillingStatus } from "@/lib/billing";
+import { cn } from "@/lib/utils";
 import { addPaymentDetails, cancelSubscription, changePlan, resumeSubscription } from "./billing-actions";
 
 /**
@@ -64,140 +64,160 @@ export function SubscriptionPanel({
 
   if (!plan) {
     return (
-      <Panel title={m.billing.title} hint={m.billing.hint}>
-        <div id="abonnement" className="flex flex-wrap items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground">{m.billing.statusNone}</p>
-          <Link href="/welkom" className={buttonVariants({ variant: "outline" })}>
-            {m.welcome.planTitle}
-          </Link>
-        </div>
-      </Panel>
+      // The anchor wraps the title too, so a link to #abonnement lands on the heading.
+      <div id="abonnement" className="scroll-mt-20">
+        <Section title={m.billing.title} hint={m.billing.hint}>
+          <div className="surface-card flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <p className="text-[15px] text-muted-foreground">{m.billing.statusNone}</p>
+            <Link href="/welkom" className={cn(buttonVariants(), "w-fit")}>
+              {m.welcome.planTitle}
+            </Link>
+          </div>
+        </Section>
+      </div>
     );
   }
 
+  // A status the size of a word: a small dot, a quiet label.
   const badge =
     status === "trial" && trialEndsAt
-      ? { text: fmt(m.billing.statusTrial, { date: f.date(trialEndsAt) }), className: "bg-primary/15 text-accent-foreground" }
+      ? { text: fmt(m.billing.statusTrial, { date: f.date(trialEndsAt) }), dot: "bg-primary" }
       : status === "cancelled"
-        ? { text: m.billing.statusCancelled, className: "bg-muted text-muted-foreground" }
+        ? { text: m.billing.statusCancelled, dot: "bg-muted-foreground/40" }
         : status === "ended"
-          ? { text: m.billing.statusEnded, className: "bg-muted text-muted-foreground" }
-          : { text: m.billing.statusActive, className: "bg-positive/15 text-positive" };
+          ? { text: m.billing.statusEnded, dot: "bg-muted-foreground/40" }
+          : { text: m.billing.statusActive, dot: "bg-positive" };
 
   const others = PLANS.filter((p) => p.id !== plan.id && planFits(p, machines));
   const chargeDate = firstChargeOn ?? trialEndsAt;
 
   return (
-    <Panel
-      title={m.billing.title}
-      hint={m.billing.hint}
-      actions={<Badge className={badge.className}>{badge.text}</Badge>}
-    >
-      <div id="abonnement" className="flex flex-col gap-5">
-        <div>
-          <p className="text-sm text-muted-foreground">{m.billing.current}</p>
-          <p className="mt-1">
-            <span className="font-heading text-2xl font-semibold text-heading">{m.plans[plan.id]}</span>{" "}
-            <span className="tabular font-semibold">{f.euro(plan.pricePerMonth)}</span>{" "}
-            <span className="text-sm text-muted-foreground">
-              {m.welcome.planPerMonth} · {m.welcome.planExcl} ·{" "}
-              {fmt(m.billing.inclVat, { amount: f.euro(priceInclVat(plan)) })}
-            </span>
-          </p>
-        </div>
-
-        {returnedFromPayment && hasMandate && <p className="text-sm font-semibold text-positive">{m.billing.paymentOk}</p>}
-
-        {status === "ended" && <p className="max-w-[56ch] text-sm text-muted-foreground">{m.billing.endedNote}</p>}
-
-        {SUPPORT_PHONE && plan.features.includes("phoneSupport") && (
-          <p className="text-sm">
-            {fmt(m.billing.callUs, { phone: "" })}
-            <a href={`tel:${SUPPORT_PHONE.replace(/\s/g, "")}`} className="font-semibold underline underline-offset-4">
-              {SUPPORT_PHONE}
-            </a>
-          </p>
-        )}
-
-        {status !== "cancelled" && paymentsEnabled && !hasMandate && trialEndsAt && (
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-surface p-4">
-            <p className="max-w-[52ch] text-sm">{fmt(m.billing.noPaymentYet, { date: f.date(trialEndsAt) })}</p>
-            <Button onClick={pay} disabled={isPending}>
-              <CreditCard />
-              {m.billing.addPayment}
-            </Button>
-          </div>
-        )}
-
-        {status !== "cancelled" && paymentsEnabled && hasMandate && status === "trial" && chargeDate && (
-          <p className="text-sm">
-            {fmt(m.billing.firstCharge, { date: f.date(chargeDate), incl: f.euro(priceInclVat(plan)) })}
-          </p>
-        )}
-
-        {status !== "cancelled" && others.length > 0 && (
-          <div>
-            <p className="text-sm text-muted-foreground">{m.billing.change}</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {others.map((p) => (
-                <Button
-                  key={p.id}
-                  variant="outline"
-                  size="sm"
-                  disabled={isPending}
-                  onClick={() => setSwitchTo(p)}
-                >
-                  {fmt(m.billing.changeTo, { plan: m.plans[p.id] })} · {f.euroRound(p.pricePerMonth)}
-                </Button>
-              ))}
+    <div id="abonnement" className="scroll-mt-20">
+      <Section title={m.billing.title} hint={m.billing.hint}>
+        <div className="surface-card">
+          {/* What you have: the one big thing on this page. */}
+          <div className="flex flex-col gap-5 px-5 pb-6 pt-6 sm:px-7 sm:pt-7">
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
+                <p className="text-[14px] font-medium text-muted-foreground">{m.billing.current}</p>
+                <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground">
+                  <span className={cn("size-1.5 shrink-0 rounded-full", badge.dot)} aria-hidden="true" />
+                  {badge.text}
+                </span>
+              </div>
+              <p className="mt-2 font-heading text-[28px] font-semibold leading-tight tracking-[-0.03em] text-heading sm:text-[30px]">
+                {m.plans[plan.id]}
+              </p>
+              <p className="mt-1.5 text-[14px] text-muted-foreground">
+                <span className="tabular text-[15px] font-semibold text-foreground">{f.euro(plan.pricePerMonth)}</span>{" "}
+                {m.welcome.planPerMonth} · {m.welcome.planExcl} ·{" "}
+                {fmt(m.billing.inclVat, { amount: f.euro(priceInclVat(plan)) })}
+              </p>
             </div>
-            {switchTo && (
-              <div className="mt-3 flex flex-col gap-3 bg-surface p-4">
-                <p className="max-w-[56ch] text-sm">{planChangeLine(m, f, switchTo)}</p>
-                <div className="flex flex-wrap gap-2">
-                  <Button size="sm" onClick={() => run(() => changePlan(switchTo.id))} disabled={isPending}>
-                    {m.billing.changeConfirmButton}
+
+            {returnedFromPayment && hasMandate && (
+              <p className="text-[14px] font-semibold text-positive">{m.billing.paymentOk}</p>
+            )}
+
+            {status === "ended" && (
+              <p className="max-w-[56ch] text-[14px] text-muted-foreground">{m.billing.endedNote}</p>
+            )}
+
+            {SUPPORT_PHONE && plan.features.includes("phoneSupport") && (
+              <p className="text-[14px]">
+                {fmt(m.billing.callUs, { phone: "" })}
+                <a href={`tel:${SUPPORT_PHONE.replace(/\s/g, "")}`} className="font-semibold underline underline-offset-4">
+                  {SUPPORT_PHONE}
+                </a>
+              </p>
+            )}
+
+            {status !== "cancelled" && paymentsEnabled && !hasMandate && trialEndsAt && (
+              <div className="flex flex-col gap-3 rounded-2xl bg-surface p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                <p className="max-w-[52ch] text-[14px]">{fmt(m.billing.noPaymentYet, { date: f.date(trialEndsAt) })}</p>
+                <Button onClick={pay} disabled={isPending} className="w-fit shrink-0">
+                  <CreditCard />
+                  {m.billing.addPayment}
+                </Button>
+              </div>
+            )}
+
+            {status !== "cancelled" && paymentsEnabled && hasMandate && status === "trial" && chargeDate && (
+              <p className="text-[14px]">
+                {fmt(m.billing.firstCharge, { date: f.date(chargeDate), incl: f.euro(priceInclVat(plan)) })}
+              </p>
+            )}
+          </div>
+
+          {status !== "cancelled" && others.length > 0 && (
+            <div className="border-t px-5 py-5 sm:px-7">
+              <p className="text-[14px] font-medium text-muted-foreground">{m.billing.change}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {others.map((p) => (
+                  <Button
+                    key={p.id}
+                    variant={switchTo?.id === p.id ? "default" : "secondary"}
+                    disabled={isPending}
+                    onClick={() => setSwitchTo(p)}
+                  >
+                    {fmt(m.billing.changeTo, { plan: m.plans[p.id] })} · {f.euroRound(p.pricePerMonth)}
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setSwitchTo(null)} disabled={isPending}>
+                ))}
+              </div>
+              {switchTo && (
+                <div className="mt-4 flex flex-col gap-3 rounded-2xl bg-surface p-4">
+                  <p className="max-w-[56ch] text-[14px]">{planChangeLine(m, f, switchTo)}</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button onClick={() => run(() => changePlan(switchTo.id))} disabled={isPending}>
+                      {m.billing.changeConfirmButton}
+                    </Button>
+                    <Button variant="ghost" onClick={() => setSwitchTo(null)} disabled={isPending}>
+                      {m.billing.cancelNo}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* The way out: always here, never louder than it needs to be. */}
+          <div className="border-t px-5 py-4 sm:px-7">
+            {status === "cancelled" ? (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-[14px] text-muted-foreground">{m.billing.cancelled}</p>
+                <Button
+                  variant="secondary"
+                  onClick={() => run(resumeSubscription)}
+                  disabled={isPending}
+                  className="w-fit shrink-0"
+                >
+                  {m.billing.resume}
+                </Button>
+              </div>
+            ) : confirming ? (
+              <div className="flex flex-col gap-3 py-1">
+                <p className="max-w-[56ch] text-[14px]">{m.billing.cancelConfirm}</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="destructive" onClick={() => run(cancelSubscription)} disabled={isPending}>
+                    {m.billing.cancelYes}
+                  </Button>
+                  <Button variant="ghost" onClick={() => setConfirming(false)} disabled={isPending}>
                     {m.billing.cancelNo}
                   </Button>
                 </div>
               </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirming(true)}
+                className="-mx-1 rounded-md px-1 py-1 text-[14px] text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
+              >
+                {m.billing.cancel}
+              </button>
             )}
           </div>
-        )}
-
-        <div className="border-t pt-4">
-          {status === "cancelled" ? (
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground">{m.billing.cancelled}</p>
-              <Button variant="outline" size="sm" onClick={() => run(resumeSubscription)} disabled={isPending}>
-                {m.billing.resume}
-              </Button>
-            </div>
-          ) : confirming ? (
-            <div className="flex flex-col gap-3">
-              <p className="max-w-[56ch] text-sm">{m.billing.cancelConfirm}</p>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="destructive" size="sm" onClick={() => run(cancelSubscription)} disabled={isPending}>
-                  {m.billing.cancelYes}
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setConfirming(false)} disabled={isPending}>
-                  {m.billing.cancelNo}
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirming(true)}
-              className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
-            >
-              {m.billing.cancel}
-            </button>
-          )}
         </div>
-      </div>
-    </Panel>
+      </Section>
+    </div>
   );
 }

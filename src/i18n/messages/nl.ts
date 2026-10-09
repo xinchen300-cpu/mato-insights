@@ -247,6 +247,7 @@ export const nl: Messages = {
     archived: "Gearchiveerd",
     showArchived: "Gearchiveerde tonen",
     inSlots: "In {count} vakken",
+    inSlotsOne: "In 1 vak",
     searchPlaceholder: "Zoek of maak een product…",
     createNamed: "“{name}” aanmaken",
     noResults: "Geen producten gevonden.",

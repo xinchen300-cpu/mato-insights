@@ -32,12 +32,13 @@ export function SyncNowButton() {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <Button onClick={handleClick} disabled={isPending} variant="outline">
+    // Sits on the right of its row on a wide screen, so the answer lines up under it.
+    <div className="flex flex-col items-start gap-1.5 sm:items-end">
+      <Button onClick={handleClick} disabled={isPending} variant="secondary">
         <RefreshCw className={isPending ? "animate-spin" : undefined} />
         {isPending ? m.settings.syncing : m.settings.syncNow}
       </Button>
-      {message && <span className="text-sm text-muted-foreground">{message}</span>}
+      {message && <span className="max-w-[40ch] text-[13px] text-muted-foreground sm:text-right">{message}</span>}
     </div>
   );
 }

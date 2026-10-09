@@ -2,12 +2,25 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import {
+  authAside,
+  authCard,
+  authError,
+  authField,
+  authFieldHint,
+  authForm,
+  authHint,
+  authInput,
+  authLink,
+  authTitle,
+} from "@/components/auth-frame";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
 import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 import { checkInvite } from "./actions";
 
 export function SignupForm() {
@@ -40,10 +53,10 @@ export function SignupForm() {
 
   if (sentTo) {
     return (
-      <div className="border bg-card p-6 sm:p-8">
-        <h1 className="text-3xl">{m.auth.checkInbox}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{fmt(m.auth.checkInboxHint, { email: sentTo })}</p>
-        <Link href="/login" className={`${buttonVariants()} mt-6`}>
+      <div className={authCard}>
+        <h1 className={authTitle}>{m.auth.checkInbox}</h1>
+        <p className={authHint}>{fmt(m.auth.checkInboxHint, { email: sentTo })}</p>
+        <Link href="/login" className={cn(buttonVariants({ size: "lg" }), "mt-7 w-full")}>
           {m.auth.toSignIn}
         </Link>
       </div>
@@ -51,30 +64,40 @@ export function SignupForm() {
   }
 
   return (
-    <div className="border bg-card p-6 shadow-[0_18px_40px_rgb(28_24_18/0.1)] sm:p-8">
-      <h1 className="text-3xl">{m.auth.createAccount}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{m.auth.createHint}</p>
-      <form action={submit} className="mt-6 grid gap-4">
-        <div className="grid gap-2">
-          <Label htmlFor="email">{m.auth.email}</Label>
-          <Input id="email" name="email" type="email" required autoComplete="email" />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="password">{m.auth.password}</Label>
-          <Input id="password" name="password" type="password" required minLength={8} autoComplete="new-password" />
-          <p className="text-xs text-muted-foreground">{m.auth.passwordHint}</p>
-        </div>
-        {error && <p className="text-sm text-negative">{error}</p>}
-        <Button type="submit" size="lg" disabled={loading} className="mt-2">
-          {loading ? m.auth.creating : m.auth.create}
-        </Button>
-      </form>
-      <p className="mt-6 text-sm text-muted-foreground">
+    <>
+      <div className={authCard}>
+        <h1 className={authTitle}>{m.auth.createAccount}</h1>
+        <p className={authHint}>{m.auth.createHint}</p>
+        <form action={submit} className={authForm}>
+          <div className={authField}>
+            <Label htmlFor="email">{m.auth.email}</Label>
+            <Input id="email" name="email" type="email" required autoComplete="email" className={authInput} />
+          </div>
+          <div className={authField}>
+            <Label htmlFor="password">{m.auth.password}</Label>
+            <Input
+              id="password"
+              name="password"
+              type="password"
+              required
+              minLength={8}
+              autoComplete="new-password"
+              className={authInput}
+            />
+            <p className={authFieldHint}>{m.auth.passwordHint}</p>
+          </div>
+          {error && <p className={authError}>{error}</p>}
+          <Button type="submit" size="lg" disabled={loading} className="mt-1 w-full">
+            {loading ? m.auth.creating : m.auth.create}
+          </Button>
+        </form>
+      </div>
+      <p className={authAside}>
         {m.auth.haveAccount}{" "}
-        <Link href="/login" className="font-semibold text-accent-foreground underline underline-offset-4">
+        <Link href="/login" className={authLink}>
           {m.auth.signIn}
         </Link>
       </p>
-    </div>
+    </>
   );
 }

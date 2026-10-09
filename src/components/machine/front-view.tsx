@@ -21,6 +21,7 @@ const grow: Record<SlotSize, number> = { small: 1, ice: 0.8, large: 1.35, wide: 
 
 // The machine seen from the front: rows top to bottom, slots left to right.
 // Shared by the machine page, the layout builder and the refill screens.
+// Drawn quietly: a soft grey cabinet, each row a tray, each slot a white tile.
 export function FrontView({
   rows,
   showStock = true,
@@ -36,15 +37,16 @@ export function FrontView({
 }) {
   return (
     <div className="overflow-x-auto">
-      <div className="min-w-fit border-[6px] border-foreground bg-foreground p-1.5">
-        <div className="flex flex-col gap-1.5">
+      {/* Hairline drawn inset: the scroll wrapper would clip a ring outside the cabinet. */}
+      <div className="min-w-fit rounded-2xl bg-surface p-1.5 ring-1 ring-inset ring-border sm:p-2">
+        <div className="flex flex-col gap-1.5 sm:gap-2">
           {rows.map((row, rowIndex) => (
-            <div key={rowIndex} className="flex gap-1.5 border-b-4 border-[#3a342b] bg-[#2a251e] p-1.5">
+            <div key={rowIndex} className="flex gap-1.5 rounded-xl bg-foreground/[0.045] p-1.5">
               {row.map((slot) => {
                 const level = fillLevel(slot.stock, slot.capacity);
                 const className = cn(
-                  "flex min-w-[52px] flex-col bg-card text-left",
-                  onSlotClick && "cursor-pointer transition-transform hover:-translate-y-0.5",
+                  "flex min-w-[52px] flex-col overflow-hidden rounded-lg bg-card text-left shadow-[0_0_0_1px_var(--border),var(--shadow-card)]",
+                  onSlotClick && "cursor-pointer transition-transform duration-150 hover:-translate-y-0.5",
                   selectedKey === slot.key && "outline-2 outline-offset-1 outline-primary",
                 );
                 const style = { flexGrow: grow[slot.size], flexBasis: 0 };
@@ -52,9 +54,9 @@ export function FrontView({
                   <>
                     {slot.ownerTone && <div className="h-[3px]" style={{ background: slot.ownerTone }} />}
                     <div className="flex items-center justify-between gap-1 px-1.5 pt-1">
-                      <span className="font-mono text-[11px] font-bold text-foreground">{slot.selection}</span>
+                      <span className="text-[11px] font-semibold tabular-nums text-foreground">{slot.selection}</span>
                       {showStock && slot.stock !== null && (
-                        <span className="tabular font-mono text-[10px] text-muted-foreground">
+                        <span className="tabular text-[10.5px] font-medium text-muted-foreground">
                           {slot.stock}/{slot.capacity}
                         </span>
                       )}
@@ -70,9 +72,9 @@ export function FrontView({
                       )}
                     </div>
                     {showStock && (
-                      <div className="h-1.5 bg-level-empty/60">
+                      <div className="mx-1.5 mb-1.5 h-1 overflow-hidden rounded-full bg-level-empty">
                         <div
-                          className={cn("h-full", levelColor[level])}
+                          className={cn("h-full rounded-full", levelColor[level])}
                           style={{
                             width:
                               slot.stock === null ? "0%" : `${Math.min(100, (slot.stock / slot.capacity) * 100)}%`,
@@ -119,15 +121,15 @@ export function StockLegend({
     ["bg-level-empty", labels.empty],
   ];
   return (
-    <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+    <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[12.5px] text-muted-foreground">
       {items.map(([color, label]) => (
         <span key={label} className="inline-flex items-center gap-1.5">
-          <span className={cn("size-2.5", color)} />
+          <span className={cn("size-2.5 rounded-full", color)} />
           {label}
         </span>
       ))}
       <span className="inline-flex items-center gap-1.5">
-        <span className="size-2.5 border border-dashed border-muted-foreground" />
+        <span className="size-2.5 rounded-full border border-dashed border-muted-foreground" />
         {labels.unknown}
       </span>
     </div>
@@ -136,10 +138,10 @@ export function StockLegend({
 
 export function OwnerLegend({ owners }: { owners: { name: string; tone: string }[] }) {
   return (
-    <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+    <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[12.5px] text-muted-foreground">
       {owners.map((owner) => (
         <span key={owner.name} className="inline-flex items-center gap-1.5">
-          <span className="h-[3px] w-4" style={{ background: owner.tone }} />
+          <span className="h-1 w-4 rounded-full" style={{ background: owner.tone }} />
           {owner.name}
         </span>
       ))}

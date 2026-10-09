@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { authAside, authCard, authField, authForm, authInput, authLink, authTitle } from "@/components/auth-frame";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,27 +28,34 @@ export function ForgotForm() {
   }
 
   return (
-    <div className="border bg-card p-6 shadow-[0_18px_40px_rgb(28_24_18/0.1)] sm:p-8">
-      <h1 className="text-3xl">{m.auth.resetTitle}</h1>
-      <p className={cn("mt-2 text-sm", state === "tooOften" ? "text-negative" : "text-muted-foreground")}>
-        {state === "tooOften" ? m.auth.resetTooOften : state === "sent" ? m.auth.resetSent : m.auth.resetHint}
-      </p>
-      {state !== "sent" && (
-        <form action={submit} className="mt-6 grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="email">{m.auth.email}</Label>
-            <Input id="email" name="email" type="email" required autoComplete="email" />
-          </div>
-          <Button type="submit" size="lg" disabled={state === "sending"} className="mt-2">
-            {state === "sending" ? m.auth.resetSending : m.auth.resetSend}
-          </Button>
-        </form>
-      )}
-      <p className="mt-6 text-sm text-muted-foreground">
-        <Link href="/login" className="font-semibold text-accent-foreground underline underline-offset-4">
+    <>
+      <div className={authCard}>
+        <h1 className={authTitle}>{m.auth.resetTitle}</h1>
+        <p
+          className={cn(
+            "mt-2 text-[15px] leading-relaxed",
+            state === "tooOften" ? "font-medium text-negative" : "text-muted-foreground",
+          )}
+        >
+          {state === "tooOften" ? m.auth.resetTooOften : state === "sent" ? m.auth.resetSent : m.auth.resetHint}
+        </p>
+        {state !== "sent" && (
+          <form action={submit} className={authForm}>
+            <div className={authField}>
+              <Label htmlFor="email">{m.auth.email}</Label>
+              <Input id="email" name="email" type="email" required autoComplete="email" className={authInput} />
+            </div>
+            <Button type="submit" size="lg" disabled={state === "sending"} className="mt-1 w-full">
+              {state === "sending" ? m.auth.resetSending : m.auth.resetSend}
+            </Button>
+          </form>
+        )}
+      </div>
+      <p className={authAside}>
+        <Link href="/login" className={authLink}>
           {m.auth.toSignIn}
         </Link>
       </p>
-    </div>
+    </>
   );
 }

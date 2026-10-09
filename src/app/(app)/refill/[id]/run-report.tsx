@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Copy } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/client";
 import type { RunSummaryRow } from "@/lib/types";
@@ -47,33 +47,35 @@ export function RunReport({ rows, when }: { rows: RunSummaryRow[]; when: string 
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">{m.refill.reportEmpty}</p>;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col divide-y divide-border">
       {[...groups.entries()].map(([key, group]) => (
-        <div key={key}>
-          <div className="flex items-baseline justify-between gap-3">
-            <h3 className="font-heading text-lg font-semibold">{group.name}</h3>
-            <Button variant="ghost" size="sm" onClick={() => copy(key, group)}>
-              <Copy />
+        <div key={key} className="py-4 first:pt-1 last:pb-1">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="min-w-0 truncate text-[17px] font-semibold tracking-[-0.015em]">{group.name}</h3>
+            <Button variant="secondary" size="sm" onClick={() => copy(key, group)} className="shrink-0">
+              {copied === key ? <Check /> : <Copy />}
               {copied === key ? m.refill.reportCopied : m.refill.reportCopy}
             </Button>
           </div>
-          <ul className="mt-1 flex flex-col divide-y">
+          <ul className="mt-2 flex flex-col">
             {group.rows.map((row) => (
-              <li key={row.product_id} className="flex flex-wrap items-baseline justify-between gap-x-4 py-2">
-                <span className="min-w-0 truncate">{row.product_name}</span>
-                <span className="tabular shrink-0 text-sm">
+              <li key={row.product_id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-1.5">
+                <span className="min-w-0 truncate text-[15px]">{row.product_name}</span>
+                <span className="tabular flex shrink-0 flex-wrap items-center justify-end gap-x-3 text-[13.5px]">
                   {row.filled > 0 && (
                     <span className="text-muted-foreground">
                       {row.filled} {m.refill.reportFilled}
                     </span>
                   )}
                   {row.expired > 0 && (
-                    <span className="ml-3 text-warning">
+                    <span className="inline-flex items-center gap-1.5 font-medium text-warning">
+                      <span className="size-1.5 rounded-full bg-warning" aria-hidden="true" />
                       {row.expired} {m.refill.reportExpired}
                     </span>
                   )}
                   {row.short > 0 && (
-                    <span className="ml-3 font-semibold text-negative">
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-negative">
+                      <span className="size-1.5 rounded-full bg-negative" aria-hidden="true" />
                       {row.short} {m.refill.reportShort}
                     </span>
                   )}

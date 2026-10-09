@@ -57,6 +57,7 @@ export function RevenueChart({ data, height = 240 }: { data: ChartPoint[]; heigh
           strokeLinecap="round"
           fill="url(#revenueFill)"
           activeDot={{ r: 5, fill: "var(--chart-1)", stroke: "var(--card)", strokeWidth: 2 }}
+          animationDuration={500}
         />
       </AreaChart>
     </ResponsiveContainer>

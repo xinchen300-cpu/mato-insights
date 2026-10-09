@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Store } from "lucide-react";
+import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
+import { EmptyState } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -16,55 +17,65 @@ import { saveBusiness } from "./actions";
 
 type Row = Business & { machineNames: string[] };
 
+/** The round token for a business: its own logo when it has one, else its first letter. */
+function BusinessToken({ business }: { business: Business }) {
+  if (!business.logo_path) return <Avatar>{initial(business.name)}</Avatar>;
+  return (
+    <Avatar className="bg-card ring-1 ring-border">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={mediaUrl(business.logo_path)!} alt="" className="size-7 object-contain" />
+    </Avatar>
+  );
+}
+
 export function BusinessList({ businesses }: { businesses: Row[] }) {
   const { m, f } = useI18n();
+
+  if (businesses.length === 0) {
+    return <EmptyState icon={<Store className="size-5" />} title={m.businesses.empty} />;
+  }
+
+  return (
+    <RowList>
+      {businesses.map((b) => {
+        const since = b.started_on ? fmt(m.businesses.since, { date: f.date(b.started_on) }) : null;
+        return (
+          <li key={b.id}>
+            <ListRow
+              href={`/businesses/${b.id}`}
+              leading={<BusinessToken business={b} />}
+              title={b.name}
+              subtitle={
+                <>
+                  <span className="block truncate">
+                    {plural(b.machineNames.length, m.businesses.machinesOne, m.businesses.machinesOther)}
+                    {b.machineNames.length > 0 && ` · ${b.machineNames.join(", ")}`}
+                  </span>
+                  {/* On a phone the date moves under the name, so the name keeps its room. */}
+                  {since && <span className="block truncate sm:hidden">{since}</span>}
+                </>
+              }
+              valueSub={since ? <span className="hidden text-muted-foreground sm:inline">{since}</span> : undefined}
+              chevron
+            />
+          </li>
+        );
+      })}
+    </RowList>
+  );
+}
+
+/** The page's one action, with its dialog: only the essentials, the rest is set on the business' own page. */
+export function AddBusiness() {
+  const { m } = useI18n();
   const [adding, setAdding] = useState(false);
 
   return (
     <>
-      <Button onClick={() => setAdding(true)} className="mb-5">
+      <Button onClick={() => setAdding(true)}>
         <Plus />
         {m.businesses.add}
       </Button>
-
-      {businesses.length === 0 ? (
-        <p className="border border-dashed border-input bg-surface p-8 text-sm text-muted-foreground">
-          {m.businesses.empty}
-        </p>
-      ) : (
-        <ul className="grid gap-3 sm:grid-cols-2">
-          {businesses.map((b) => (
-            <li key={b.id}>
-              <Link
-                href={`/businesses/${b.id}`}
-                className="flex w-full items-center gap-4 border bg-card p-4 text-left transition-transform hover:-translate-y-0.5"
-              >
-                <span className="grid h-14 w-20 shrink-0 place-items-center bg-surface">
-                  {b.logo_path ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={mediaUrl(b.logo_path)!} alt="" className="max-h-12 max-w-16 object-contain" />
-                  ) : (
-                    <Store className="size-6 text-muted-foreground/60" />
-                  )}
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate font-semibold">{b.name}</span>
-                  <span className="block truncate text-sm text-muted-foreground">
-                    {plural(b.machineNames.length, m.businesses.machinesOne, m.businesses.machinesOther)}
-                    {b.machineNames.length > 0 && ` · ${b.machineNames.join(", ")}`}
-                  </span>
-                  {b.started_on && (
-                    <span className="block truncate text-sm text-muted-foreground">
-                      {fmt(m.businesses.since, { date: f.date(b.started_on) })}
-                    </span>
-                  )}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-
       {adding && <AddBusinessDialog onClose={() => setAdding(false)} />}
     </>
   );
@@ -95,7 +106,7 @@ function AddBusinessDialog({ onClose }: { onClose: () => void }) {
         <DialogHeader>
           <DialogTitle>{m.businesses.add}</DialogTitle>
         </DialogHeader>
-        <form action={submit} className="grid gap-4">
+        <form action={submit} className="grid gap-5">
           <div className="grid gap-2">
             <Label htmlFor="name">{m.businesses.name}</Label>
             <Input id="name" name="name" required autoFocus />
@@ -104,7 +115,7 @@ function AddBusinessDialog({ onClose }: { onClose: () => void }) {
             <Label htmlFor="startedOn">{m.businesses.startedOn}</Label>
             <Input id="startedOn" name="startedOn" type="date" className="w-fit" />
           </div>
-          {error && <p className="text-sm text-negative">{error}</p>}
+          {error && <p className="text-[13.5px] font-medium text-negative">{error}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               {m.common.cancel}

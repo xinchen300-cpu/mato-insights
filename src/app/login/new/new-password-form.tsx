@@ -3,6 +3,18 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import {
+  authAside,
+  authCard,
+  authError,
+  authField,
+  authFieldHint,
+  authForm,
+  authHint,
+  authInput,
+  authLink,
+  authTitle,
+} from "@/components/auth-frame";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -81,9 +93,9 @@ export function NewPasswordForm() {
   // that cannot save anything is worse than a moment of nothing.
   if (state === "checking") {
     return (
-      <div className="border bg-card p-6 shadow-[0_18px_40px_rgb(28_24_18/0.1)] sm:p-8">
-        <h1 className="text-3xl">{m.auth.resetChoose}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{m.common.loading}</p>
+      <div className={authCard}>
+        <h1 className={authTitle}>{m.auth.resetChoose}</h1>
+        <p className={authHint}>{m.common.loading}</p>
       </div>
     );
   }
@@ -92,40 +104,50 @@ export function NewPasswordForm() {
   // code inside it is still good, so it can be handed over by hand instead.
   if (state === "paste" || state === "expired") {
     return (
-      <div className="border bg-card p-6 shadow-[0_18px_40px_rgb(28_24_18/0.1)] sm:p-8">
-        <h1 className="text-3xl">{m.auth.pasteTitle}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{m.auth.pasteHint}</p>
-        <form action={submitPaste} className="mt-6 grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="link">{m.auth.pasteLabel}</Label>
-            <Input id="link" name="link" required autoComplete="off" spellCheck={false} />
-          </div>
-          {state === "expired" && <p className="text-sm text-negative">{m.auth.resetExpired}</p>}
-          {pasteError && <p className="text-sm text-negative">{m.auth.pasteBad}</p>}
-          <Button type="submit" size="lg" className="mt-2">
-            {m.auth.pasteGo}
-          </Button>
-        </form>
-        <p className="mt-6 text-sm text-muted-foreground">
-          <Link href="/login/forgot" className="font-semibold text-accent-foreground underline underline-offset-4">
+      <>
+        <div className={authCard}>
+          <h1 className={authTitle}>{m.auth.pasteTitle}</h1>
+          <p className={authHint}>{m.auth.pasteHint}</p>
+          <form action={submitPaste} className={authForm}>
+            <div className={authField}>
+              <Label htmlFor="link">{m.auth.pasteLabel}</Label>
+              <Input id="link" name="link" required autoComplete="off" spellCheck={false} className={authInput} />
+            </div>
+            {state === "expired" && <p className={authError}>{m.auth.resetExpired}</p>}
+            {pasteError && <p className={authError}>{m.auth.pasteBad}</p>}
+            <Button type="submit" size="lg" className="mt-1 w-full">
+              {m.auth.pasteGo}
+            </Button>
+          </form>
+        </div>
+        <p className={authAside}>
+          <Link href="/login/forgot" className={authLink}>
             {m.auth.resetTitle}
           </Link>
         </p>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="border bg-card p-6 shadow-[0_18px_40px_rgb(28_24_18/0.1)] sm:p-8">
-      <h1 className="text-3xl">{m.auth.resetChoose}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{m.auth.resetChooseHint}</p>
-      <form action={submit} className="mt-6 grid gap-4">
-        <div className="grid gap-2">
+    <div className={authCard}>
+      <h1 className={authTitle}>{m.auth.resetChoose}</h1>
+      <p className={authHint}>{m.auth.resetChooseHint}</p>
+      <form action={submit} className={authForm}>
+        <div className={authField}>
           <Label htmlFor="password">{m.auth.password}</Label>
-          <Input id="password" name="password" type="password" required minLength={8} autoComplete="new-password" />
-          <span className="text-xs text-muted-foreground">{m.auth.passwordHint}</span>
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            required
+            minLength={8}
+            autoComplete="new-password"
+            className={authInput}
+          />
+          <span className={authFieldHint}>{m.auth.passwordHint}</span>
         </div>
-        <Button type="submit" size="lg" disabled={state !== "ready"} className="mt-2">
+        <Button type="submit" size="lg" disabled={state !== "ready"} className="mt-1 w-full">
           {state === "saving" ? m.auth.resetSaving : m.auth.resetSave}
         </Button>
       </form>

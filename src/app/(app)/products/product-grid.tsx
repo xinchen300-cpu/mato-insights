@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ComponentProps, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, ArchiveRestore, ImageIcon, Plus } from "lucide-react";
+import { Archive, ArchiveRestore, ChevronDown, Package, Plus } from "lucide-react";
 import { ImagePicker } from "@/components/image-picker";
+import { Avatar, RowList, initial } from "@/components/list-row";
+import { PageHeader, Section } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -13,14 +15,22 @@ import { fmt } from "@/i18n/format";
 import { mediaUrl } from "@/lib/media";
 import { CUSTOM_SHELF_LIFE } from "@/lib/expiry";
 import type { Product, ShelfLifePreset } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { saveProduct, setProductArchived } from "./actions";
 
 type BusinessOption = { id: string; name: string };
 
 const NO_BUSINESS = "none";
 
-const selectClass =
-  "h-10 w-full border border-input bg-card px-3 text-base outline-none focus-visible:border-ring md:text-sm";
+// A form select that matches Input: same height, radius, hairline and focus ring.
+const fieldSelectClass =
+  "h-11 w-full cursor-pointer appearance-none rounded-xl border border-input bg-card pl-3.5 pr-10 text-base outline-none transition-[border-color,box-shadow] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25 md:text-sm";
+
+// A filter pill: soft grey at rest, near-black once it narrows the list.
+const pillClass =
+  "inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-full text-base font-medium outline-none transition-[background-color,color,box-shadow] duration-150 md:h-9 md:text-[13.5px]";
+const pillIdle = "bg-surface text-foreground hover:bg-[#e6e6e9]";
+const pillActive = "bg-foreground text-background";
 
 export function ProductGrid({
   products,
@@ -29,6 +39,10 @@ export function ProductGrid({
   initialBusiness = "",
   presets,
   producers,
+  title,
+  subtitle,
+  actions,
+  notice,
 }: {
   products: Product[];
   slotCounts: Record<string, number>;
@@ -36,6 +50,12 @@ export function ProductGrid({
   initialBusiness?: string;
   presets: ShelfLifePreset[];
   producers: BusinessOption[];
+  /** The page header lives here so "add" can sit next to the page's other actions. */
+  title: string;
+  subtitle?: string;
+  actions?: ReactNode;
+  /** Shown between the header and the list, e.g. the unassigned-selections row. */
+  notice?: ReactNode;
 }) {
   const { m, f } = useI18n();
   const [editing, setEditing] = useState<Product | "new" | null>(null);
@@ -66,86 +86,130 @@ export function ProductGrid({
 
   return (
     <>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <Button onClick={() => setEditing("new")}>
-          <Plus />
-          {m.products.add}
-        </Button>
-        <select
-          aria-label={m.products.business}
-          value={business}
-          onChange={(e) => setBusiness(e.target.value)}
-          className={`${selectClass} sm:ml-auto sm:w-56`}
-        >
-          <option value="">{m.stats.allBusinesses}</option>
-          {businesses.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-          <option value={NO_BUSINESS}>{m.products.noBusiness}</option>
-        </select>
+      <PageHeader
+        title={title}
+        subtitle={subtitle}
+        actions={
+          <>
+            {actions}
+            <Button onClick={() => setEditing("new")}>
+              <Plus />
+              {m.products.add}
+            </Button>
+          </>
+        }
+      />
+
+      {notice}
+
+      <div className="mb-8 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-0 max-w-full">
+          <select
+            aria-label={m.products.business}
+            value={business}
+            onChange={(e) => setBusiness(e.target.value)}
+            className={cn(
+              pillClass,
+              "max-w-full appearance-none truncate pl-4 pr-9 focus-visible:ring-3 focus-visible:ring-ring/40 [&>option]:bg-card [&>option]:text-foreground",
+              business === "" ? pillIdle : pillActive,
+            )}
+          >
+            <option value="">{m.stats.allBusinesses}</option>
+            {businesses.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+            <option value={NO_BUSINESS}>{m.products.noBusiness}</option>
+          </select>
+          <ChevronDown
+            aria-hidden="true"
+            className={cn(
+              "pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2",
+              business === "" ? "text-muted-foreground" : "text-background/70",
+            )}
+          />
+        </div>
         {hasArchived && (
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          <label
+            className={cn(
+              pillClass,
+              "px-4 has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/40",
+              showArchived ? pillActive : cn(pillIdle, "text-muted-foreground hover:text-foreground"),
+            )}
+          >
             <input
               type="checkbox"
               checked={showArchived}
               onChange={(e) => setShowArchived(e.target.checked)}
-              className="size-4 accent-[var(--primary)]"
+              className="sr-only"
             />
+            <Archive className="size-4" aria-hidden="true" />
             {m.products.showArchived}
           </label>
         )}
       </div>
 
       {groups.length === 0 ? (
-        <p className="border border-dashed border-input bg-surface p-8 text-sm text-muted-foreground">
-          {m.products.empty}
-        </p>
+        <div className="surface-card flex flex-col items-center gap-3 px-6 py-12 text-center">
+          <div className="grid size-12 place-items-center rounded-full bg-surface text-muted-foreground">
+            <Package className="size-5" aria-hidden="true" />
+          </div>
+          <p className="max-w-sm text-[15px] text-muted-foreground">{m.products.empty}</p>
+        </div>
       ) : (
-        <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-10">
           {groups.map((group) => (
-            <section key={group.key}>
-              <h2 className="mb-3 flex items-baseline gap-2 text-lg">
-                {group.name}
-                <span className="tabular text-sm font-normal text-muted-foreground">{group.items.length}</span>
-              </h2>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                {group.items.map((p) => {
-                  const framed = group.items.some((item) => item.photo_path);
-                  return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setEditing(p)}
-                    className={`group flex flex-col border bg-card text-left transition-colors hover:border-primary/40 ${p.archived ? "opacity-60" : ""}`}
-                  >
-                    {framed && (
-                      <div className="grid h-32 place-items-center bg-surface p-3">
-                        {p.photo_path ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={mediaUrl(p.photo_path)!} alt="" className="max-h-full max-w-full object-contain" />
-                        ) : (
-                          <ImageIcon className="size-7 text-muted-foreground/60" />
-                        )}
-                      </div>
-                    )}
-                    <div className="flex flex-1 flex-col gap-1 p-3">
-                      <span className="line-clamp-2 font-semibold leading-snug">{p.name}</span>
-                      <span className="mt-auto flex items-center justify-between gap-2 text-sm text-muted-foreground">
-                        <span className="tabular">{p.price !== null ? f.euro(p.price) : "—"}</span>
+            <Section
+              key={group.key}
+              title={
+                <span className="flex items-baseline gap-2">
+                  <span className="min-w-0 truncate">{group.name}</span>
+                  <span className="tabular text-[15px] font-medium text-muted-foreground">{group.items.length}</span>
+                </span>
+              }
+            >
+              {/* Rows like a bank's payments; two columns once there is room for them. */}
+              <RowList className="md:grid md:grid-cols-2 md:gap-x-1">
+                {group.items.map((p) => (
+                  <li key={p.id} className="min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => setEditing(p)}
+                      className={cn(
+                        "hover-surface flex min-h-16 w-full items-center gap-3.5 rounded-xl px-3 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
+                        p.archived && "opacity-60",
+                      )}
+                    >
+                      <ProductToken product={p} />
+                      <span className="min-w-0 flex-1">
+                        <span className="line-clamp-2 text-[15px] font-semibold leading-snug tracking-[-0.01em]">
+                          {p.name}
+                        </span>
                         {p.archived ? (
-                          <span>{m.products.archived}</span>
+                          <span className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                            <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground/50" aria-hidden="true" />
+                            {m.products.archived}
+                          </span>
                         ) : slotCounts[p.id] ? (
-                          <span>{fmt(m.products.inSlots, { count: slotCounts[p.id] })}</span>
+                          <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">
+                            {slotCounts[p.id] === 1 ? m.products.inSlotsOne : fmt(m.products.inSlots, { count: slotCounts[p.id] })}
+                          </span>
                         ) : null}
                       </span>
-                    </div>
-                  </button>
-                  );
-                })}
-              </div>
-            </section>
+                      <span
+                        className={cn(
+                          "tabular shrink-0 text-right text-[15px] font-semibold tracking-[-0.01em]",
+                          p.price === null && "font-normal text-muted-foreground",
+                        )}
+                      >
+                        {p.price !== null ? f.euro(p.price) : "—"}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </RowList>
+            </Section>
           ))}
         </div>
       )}
@@ -162,6 +226,34 @@ export function ProductGrid({
         />
       )}
     </>
+  );
+}
+
+/** The product's photo in a round token, or the first letter of its name. */
+function ProductToken({ product }: { product: Product }) {
+  const src = mediaUrl(product.photo_path);
+  if (!src) return <Avatar className="size-12 text-[16px]">{initial(product.name)}</Avatar>;
+  return (
+    <span
+      aria-hidden="true"
+      className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-full bg-card shadow-[inset_0_0_0_1px_var(--border)]"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="" className="size-full object-contain p-1.5" />
+    </span>
+  );
+}
+
+/** A native select dressed like Input, with its own chevron. */
+function FieldSelect({ className, ...props }: ComponentProps<"select">) {
+  return (
+    <div className="relative">
+      <select {...props} className={cn(fieldSelectClass, className)} />
+      <ChevronDown
+        aria-hidden="true"
+        className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+      />
+    </div>
   );
 }
 
@@ -220,13 +312,16 @@ function ProductDialog({
         : product.price.toFixed(2).replace(".", ",")
       : "";
 
+  const optional = <span className="font-normal text-muted-foreground">({m.common.optional})</span>;
+  const hint = "text-[13px] leading-snug text-muted-foreground";
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{product ? m.products.edit : m.products.add}</DialogTitle>
         </DialogHeader>
-        <form action={submit} className="grid gap-4">
+        <form action={submit} className="grid gap-5">
           {product && <input type="hidden" name="id" value={product.id} />}
           <div className="grid gap-2">
             <Label htmlFor="name">{m.products.name}</Label>
@@ -234,21 +329,19 @@ function ProductDialog({
           </div>
           <div className="grid gap-2">
             <Label htmlFor="price">
-              {m.products.price} <span className="font-normal text-muted-foreground">({m.common.optional})</span>
+              {m.products.price} {optional}
             </Label>
-            <Input id="price" name="price" inputMode="decimal" defaultValue={priceText} className="max-w-32" />
+            <Input id="price" name="price" inputMode="decimal" defaultValue={priceText} className="max-w-36" />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="shelfLifePresetId">
-              {m.products.shelfLife}{" "}
-              <span className="font-normal text-muted-foreground">({m.common.optional})</span>
+              {m.products.shelfLife} {optional}
             </Label>
-            <select
+            <FieldSelect
               id="shelfLifePresetId"
               name="shelfLifePresetId"
               value={shelfLife}
               onChange={(e) => setShelfLife(e.target.value)}
-              className={selectClass}
             >
               <option value="">{m.products.shelfLifeNone}</option>
               {presets.map((preset) => (
@@ -257,26 +350,25 @@ function ProductDialog({
                 </option>
               ))}
               <option value={CUSTOM_SHELF_LIFE}>{m.products.shelfLifeCustom}</option>
-            </select>
+            </FieldSelect>
             {shelfLife === CUSTOM_SHELF_LIFE && (
               <Input
                 name="shelfLifeDays"
                 inputMode="numeric"
                 defaultValue={product?.shelf_life_days ?? ""}
                 aria-label={m.products.shelfLifeCustom}
-                className="max-w-32"
+                className="max-w-36"
                 autoFocus
               />
             )}
-            <p className="text-xs text-muted-foreground">{m.products.shelfLifeHint}</p>
+            <p className={hint}>{m.products.shelfLifeHint}</p>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="businessId">{m.products.business}</Label>
-            <select
+            <FieldSelect
               id="businessId"
               name="businessId"
               defaultValue={product ? (product.business_id ?? "") : defaultBusiness}
-              className={selectClass}
             >
               <option value="">{m.products.noBusiness}</option>
               {businesses.map((b) => (
@@ -284,28 +376,23 @@ function ProductDialog({
                   {b.name}
                 </option>
               ))}
-            </select>
-            <p className="text-xs text-muted-foreground">{m.products.businessHint}</p>
+            </FieldSelect>
+            <p className={hint}>{m.products.businessHint}</p>
           </div>
           {producers.length > 0 && (
             <div className="grid gap-2">
               <Label htmlFor="producerId">{m.producers.title}</Label>
-              <select
-                id="producerId"
-                name="producerId"
-                defaultValue={product?.producer_id ?? ""}
-                className={selectClass}
-              >
+              <FieldSelect id="producerId" name="producerId" defaultValue={product?.producer_id ?? ""}>
                 <option value="">{m.producers.none}</option>
                 {producers.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
                 ))}
-              </select>
+              </FieldSelect>
             </div>
           )}
-          <div className="grid gap-2">
+          <div className="grid gap-2.5">
             <Label>{m.products.photo}</Label>
             <ImagePicker
               initialUrl={mediaUrl(product?.photo_path)}
@@ -318,15 +405,21 @@ function ProductDialog({
           {error && <p className="text-sm text-negative">{error}</p>}
           <DialogFooter>
             {product && (
-              <Button type="button" variant="ghost" onClick={toggleArchived} disabled={isPending} className="sm:mr-auto">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={toggleArchived}
+                disabled={isPending}
+                className="h-11 sm:mr-auto sm:h-10"
+              >
                 {product.archived ? <ArchiveRestore /> : <Archive />}
                 {product.archived ? m.products.restore : m.products.archive}
               </Button>
             )}
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose} className="h-11 sm:h-10">
               {m.common.cancel}
             </Button>
-            <Button type="submit" disabled={isPending}>
+            <Button type="submit" disabled={isPending} className="h-11 sm:h-10">
               {isPending ? m.common.saving : m.common.save}
             </Button>
           </DialogFooter>

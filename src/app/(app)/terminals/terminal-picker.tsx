@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check } from "lucide-react";
+import { Check, Nfc } from "lucide-react";
+import { Avatar, initial } from "@/components/list-row";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/i18n/client";
@@ -71,26 +72,21 @@ export function TerminalPicker({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <ul className="flex flex-col divide-y border bg-card">
+    <div className="flex flex-col gap-5">
+      <ul className="surface-card flex flex-col p-2">
         {state.map((row) => (
-          <li key={row.serial} className={cn("flex flex-wrap items-center gap-3 p-4", row.mine && "bg-accent/40")}>
-            <button
-              type="button"
-              aria-pressed={row.mine}
-              aria-label={m.terminals.mine}
-              onClick={() => set(row.serial, { mine: !row.mine })}
-              className={cn(
-                "grid size-9 shrink-0 place-items-center border-2 transition-colors",
-                row.mine ? "border-positive bg-positive text-white" : "border-input bg-card",
-              )}
-            >
-              {row.mine && <Check className="size-5" strokeWidth={3} />}
-            </button>
+          // One terminal per row. Wide: token, what it is, the switch, its name —
+          // in DOM order, so focus moves left to right.
+          // On a phone the switch stays beside the serial and the name drops under it.
+          <li
+            key={row.serial}
+            className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3.5 gap-y-3 rounded-xl px-3 py-3.5 sm:grid-cols-[auto_minmax(0,1fr)_auto_14rem] sm:gap-x-4"
+          >
+            <Avatar>{row.name.trim() ? initial(row.name) : <Nfc />}</Avatar>
 
-            <span className="min-w-0 flex-1">
-              <span className="block font-mono text-sm font-semibold">{row.serial}</span>
-              <span className="block truncate text-xs text-muted-foreground">
+            <span className="min-w-0">
+              <span className="block truncate font-mono text-[14px] font-semibold">{row.serial}</span>
+              <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">
                 {[
                   row.model,
                   row.lastSeenLabel ? `${m.terminals.lastSeen}: ${row.lastSeenLabel}` : m.terminals.never,
@@ -102,35 +98,55 @@ export function TerminalPicker({
               </span>
             </span>
 
+            <button
+              type="button"
+              aria-pressed={row.mine}
+              aria-label={m.terminals.mine}
+              onClick={() => set(row.serial, { mine: !row.mine })}
+              className={cn(
+                "relative inline-flex h-8 w-[52px] shrink-0 items-center rounded-full p-1 outline-none transition-colors duration-200 before:absolute before:-inset-1.5 before:content-[''] focus-visible:ring-3 focus-visible:ring-ring/40 sm:col-start-3 sm:row-start-1",
+                row.mine ? "bg-positive" : "bg-input",
+              )}
+            >
+              <span
+                className={cn(
+                  "grid size-6 place-items-center rounded-full bg-white shadow-[0_1px_3px_rgb(14_14_16/0.1)] transition-transform duration-200",
+                  row.mine && "translate-x-5",
+                )}
+              >
+                {row.mine && <Check className="size-3.5 text-positive" strokeWidth={3} />}
+              </span>
+            </button>
+
             <Input
               value={row.name}
               onChange={(e) => set(row.serial, { name: e.target.value })}
               placeholder={m.terminals.namePlaceholder}
               aria-label={m.terminals.nameLabel}
               disabled={!row.mine}
-              className="w-full sm:w-56"
+              className="col-span-2 col-start-2 w-full sm:col-span-1 sm:col-start-4 sm:row-start-1"
             />
           </li>
         ))}
       </ul>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <Button onClick={save} disabled={isPending}>
           {isPending ? m.terminals.saving : m.terminals.save}
         </Button>
-        <span className="tabular text-sm text-muted-foreground">
+        <span className="tabular text-[14px] text-muted-foreground">
           {fmt(m.terminals.chosen, { count: chosen, total: state.length })}
         </span>
-        {saved && <span className="text-sm text-positive">{m.terminals.saved}</span>}
-        {missingName && <span className="text-sm text-negative">{m.terminals.nameNeeded}</span>}
+        {saved && <span className="text-[13.5px] font-medium text-positive">{m.terminals.saved}</span>}
+        {missingName && <span className="text-[13.5px] font-medium text-negative">{m.terminals.nameNeeded}</span>}
       </div>
       {upgrade && (
-        <p role="status" className="max-w-[60ch] bg-surface p-4 text-sm">
+        <p role="status" className="max-w-[60ch] rounded-2xl bg-surface p-4 text-[14px]">
           {upgrade}
         </p>
       )}
       {current && needsQuote(chosen) && (
-        <p className="max-w-[60ch] text-sm text-muted-foreground">
+        <p className="max-w-[60ch] px-1 text-[14px] text-muted-foreground">
           {fmt(m.billing.quoteNeeded, { count: LARGEST_PLAN.maxMachines })}
         </p>
       )}

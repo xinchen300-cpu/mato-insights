@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { CircleCheck } from "lucide-react";
-import { EmptyState, PageHeader, Panel } from "@/components/page-header";
+import { CircleCheck, ClipboardList } from "lucide-react";
+import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
+import { EmptyState, PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
@@ -145,11 +146,12 @@ export default async function RefillPage() {
     <>
       <PageHeader title={m.refill.title} subtitle={m.refill.subtitle} />
 
-      <div className="flex flex-col gap-8">
+      <div className="flex flex-col gap-10">
         {!(await isOperator()) ? (
-          <p className="max-w-[60ch] text-sm text-muted-foreground">{m.refill.operatorOnly}</p>
+          <p className="max-w-[60ch] px-1 text-[15px] text-muted-foreground">{m.refill.operatorOnly}</p>
         ) : pickable.length === 0 ? (
           <EmptyState
+            icon={<ClipboardList className="size-5" />}
             title={m.machines.noLayout}
             hint={m.machines.noLayoutHint}
             action={
@@ -162,11 +164,11 @@ export default async function RefillPage() {
           <MachinePicker machines={pickable} />
         )}
 
-        <Panel title={m.refill.recent}>
+        <Section title={m.refill.recent}>
           {sheets.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{m.refill.recentEmpty}</p>
+            <p className="px-1 text-sm text-muted-foreground">{m.refill.recentEmpty}</p>
           ) : (
-            <ul className="flex flex-col divide-y">
+            <RowList>
               {sheets.map((sheet) => {
                 const total = sheet.lines.reduce((sum, l) => sum + l.to_add, 0);
                 // The clock runs from the moment the filler opened the sheet.
@@ -179,54 +181,72 @@ export default async function RefillPage() {
                         ),
                       )
                     : null;
+                const open = !sheet.completed_at && Boolean(sheet.started_at);
                 return (
                   <li key={sheet.id}>
-                    <Link href={`/refill/${sheet.id}`} className="flex items-center justify-between gap-4 py-3">
-                      <span className="min-w-0">
-                        <span className="block font-semibold">{f.dateTime(sheet.created_at)}</span>
-                        <span className="block truncate text-sm text-muted-foreground">
-                          {[
-                            sheet.machine_ids.map((id) => machineName.get(id)).filter(Boolean).join(", "),
-                            sheet.filled_by,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </span>
-                      </span>
-                      <span className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
-                        {minutes !== null && <span className="tabular">{fmt(m.refill.runTime, { minutes })}</span>}
-                        {sheet.km !== null && <span className="tabular">{fmt(m.refill.runKm, { km: sheet.km })}</span>}
-                        <span className="tabular">{fmt(m.refill.items, { count: total })}</span>
-                        {sheet.completed_at ? (
-                          <CircleCheck className="size-4 text-positive" />
+                    <ListRow
+                      href={`/refill/${sheet.id}`}
+                      leading={
+                        sheet.completed_at ? (
+                          <Avatar tone="positive">
+                            <CircleCheck />
+                          </Avatar>
                         ) : (
-                          sheet.started_at && <span className="text-xs font-semibold text-warning">{m.refill.runOpen}</span>
-                        )}
-                      </span>
-                    </Link>
+                          <Avatar tone={open ? "warning" : "neutral"}>
+                            <ClipboardList />
+                          </Avatar>
+                        )
+                      }
+                      title={f.dateTime(sheet.created_at)}
+                      subtitle={[
+                        sheet.machine_ids.map((id) => machineName.get(id)).filter(Boolean).join(", "),
+                        sheet.filled_by,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                      value={fmt(m.refill.items, { count: total })}
+                      valueSub={
+                        (minutes !== null || sheet.km !== null || open) && (
+                          <span className="ml-auto flex max-w-28 flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-muted-foreground sm:max-w-none">
+                            {minutes !== null && <span className="tabular">{fmt(m.refill.runTime, { minutes })}</span>}
+                            {sheet.km !== null && <span className="tabular">{fmt(m.refill.runKm, { km: sheet.km })}</span>}
+                            {open && (
+                              <span className="inline-flex items-center gap-1.5 font-medium text-warning">
+                                <span className="size-1.5 rounded-full bg-warning" aria-hidden="true" />
+                                {m.refill.runOpen}
+                              </span>
+                            )}
+                          </span>
+                        )
+                      }
+                      chevron
+                    />
                   </li>
                 );
               })}
-            </ul>
+            </RowList>
           )}
-        </Panel>
+        </Section>
 
-        <Panel title={m.refill.shortagesTitle} hint={m.refill.shortagesHint}>
+        <Section title={m.refill.shortagesTitle} hint={m.refill.shortagesHint}>
           {shortList.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{m.refill.shortagesEmpty}</p>
+            <p className="px-1 text-sm text-muted-foreground">{m.refill.shortagesEmpty}</p>
           ) : (
-            <ul className="flex flex-col divide-y">
+            <RowList>
               {shortList.map((row) => (
-                <li key={row.name} className="flex items-baseline justify-between gap-4 py-3">
-                  <span className="min-w-0 truncate font-semibold">{row.name}</span>
-                  <span className="tabular shrink-0 text-sm text-muted-foreground">
-                    {fmt(m.refill.shortagesTimes, { count: row.times, units: row.units })}
-                  </span>
+                <li key={row.name}>
+                  <ListRow
+                    leading={<Avatar>{initial(row.name)}</Avatar>}
+                    title={row.name}
+                    subtitle={
+                      <span className="tabular">{fmt(m.refill.shortagesTimes, { count: row.times, units: row.units })}</span>
+                    }
+                  />
                 </li>
               ))}
-            </ul>
+            </RowList>
           )}
-        </Panel>
+        </Section>
       </div>
     </>
   );

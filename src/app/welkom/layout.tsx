@@ -6,7 +6,7 @@ import { LanguageToggle } from "@/components/shell/language-toggle";
 export default function WelcomeLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-svh bg-background">
-      <header className="mx-auto flex w-full max-w-2xl items-center justify-between gap-3 px-5 pt-6">
+      <header className="mx-auto flex h-16 w-full max-w-3xl items-center justify-between gap-3 px-5 sm:px-8">
         <MatoWordmark />
         <LanguageToggle />
       </header>

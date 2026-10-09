@@ -247,6 +247,7 @@ export const en = {
     archived: "Archived",
     showArchived: "Show archived",
     inSlots: "In {count} slots",
+    inSlotsOne: "In 1 slot",
     searchPlaceholder: "Search or create a product…",
     createNamed: "Create “{name}”",
     noResults: "No products found.",

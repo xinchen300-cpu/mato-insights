@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { ChevronDown } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -51,20 +52,35 @@ export function StatsFilters({
   // Narrowing the business must not leave a machine selected that the list no
   // longer offers, or the bar says "all machines" while one is filtered out.
   const machineValue = machineOptions.some((mc) => mc.id === machine) ? machine : "";
-  const selectClass =
-    "h-10 w-full border border-input bg-card px-3 text-base outline-none focus-visible:border-ring md:text-sm";
+  // 16px on phones so iOS does not zoom into the field on focus.
+  const fieldClass =
+    "h-11 w-full min-w-0 rounded-xl border border-input bg-card px-3.5 text-base outline-none transition-[border-color,box-shadow] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25 sm:h-10 md:text-sm";
+  const selectClass = (active: boolean) =>
+    cn(
+      "h-11 w-full min-w-0 cursor-pointer appearance-none truncate rounded-full border bg-card pl-4 pr-10 text-base text-foreground outline-none transition-[border-color,box-shadow,background-color] duration-150 hover:bg-surface focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25 sm:h-10 md:text-[14px]",
+      active ? "border-foreground/45 font-semibold" : "border-input font-medium",
+    );
+  const chevron = (
+    <ChevronDown
+      className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+      aria-hidden="true"
+    />
+  );
 
   return (
-    <div className={cn("flex flex-col gap-4 border bg-card p-4 sm:p-5", isPending && "opacity-70")}>
-      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+    <div aria-busy={isPending} className={cn("flex flex-col gap-3 transition-opacity duration-150", isPending && "opacity-70")}>
+      <div className="flex max-w-full gap-1 self-start overflow-x-auto rounded-full bg-surface p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {PERIODS.map((p) => (
           <button
             key={p}
             type="button"
+            aria-pressed={period === p}
             onClick={() => (p === "custom" ? update({ period: "custom" }) : update({ period: p, from: null, to: null }))}
             className={cn(
-              "shrink-0 rounded-full border px-3.5 py-1.5 text-sm font-semibold transition-colors",
-              period === p ? "border-foreground bg-foreground text-background" : "hover:border-primary",
+              "shrink-0 rounded-full px-4 py-2 text-[14px] font-medium outline-none transition-[background-color,color,box-shadow] duration-150 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60 sm:px-3.5 sm:py-1.5 sm:text-[13.5px]",
+              period === p
+                ? "bg-card text-foreground shadow-[0_1px_3px_rgb(14_14_16/0.1)]"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             {m.periods[p]}
@@ -73,65 +89,84 @@ export function StatsFilters({
       </div>
 
       {period === "custom" && (
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+        <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-end">
+          <label className="grid min-w-0 gap-1.5 text-[13px] font-medium text-muted-foreground">
             {m.periods.from}
-            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className={selectClass} />
+            <input
+              type="date"
+              value={customFrom}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              className={cn(fieldClass, "sm:w-44")}
+            />
           </label>
-          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+          <label className="grid min-w-0 gap-1.5 text-[13px] font-medium text-muted-foreground">
             {m.periods.to}
-            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className={selectClass} />
+            <input
+              type="date"
+              value={customTo}
+              onChange={(e) => setCustomTo(e.target.value)}
+              className={cn(fieldClass, "sm:w-44")}
+            />
           </label>
           <Button
-            variant="outline"
             disabled={!customFrom || !customTo || customTo < customFrom}
             onClick={() => update({ period: "custom", from: customFrom, to: customTo })}
+            className="col-span-2 h-11 sm:h-10"
           >
             {m.periods.apply}
           </Button>
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <select
-          aria-label={m.stats.business}
-          value={business ?? ""}
-          onChange={(e) => update({ business: e.target.value || null, machine: null })}
-          className={selectClass}
-        >
-          <option value="">{m.stats.allBusinesses}</option>
-          {businesses.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label={m.stats.machine}
-          value={machineValue ?? ""}
-          onChange={(e) => update({ machine: e.target.value || null })}
-          className={selectClass}
-        >
-          <option value="">{m.stats.allMachines}</option>
-          {machineOptions.map((mc) => (
-            <option key={mc.id} value={mc.id}>
-              {mc.name}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label={m.stats.product}
-          value={product ?? ""}
-          onChange={(e) => update({ product: e.target.value || null })}
-          className={selectClass}
-        >
-          <option value="">{m.stats.allProducts}</option>
-          {products.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+        <div className="relative min-w-0 sm:w-56">
+          <select
+            aria-label={m.stats.business}
+            value={business ?? ""}
+            onChange={(e) => update({ business: e.target.value || null, machine: null })}
+            className={selectClass(Boolean(business))}
+          >
+            <option value="">{m.stats.allBusinesses}</option>
+            {businesses.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+          {chevron}
+        </div>
+        <div className="relative min-w-0 sm:w-56">
+          <select
+            aria-label={m.stats.machine}
+            value={machineValue ?? ""}
+            onChange={(e) => update({ machine: e.target.value || null })}
+            className={selectClass(Boolean(machineValue))}
+          >
+            <option value="">{m.stats.allMachines}</option>
+            {machineOptions.map((mc) => (
+              <option key={mc.id} value={mc.id}>
+                {mc.name}
+              </option>
+            ))}
+          </select>
+          {chevron}
+        </div>
+        <div className="relative col-span-2 min-w-0 sm:w-56">
+          <select
+            aria-label={m.stats.product}
+            value={product ?? ""}
+            onChange={(e) => update({ product: e.target.value || null })}
+            className={selectClass(Boolean(product))}
+          >
+            <option value="">{m.stats.allProducts}</option>
+            {products.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          {chevron}
+        </div>
       </div>
     </div>
   );

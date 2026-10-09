@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Nfc } from "lucide-react";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { getI18n } from "@/i18n/server";
@@ -68,7 +69,7 @@ export default async function TerminalsPage() {
   }
 
   return (
-    <>
+    <div className="max-w-3xl">
       <PageHeader
         title={m.terminals.title}
         subtitle={m.terminals.subtitle}
@@ -77,6 +78,7 @@ export default async function TerminalsPage() {
       />
       {rows.length === 0 ? (
         <EmptyState
+          icon={<Nfc className="size-5" />}
           title={m.terminals.empty}
           hint={m.terminals.emptyHint}
           action={
@@ -92,6 +94,6 @@ export default async function TerminalsPage() {
           paymentsEnabled={paymentsEnabled()}
         />
       )}
-    </>
+    </div>
   );
 }

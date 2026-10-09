@@ -1,10 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Montserrat } from "next/font/google";
 import { I18nProvider } from "@/i18n/client";
 import { getLocale } from "@/i18n/server";
 import "./globals.css";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
+// The face of the MATO logo, used for the wordmark only.
+const montserrat = Montserrat({ variable: "--font-montserrat", subsets: ["latin"], weight: ["400", "700"] });
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains",
   subsets: ["latin"],
@@ -30,7 +32,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html
       suppressHydrationWarning
       lang={locale}
-      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${montserrat.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
         {/* Restores the "hide figures" switch before first paint, so they never flash. */}

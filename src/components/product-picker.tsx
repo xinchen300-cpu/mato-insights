@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Plus } from "lucide-react";
+import { Avatar, initial } from "@/components/list-row";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
@@ -87,27 +88,32 @@ export function ProductPicker({
       <button
         type="button"
         disabled={disabled || creating}
+        aria-expanded={open}
         onClick={() => {
           setOpen((o) => !o);
           setTimeout(() => inputRef.current?.focus(), 0);
         }}
         className={cn(
-          "flex h-10 w-full items-center gap-2 border border-input bg-card px-3 text-left text-sm transition-colors hover:border-primary disabled:opacity-50",
-          open && "border-primary",
+          "flex h-11 w-full items-center gap-2.5 rounded-xl border border-input bg-card px-3.5 text-left text-base outline-none transition-[border-color,box-shadow,background-color] duration-150 hover:bg-surface/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25 disabled:opacity-50 md:text-sm",
+          open && "border-ring ring-3 ring-ring/25",
         )}
       >
         {selected?.photo_path && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={mediaUrl(selected.photo_path)!} alt="" className="size-6 object-contain" />
+          <span className="-ml-1.5 grid size-7 shrink-0 place-items-center overflow-hidden rounded-full bg-surface">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={mediaUrl(selected.photo_path)!} alt="" className="max-h-5 max-w-5 object-contain" />
+          </span>
         )}
         <span className={cn("flex-1 truncate", !selected && "text-muted-foreground")}>
           {selected?.name ?? placeholder ?? m.products.searchPlaceholder}
         </span>
-        <ChevronDown className="size-4 text-muted-foreground" />
+        <ChevronDown
+          className={cn("size-4 shrink-0 text-muted-foreground transition-transform duration-150", open && "rotate-180")}
+        />
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 border bg-popover shadow-[0_18px_40px_rgb(28_24_18/0.16)]">
+        <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-2xl bg-popover shadow-[0_0_0_1px_var(--border),var(--shadow-pop)]">
           <input
             ref={inputRef}
             value={query}
@@ -122,16 +128,17 @@ export function ProductPicker({
               }
             }}
             placeholder={m.products.searchPlaceholder}
-            className="h-11 w-full border-b bg-transparent px-3 text-base outline-none md:text-sm"
+            className="h-12 w-full border-b bg-transparent px-4 text-base outline-none placeholder:text-muted-foreground md:text-sm"
           />
-          <ul className="max-h-64 overflow-y-auto py-1">
+          <ul className="max-h-72 overflow-y-auto p-1.5">
             {allowNone && (
               <li>
                 <button
                   type="button"
                   onClick={() => choose(null)}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-muted-foreground hover:bg-accent"
+                  className="hover-surface flex min-h-11 w-full items-center gap-3 rounded-xl px-2.5 py-1.5 text-left text-[15px] text-muted-foreground md:text-sm"
                 >
+                  <span className="size-8 shrink-0" aria-hidden="true" />
                   {noneLabel ?? m.common.none}
                 </button>
               </li>
@@ -141,32 +148,36 @@ export function ProductPicker({
                 <button
                   type="button"
                   onClick={() => choose(p.id)}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
+                  className="hover-surface flex min-h-11 w-full items-center gap-3 rounded-xl px-2.5 py-1.5 text-left text-[15px] md:text-sm"
                 >
-                  <span className="grid size-7 shrink-0 place-items-center">
-                    {p.photo_path && (
+                  <Avatar className="size-8 overflow-hidden text-[13px]">
+                    {p.photo_path ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={mediaUrl(p.photo_path)!} alt="" className="max-h-7 max-w-7 object-contain" />
+                      <img src={mediaUrl(p.photo_path)!} alt="" className="max-h-6 max-w-6 object-contain" />
+                    ) : (
+                      initial(p.name)
                     )}
-                  </span>
+                  </Avatar>
                   <span className="flex-1 truncate">{p.name}</span>
-                  {p.id === value && <Check className="size-4 text-primary" />}
+                  {p.id === value && <Check className="size-4 shrink-0 text-primary" />}
                 </button>
               </li>
             ))}
             {matches.length === 0 && !canCreate && (
-              <li className="px-3 py-2 text-sm text-muted-foreground">{m.products.noResults}</li>
+              <li className="px-3 py-3 text-sm text-muted-foreground">{m.products.noResults}</li>
             )}
             {canCreate && (
-              <li>
+              <li className={cn((allowNone || matches.length > 0) && "mt-1 border-t pt-1")}>
                 <button
                   type="button"
                   onClick={() => void create()}
                   disabled={creating}
-                  className="flex w-full items-center gap-2 border-t px-3 py-2.5 text-left text-sm font-semibold text-accent-foreground hover:bg-accent"
+                  className="hover-surface flex min-h-11 w-full items-center gap-3 rounded-xl px-2.5 py-1.5 text-left text-[15px] font-semibold disabled:opacity-50 md:text-sm"
                 >
-                  <Plus className="size-4" />
-                  {fmt(m.products.createNamed, { name: query.trim() })}
+                  <Avatar tone="gold" className="size-8 [&_svg]:size-4">
+                    <Plus />
+                  </Avatar>
+                  <span className="min-w-0 flex-1 break-words">{fmt(m.products.createNamed, { name: query.trim() })}</span>
                 </button>
               </li>
             )}

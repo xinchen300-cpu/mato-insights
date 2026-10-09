@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ArrowRight, Store } from "lucide-react";
+import { ArrowRight, ChevronRight, Store } from "lucide-react";
+import { Avatar, RowList, initial } from "@/components/list-row";
 import { StatusBadge } from "@/components/machine/status-badge";
 import { PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
@@ -74,91 +75,118 @@ export default async function MachinesPage() {
         }
       />
 
-      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {machines.map((mc) => {
-          const s = summary.get(mc.id);
-          const lastSale = lastSales.get(mc.id);
-          const overall = s && s.counted ? fillLevel(s.stock, s.capacity) : "unknown";
-          // Online is the normal case and goes unsaid; only a problem gets a word.
-          const status = terminalStatus(mc.last_connected_at, mc.last_disconnected_at);
-          // A card that is missing something points straight at the screen that fixes it.
-          const todo =
-            mc.type === "other"
-              ? null
-              : !s || s.slots === 0
-                ? { label: m.machines.buildLayout, href: `/machines/${mc.id}/layout` }
-                : !s.counted
-                  ? { label: m.machines.countStock, href: `/machines/${mc.id}/refill` }
-                  : null;
-          return (
-            <li key={mc.id}>
-              <Link
-                href={todo?.href ?? `/machines/${mc.id}`}
-                className="flex h-full flex-col gap-3 border bg-card p-5 transition-colors hover:border-primary/40"
-              >
-                <div className="flex items-start gap-3">
-                  {mc.business_logo_path && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={mediaUrl(mc.business_logo_path)!} alt="" className="h-9 w-12 object-contain" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <p className="truncate font-heading text-lg font-semibold text-foreground">{mc.name}</p>
+      {/* The machines as a bank shows its accounts: one calm row each, the
+          name on the left, how full it is on the right. */}
+      {machines.length > 0 && (
+        <RowList>
+          {machines.map((mc) => {
+            const s = summary.get(mc.id);
+            const lastSale = lastSales.get(mc.id);
+            const overall = s && s.counted ? fillLevel(s.stock, s.capacity) : "unknown";
+            // Online is the normal case and goes unsaid; only a problem gets a word.
+            const status = terminalStatus(mc.last_connected_at, mc.last_disconnected_at);
+            // A row that is missing something points straight at the screen that fixes it.
+            const todo =
+              mc.type === "other"
+                ? null
+                : !s || s.slots === 0
+                  ? { label: m.machines.buildLayout, href: `/machines/${mc.id}/layout` }
+                  : !s.counted
+                    ? { label: m.machines.countStock, href: `/machines/${mc.id}/refill` }
+                    : null;
+            const subline = [
+              (ownerNames.get(mc.id) ?? []).filter((name) => name !== mc.name).join(" · ") || null,
+              mc.type ? m.machines.types[mc.type] : null,
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            return (
+              <li key={mc.id}>
+                {/* Phones stack the stock under the name; wider screens give it its own column. */}
+                <Link
+                  href={todo?.href ?? `/machines/${mc.id}`}
+                  className="hover-surface grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3.5 gap-y-2.5 rounded-xl px-3 py-3.5 sm:grid-cols-[auto_minmax(0,1fr)_14rem_auto] sm:gap-x-6"
+                >
+                  <Avatar
+                    className={cn(
+                      "col-start-1 row-span-2 row-start-1 self-start sm:row-span-1 sm:self-center",
+                      mc.business_logo_path && "bg-card shadow-[0_0_0_1px_var(--border)]",
+                    )}
+                  >
+                    {mc.business_logo_path ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={mediaUrl(mc.business_logo_path)!} alt="" className="max-h-6 max-w-7 object-contain" />
+                    ) : (
+                      initial(mc.name)
+                    )}
+                  </Avatar>
+
+                  <span className="col-start-2 row-start-1 min-w-0">
+                    <span className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                      <span className="max-w-full truncate text-[15px] font-semibold tracking-[-0.01em]">
+                        {mc.name}
+                      </span>
                       {status !== "online" && (
                         <StatusBadge status={status} label={statusLabel(mc)} className="shrink-0" />
                       )}
-                    </div>
-                    <p className="truncate text-sm text-muted-foreground">
-                      {[
-                        (ownerNames.get(mc.id) ?? []).filter((name) => name !== mc.name).join(" · ") || null,
-                        mc.type ? m.machines.types[mc.type] : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </p>
-                  </div>
-                </div>
-
-                {s && s.slots > 0 && mc.type !== "other" ? (
-                  <div className="flex flex-col gap-1.5">
-                    {s.counted && (
-                      <div className="h-1.5 bg-level-empty/60">
-                        <div
-                          className={cn("h-full", levelColor[overall])}
-                          style={{ width: `${Math.min(100, (s.stock / s.capacity) * 100)}%` }}
-                        />
-                      </div>
+                    </span>
+                    {subline && (
+                      <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">{subline}</span>
                     )}
-                    {todo ? (
-                      <p className="inline-flex items-center gap-1 text-sm font-semibold text-accent-foreground">
-                        {todo.label}
-                        <ArrowRight className="size-3.5" />
-                      </p>
+                    <span className="mt-0.5 block truncate text-[12.5px] text-muted-foreground">
+                      {m.machines.lastSale}: {lastSale ? f.relative(lastSale) : m.machines.noSales}
+                    </span>
+                  </span>
+
+                  <span className="col-start-2 row-start-2 flex min-w-0 items-center gap-3 sm:col-start-3 sm:row-start-1 sm:flex-col sm:items-end sm:gap-2 sm:text-right">
+                    {s && s.slots > 0 && mc.type !== "other" ? (
+                      <>
+                        {s.counted && (
+                          <span className="block h-1.5 w-14 shrink-0 overflow-hidden rounded-full bg-level-empty sm:w-full">
+                            <span
+                              className={cn("block h-full rounded-full", levelColor[overall])}
+                              style={{ width: `${Math.min(100, (s.stock / s.capacity) * 100)}%` }}
+                            />
+                          </span>
+                        )}
+                        {todo ? (
+                          <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-foreground">
+                            {todo.label}
+                            <ArrowRight className="size-3.5" />
+                          </span>
+                        ) : (
+                          <span
+                            className={cn(
+                              "text-[13px]",
+                              s.low > 0 ? "font-medium text-negative" : "text-muted-foreground",
+                            )}
+                          >
+                            {s.low > 0
+                              ? fmt(m.overview.slotsLow, { count: s.low })
+                              : fmt(m.machines.inMachine, { stock: s.stock, capacity: s.capacity })}
+                          </span>
+                        )}
+                      </>
+                    ) : mc.type === "other" ? (
+                      <span className="text-[13px] text-muted-foreground">{m.machines.types.other}</span>
                     ) : (
-                      <p className={cn("text-sm", s.low > 0 ? "text-negative" : "text-muted-foreground")}>
-                        {s.low > 0
-                          ? fmt(m.overview.slotsLow, { count: s.low })
-                          : fmt(m.machines.inMachine, { stock: s.stock, capacity: s.capacity })}
-                      </p>
+                      <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-foreground">
+                        {m.machines.buildLayout}
+                        <ArrowRight className="size-3.5" />
+                      </span>
                     )}
-                  </div>
-                ) : mc.type === "other" ? (
-                  <p className="text-sm text-muted-foreground">{m.machines.types.other}</p>
-                ) : (
-                  <p className="inline-flex items-center gap-1 text-sm font-semibold text-accent-foreground">
-                    {m.machines.buildLayout}
-                    <ArrowRight className="size-3.5" />
-                  </p>
-                )}
+                  </span>
 
-                <p className="mt-auto text-xs text-muted-foreground">
-                  {m.machines.lastSale}: {lastSale ? f.relative(lastSale) : m.machines.noSales}
-                </p>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+                  <ChevronRight
+                    className="col-start-3 row-span-2 row-start-1 size-4 shrink-0 text-muted-foreground/70 sm:col-start-4 sm:row-span-1"
+                    aria-hidden="true"
+                  />
+                </Link>
+              </li>
+            );
+          })}
+        </RowList>
+      )}
     </>
   );
 }

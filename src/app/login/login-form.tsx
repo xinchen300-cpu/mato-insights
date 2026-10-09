@@ -3,6 +3,17 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import {
+  authAside,
+  authCard,
+  authError,
+  authField,
+  authForm,
+  authHint,
+  authInput,
+  authLink,
+  authTitle,
+} from "@/components/auth-frame";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,38 +54,48 @@ export function LoginForm({ canSignUp }: { canSignUp: boolean }) {
   }
 
   return (
-    <div className="border bg-card p-6 shadow-[0_18px_40px_rgb(28_24_18/0.1)] sm:p-8">
-      <h1 className="text-3xl">{m.auth.welcome}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{m.auth.welcomeHint}</p>
-      <form action={submit} className="mt-6 grid gap-4">
-        <div className="grid gap-2">
-          <Label htmlFor="email">{m.auth.email}</Label>
-          <Input id="email" name="email" type="email" required autoComplete="email" />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="password">{m.auth.password}</Label>
-          <Input id="password" name="password" type="password" required autoComplete="current-password" />
-        </div>
-        {linkDead && <p className="text-sm text-negative">{m.auth.resetExpired}</p>}
-        {error && <p className="text-sm text-negative">{m.auth.wrongLogin}</p>}
-        <Link
-          href="/login/forgot"
-          className="justify-self-start text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
-        >
-          {m.auth.forgot}
-        </Link>
-        <Button type="submit" size="lg" disabled={loading} className="mt-2">
-          {loading ? m.auth.signingIn : m.auth.signIn}
-        </Button>
-      </form>
+    <>
+      <div className={authCard}>
+        <h1 className={authTitle}>{m.auth.welcome}</h1>
+        <p className={authHint}>{m.auth.welcomeHint}</p>
+        <form action={submit} className={authForm}>
+          <div className={authField}>
+            <Label htmlFor="email">{m.auth.email}</Label>
+            <Input id="email" name="email" type="email" required autoComplete="email" className={authInput} />
+          </div>
+          <div className={authField}>
+            <Label htmlFor="password">{m.auth.password}</Label>
+            <Input
+              id="password"
+              name="password"
+              type="password"
+              required
+              autoComplete="current-password"
+              className={authInput}
+            />
+            {/* Right under the field it is about, so it is found exactly when it is needed. */}
+            <Link
+              href="/login/forgot"
+              className="justify-self-end rounded-full py-0.5 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {m.auth.forgot}
+            </Link>
+          </div>
+          {linkDead && <p className={authError}>{m.auth.resetExpired}</p>}
+          {error && <p className={authError}>{m.auth.wrongLogin}</p>}
+          <Button type="submit" size="lg" disabled={loading} className="mt-1 w-full">
+            {loading ? m.auth.signingIn : m.auth.signIn}
+          </Button>
+        </form>
+      </div>
       {canSignUp && (
-        <p className="mt-6 text-sm text-muted-foreground">
+        <p className={authAside}>
           {m.auth.noAccount}{" "}
-          <Link href="/signup" className="font-semibold text-accent-foreground underline underline-offset-4">
+          <Link href="/signup" className={authLink}>
             {m.auth.create}
           </Link>
         </p>
       )}
-    </div>
+    </>
   );
 }

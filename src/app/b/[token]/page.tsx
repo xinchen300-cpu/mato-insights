@@ -1,12 +1,13 @@
-import Link from "next/link";
+import { CalendarClock, CalendarX, Package, PackageCheck } from "lucide-react";
 import { MatoWordmark } from "@/components/brand/mato-mark";
 import { RevenueChart } from "@/components/charts/revenue-chart";
-import { EmptyState, Panel } from "@/components/page-header";
+import { KpiHero, MiniStat } from "@/components/kpi";
+import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
+import { EmptyState, PageHeader, Section } from "@/components/page-header";
+import { SegmentedLinks } from "@/components/segmented";
 import { LanguageToggle } from "@/components/shell/language-toggle";
-import { StatTile } from "@/components/stat-tile";
 import { StatsGuide } from "@/components/stats-guide";
 import { TipsPanel } from "@/components/tips-panel";
-import { cn } from "@/lib/utils";
 import { fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getBusinessByToken, getBusinessFreshness, getRecentSales, getStatsReport } from "@/lib/data";
@@ -46,179 +47,230 @@ export default async function BusinessSharePage({
       ])
     : [null, [], null];
 
+  const compareLabel = report ? m.periods[compareLabelKey(report.period)] : undefined;
+  const verdict = report ? compareCounts(report.totals.units, report.totals.prev_units) : undefined;
+  const notes = { tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise };
+
   return (
-    <div className="mx-auto min-h-svh max-w-3xl px-4 pb-16 pt-5">
-      <header className="mb-8 flex items-center justify-between gap-3">
+    <div className="mx-auto min-h-svh max-w-3xl px-4 pb-16 pt-4 sm:px-6 sm:pt-6">
+      <header className="mb-8 flex h-10 items-center justify-between gap-3 sm:mb-10">
         <MatoWordmark />
         <LanguageToggle />
       </header>
 
       {!business || !report ? (
-        <p className="border bg-card p-8 text-center text-muted-foreground">{m.portal.notFound}</p>
+        <p className="surface-card px-6 py-12 text-center text-[15px] text-muted-foreground">{m.portal.notFound}</p>
       ) : (
-        <div className="flex flex-col gap-6">
-          <div>
-            <p className="eyebrow">{m.portal.eyebrow}</p>
-            <h1 className="mt-2 flex items-center gap-3 text-[2rem] sm:text-[2.6rem]">
-              {business.logo_path && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={mediaUrl(business.logo_path)!} alt="" className="h-10 w-14 object-contain" />
-              )}
-              {business.name}
-            </h1>
-            <p className="mt-3 max-w-xl text-[15px] text-muted-foreground">{m.portal.subtitle}</p>
-          </div>
-
-          <nav className="flex flex-wrap gap-2" aria-label={m.stats.period}>
-            {PERIODS.map((p) => (
-              <Link
-                key={p}
-                href={`?period=${p}`}
-                aria-current={p === period ? "page" : undefined}
-                className={cn(
-                  "border px-3.5 py-2 text-sm font-semibold transition-colors",
-                  p === period ? "border-foreground bg-foreground text-background" : "bg-card hover:border-foreground",
+        <>
+          <PageHeader
+            eyebrow={m.portal.eyebrow}
+            title={
+              <span className="flex items-center gap-3">
+                {business.logo_path && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={mediaUrl(business.logo_path)!} alt="" className="h-10 w-14 shrink-0 object-contain" />
                 )}
-              >
-                {m.periods[p]}
-              </Link>
-            ))}
-          </nav>
+                <span className="min-w-0">{business.name}</span>
+              </span>
+            }
+            subtitle={m.portal.subtitle}
+          />
 
-          {freshness && (freshness.last_refill_at || freshness.qty_expired > 0 || freshness.qty_expiring_24h > 0) && (
-            <p className="border bg-card p-4 text-[15px]">
-              {freshness.qty_expired > 0 && (
-                <span className="block font-semibold text-negative">
-                  {fmt(m.portal.expired, { count: freshness.qty_expired })}
-                </span>
-              )}
-              {freshness.qty_expiring_24h > 0 && (
-                <span className="block font-semibold text-warning">
-                  {fmt(m.portal.expiringToday, { count: freshness.qty_expiring_24h })}
-                </span>
-              )}
-              {freshness.last_refill_at && (
-                <span className="block text-muted-foreground">
-                  {fmt(m.portal.lastRefill, { when: f.date(freshness.last_refill_at) })}
-                </span>
-              )}
-            </p>
-          )}
+          <div className="flex flex-col gap-10">
+            <div className="flex flex-col gap-4">
+              <nav aria-label={m.stats.period} className="min-w-0 max-w-full">
+                <SegmentedLinks
+                  items={PERIODS.map((p) => ({ href: `?period=${p}`, label: m.periods[p], active: p === period }))}
+                />
+              </nav>
 
-          {report.totals.units === 0 ? (
-            <EmptyState title={m.stats.noSales} />
-          ) : (
-            <>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <StatTile
-                  label={m.stats.revenue}
-                  value={f.euro(report.totals.revenue)}
-                  current={report.totals.revenue}
-                  previous={report.totals.prev_revenue}
-                  compareLabel={m.periods[compareLabelKey(report.period)]}
-                  verdict={compareCounts(report.totals.units, report.totals.prev_units)}
-                  verdictNotes={{ tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise }}
-                  f={f}
-                />
-                <StatTile
-                  label={m.stats.units}
-                  value={f.number(report.totals.units)}
-                  current={report.totals.units}
-                  previous={report.totals.prev_units}
-                  compareLabel={m.periods[compareLabelKey(report.period)]}
-                  verdict={compareCounts(report.totals.units, report.totals.prev_units)}
-                  verdictNotes={{ tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise }}
-                  f={f}
-                />
-                <StatTile
-                  label={m.stats.avgSale}
-                  value={f.euro(report.totals.revenue / report.totals.units)}
-                  f={f}
-                />
-              </div>
-
-              <Panel title={m.stats.revenueOverTime}>
-                <RevenueChart
-                  data={
-                    report.period === "today"
-                      ? report.by_hour.map((h) => ({ key: String(h.hour), label: `${h.hour}:00`, revenue: h.revenue }))
-                      : fillDays(report).map((d) => ({
-                          key: d.day,
-                          label: f.dayMonth(`${d.day}T12:00:00Z`),
-                          revenue: d.revenue,
-                        }))
-                  }
-                />
-              </Panel>
-
-              <Panel title={m.portal.whatSold}>
-                <ul className="flex flex-col divide-y">
-                  {report.by_product
-                    .filter((p) => p.units > 0)
-                    .map((row) => (
-                      <li
-                        key={row.product_id ?? "unassigned"}
-                        className="grid grid-cols-[2rem_1fr_auto] items-center gap-x-3 py-2.5"
-                      >
-                        <span className="grid size-8 place-items-center">
-                          {row.photo_path && (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={mediaUrl(row.photo_path)!} alt="" className="max-h-8 max-w-8 object-contain" />
-                          )}
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate font-semibold">
-                            {row.product_name ?? m.portal.otherProducts}
+              {/* Food safety first: a producer who only gets this page must see what to pull before anything else. */}
+              {freshness && (freshness.last_refill_at || freshness.qty_expired > 0 || freshness.qty_expiring_24h > 0) && (
+                <RowList>
+                  {freshness.qty_expired > 0 && (
+                    <li>
+                      <ListRow
+                        leading={
+                          <Avatar tone="negative">
+                            <CalendarX />
+                          </Avatar>
+                        }
+                        title={
+                          <span className="whitespace-normal text-negative">
+                            {fmt(m.portal.expired, { count: freshness.qty_expired })}
                           </span>
-                          <span className="block text-xs text-muted-foreground">
-                            {plural(row.units, m.common.unitsOne, m.common.unitsOther)}
+                        }
+                      />
+                    </li>
+                  )}
+                  {freshness.qty_expiring_24h > 0 && (
+                    <li>
+                      <ListRow
+                        leading={
+                          <Avatar tone="warning">
+                            <CalendarClock />
+                          </Avatar>
+                        }
+                        title={
+                          <span className="whitespace-normal text-warning">
+                            {fmt(m.portal.expiringToday, { count: freshness.qty_expiring_24h })}
                           </span>
-                        </span>
-                        <span className="tabular text-right font-semibold">{f.euro(row.revenue)}</span>
-                      </li>
-                    ))}
-                </ul>
-              </Panel>
-
-              {report.by_machine.length > 1 && (
-                <Panel title={m.stats.perMachine}>
-                  <ul className="flex flex-col divide-y">
-                    {report.by_machine.map((row) => (
-                      <li key={row.machine_id} className="flex items-baseline justify-between gap-4 py-2.5">
-                        <span className="truncate font-semibold">{row.machine_name}</span>
-                        <span className="tabular font-semibold">{f.euro(row.revenue)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </Panel>
+                        }
+                      />
+                    </li>
+                  )}
+                  {freshness.last_refill_at && (
+                    <li>
+                      <ListRow
+                        leading={
+                          <Avatar>
+                            <PackageCheck />
+                          </Avatar>
+                        }
+                        title={
+                          <span className="whitespace-normal font-medium text-muted-foreground">
+                            {fmt(m.portal.lastRefill, { when: f.date(freshness.last_refill_at) })}
+                          </span>
+                        }
+                      />
+                    </li>
+                  )}
+                </RowList>
               )}
-            </>
-          )}
 
-          {recent.length > 0 && (
-            <Panel title={m.portal.recent}>
-              <ul className="flex flex-col divide-y">
-                {recent.map((sale, i) => (
-                  <li key={`${sale.occurred_at}-${i}`} className="flex items-baseline justify-between gap-4 py-2.5">
-                    <span className="min-w-0">
-                      <span className="block truncate font-semibold">
-                        {sale.product_name ?? m.portal.otherProducts}
-                      </span>
-                      <span className="block text-xs text-muted-foreground">{f.dateTime(sale.occurred_at)}</span>
-                    </span>
-                    <span className="tabular shrink-0 font-semibold">{f.euro(sale.amount)}</span>
-                  </li>
-                ))}
-              </ul>
-            </Panel>
-          )}
+              {report.totals.units === 0 ? (
+                <EmptyState title={m.stats.noSales} />
+              ) : (
+                // The balance, as on the operator's overview: one figure, its trend, the curve.
+                <section className="surface-card px-5 pb-4 pt-6 sm:px-8 sm:pb-6 sm:pt-8">
+                  <KpiHero
+                    label={m.stats.revenue}
+                    value={f.euro(report.totals.revenue)}
+                    compare={{
+                      current: report.totals.revenue,
+                      previous: report.totals.prev_revenue,
+                      label: compareLabel,
+                      verdict,
+                      notes,
+                    }}
+                    f={f}
+                  />
+                  <div className="mt-7 grid grid-cols-2 gap-x-6 gap-y-6">
+                    <MiniStat
+                      label={m.stats.units}
+                      value={f.number(report.totals.units)}
+                      compare={{
+                        current: report.totals.units,
+                        previous: report.totals.prev_units,
+                        label: compareLabel,
+                        verdict,
+                        notes,
+                      }}
+                      f={f}
+                    />
+                    <MiniStat
+                      label={m.stats.avgSale}
+                      value={f.euro(report.totals.revenue / report.totals.units)}
+                      f={f}
+                    />
+                  </div>
+                  <h2 className="mt-8 text-[13px] font-medium text-muted-foreground">{m.stats.revenueOverTime}</h2>
+                  <div className="-mx-2 mt-3 sm:-mx-3">
+                    <RevenueChart
+                      height={220}
+                      data={
+                        report.period === "today"
+                          ? report.by_hour.map((h) => ({ key: String(h.hour), label: `${h.hour}:00`, revenue: h.revenue }))
+                          : fillDays(report).map((d) => ({
+                              key: d.day,
+                              label: f.dayMonth(`${d.day}T12:00:00Z`),
+                              revenue: d.revenue,
+                            }))
+                      }
+                    />
+                  </div>
+                </section>
+              )}
+            </div>
 
-          <TipsPanel m={m} count={3} title={m.portal.tipsTitle} />
+            {report.totals.units > 0 && (
+              <>
+                <Section title={m.portal.whatSold}>
+                  <RowList>
+                    {report.by_product
+                      .filter((p) => p.units > 0)
+                      .map((row) => (
+                        <li key={row.product_id ?? "unassigned"}>
+                          <ListRow
+                            leading={
+                              row.photo_path ? (
+                                <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-surface">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={mediaUrl(row.photo_path)!}
+                                    alt=""
+                                    className="max-h-7 max-w-7 object-contain"
+                                  />
+                                </span>
+                              ) : (
+                                <Avatar>{row.product_name ? initial(row.product_name) : <Package />}</Avatar>
+                              )
+                            }
+                            title={row.product_name ?? m.portal.otherProducts}
+                            subtitle={
+                              <span className="tabular">{plural(row.units, m.common.unitsOne, m.common.unitsOther)}</span>
+                            }
+                            value={f.euro(row.revenue)}
+                          />
+                        </li>
+                      ))}
+                  </RowList>
+                </Section>
 
-          <StatsGuide m={m} f={f} />
+                {report.by_machine.length > 1 && (
+                  <Section title={m.stats.perMachine}>
+                    <RowList>
+                      {report.by_machine.map((row) => (
+                        <li key={row.machine_id}>
+                          <ListRow
+                            leading={<Avatar>{initial(row.machine_name)}</Avatar>}
+                            title={row.machine_name}
+                            value={f.euro(row.revenue)}
+                          />
+                        </li>
+                      ))}
+                    </RowList>
+                  </Section>
+                )}
+              </>
+            )}
 
-          <p className="text-xs text-muted-foreground">{fmt(m.portal.footer, { name: business.name })}</p>
-        </div>
+            {recent.length > 0 && (
+              <Section title={m.portal.recent}>
+                <RowList>
+                  {recent.map((sale, i) => (
+                    <li key={`${sale.occurred_at}-${i}`}>
+                      <ListRow
+                        leading={
+                          <Avatar>{sale.product_name ? initial(sale.product_name) : <Package />}</Avatar>
+                        }
+                        title={sale.product_name ?? m.portal.otherProducts}
+                        subtitle={f.dateTime(sale.occurred_at)}
+                        value={f.euro(sale.amount)}
+                      />
+                    </li>
+                  ))}
+                </RowList>
+              </Section>
+            )}
+
+            <TipsPanel m={m} count={3} title={m.portal.tipsTitle} />
+
+            <StatsGuide m={m} f={f} />
+
+            <p className="px-1 text-xs text-muted-foreground">{fmt(m.portal.footer, { name: business.name })}</p>
+          </div>
+        </>
       )}
     </div>
   );

@@ -23,20 +23,41 @@ export function MatoMark({ className }: { className?: string }) {
   );
 }
 
-export function MatoWordmark({ subtitle }: { subtitle?: string }) {
+/**
+ * The MATO logo as on matoautomaat.be — MATO, and under it one quiet word set
+ * wide — with INSIGHTS where the site says AUTOMATEN. Drawn as text in the
+ * logo's own face, so it stays sharp at any size and follows the text colour.
+ */
+export function MatoWordmark({ className }: { subtitle?: string; className?: string }) {
   return (
-    <span className="flex items-center gap-2.5">
-      <MatoMark className="size-7 shrink-0" />
-      <span className="flex flex-col leading-none">
-        <span className="whitespace-nowrap font-heading text-[17px] font-bold tracking-[-0.02em] text-foreground">
-          MATO <span className="font-medium text-muted-foreground">Insights</span>
-        </span>
-        {subtitle && (
-          <span className="mt-1 hidden whitespace-nowrap font-mono text-[8.5px] font-bold uppercase tracking-[0.2em] text-heading lg:block">
-            {subtitle}
-          </span>
-        )}
-      </span>
-    </span>
+    <svg
+      viewBox="0 0 933 282"
+      role="img"
+      aria-label="MATO Insights"
+      className={className ?? "h-[34px] w-auto text-foreground"}
+    >
+      <text
+        x="466.5"
+        y="186"
+        textAnchor="middle"
+        textLength="933"
+        lengthAdjust="spacing"
+        fill="currentColor"
+        style={{ fontFamily: "var(--font-montserrat), Montserrat, sans-serif", fontWeight: 700, fontSize: 262 }}
+      >
+        MATO
+      </text>
+      <text
+        x="466.5"
+        y="280"
+        textAnchor="middle"
+        textLength="620"
+        lengthAdjust="spacing"
+        fill="currentColor"
+        style={{ fontFamily: "var(--font-montserrat), Montserrat, sans-serif", fontWeight: 400, fontSize: 58 }}
+      >
+        INSIGHTS
+      </text>
+    </svg>
   );
 }

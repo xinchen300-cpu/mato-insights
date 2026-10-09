@@ -1,13 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CircleCheck, FileSpreadsheet, Printer } from "lucide-react";
-import { PageHeader, Panel } from "@/components/page-header";
+import { KpiHero } from "@/components/kpi";
+import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
+import { PageHeader, Section } from "@/components/page-header";
 import { SheetTables } from "@/components/refill/sheet-tables";
 import { buttonVariants } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getRefillSheet, getRunSummary } from "@/lib/data";
 import { requireOrgId } from "@/lib/org";
+import { cn } from "@/lib/utils";
 import { NotesForm } from "./notes-form";
 import { RunReport } from "./run-report";
 import { ShareBox } from "./share-box";
@@ -52,7 +55,6 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
         backLabel={m.refill.title}
         eyebrow={fmt(m.refill.createdAt, { date: f.dateTime(sheet.created_at) })}
         title={m.refill.sheetTitle}
-        subtitle={fmt(m.refill.items, { count: total })}
         actions={
           <>
             <Link href={`/print/refill/${sheet.id}`} target="_blank" className={buttonVariants({ variant: "outline" })}>
@@ -67,72 +69,85 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
         }
       />
 
-      {sheet.completed_at && (
-        <p className="mb-6 flex items-center gap-2 border border-positive/40 bg-card p-4 font-semibold text-positive">
-          <CircleCheck className="size-5" />
-          {fmt(m.refill.completedAt, { date: f.dateTime(sheet.completed_at) })}
-        </p>
-      )}
+      {/* The one figure of a sheet: how much goes into the machines. */}
+      <div className="-mt-2 mb-10 flex flex-col px-1 sm:-mt-4">
+        <KpiHero label={m.refill.total} value={fmt(m.refill.items, { count: total })} f={f} />
+        {sheet.completed_at && (
+          <p className="flex items-center gap-2 text-[15px] font-medium text-positive">
+            <CircleCheck className="size-[18px]" />
+            {fmt(m.refill.completedAt, { date: f.dateTime(sheet.completed_at) })}
+          </p>
+        )}
+      </div>
 
       {sheet.completed_at && (
-        <Panel title={m.refill.reportTitle} hint={m.refill.reportHint} className="mb-8">
-          <RunReport rows={summary} when={f.dateTime(sheet.completed_at)} />
-        </Panel>
+        <Section title={m.refill.reportTitle} hint={m.refill.reportHint} className="mb-10">
+          <div className="surface-card px-5 py-4 sm:px-6 sm:py-5">
+            <RunReport rows={summary} when={f.dateTime(sheet.completed_at)} />
+          </div>
+        </Section>
       )}
 
-      <div className="grid gap-8 lg:grid-cols-[1.5fr_1fr]">
+      <div className="grid gap-10 lg:grid-cols-[1.5fr_1fr] lg:gap-8">
         <SheetTables lines={sheet.lines} m={m} />
-        <div className="flex flex-col gap-6 lg:sticky lg:top-24 lg:self-start">
+        {/* On a phone an open sheet leads with what the operator does next:
+            share it, leave a note. A closed one leads with the list. */}
+        <div
+          className={cn(
+            "flex flex-col gap-8 lg:sticky lg:top-24 lg:self-start",
+            !sheet.completed_at && "order-first lg:order-none",
+          )}
+        >
           {!sheet.completed_at && sheet.share_token && (
-            <Panel title={m.refill.share}>
+            <section className="surface-card p-5 sm:p-6">
+              <h2 className="mb-3 text-[18px] font-semibold tracking-[-0.02em]">{m.refill.share}</h2>
               <ShareBox token={sheet.share_token} />
-            </Panel>
+            </section>
           )}
           {(minutes !== null || sheet.km !== null || sheet.filled_by) && (
-            <Panel title={m.refill.runFacts}>
-              <ul className="flex flex-col divide-y">
+            <Section title={m.refill.runFacts}>
+              <dl className="surface-card flex flex-col px-5 py-1">
                 {sheet.filled_by && (
-                  <li className="flex items-baseline justify-between gap-4 py-2.5">
-                    <span className="text-sm text-muted-foreground">{m.refill.filler}</span>
-                    <span className="font-semibold">{sheet.filled_by}</span>
-                  </li>
+                  <div className="flex items-baseline justify-between gap-4 border-b border-border py-3.5 last:border-b-0">
+                    <dt className="text-sm text-muted-foreground">{m.refill.filler}</dt>
+                    <dd className="text-[15px] font-semibold">{sheet.filled_by}</dd>
+                  </div>
                 )}
                 {minutes !== null && (
-                  <li className="flex items-baseline justify-between gap-4 py-2.5">
-                    <span className="text-sm text-muted-foreground">{m.machines.history}</span>
-                    <span className="tabular font-semibold">{fmt(m.refill.runTime, { minutes })}</span>
-                  </li>
+                  <div className="flex items-baseline justify-between gap-4 border-b border-border py-3.5 last:border-b-0">
+                    <dt className="text-sm text-muted-foreground">{m.machines.history}</dt>
+                    <dd className="tabular text-[15px] font-semibold">{fmt(m.refill.runTime, { minutes })}</dd>
+                  </div>
                 )}
                 {sheet.km !== null && (
-                  <li className="flex items-baseline justify-between gap-4 py-2.5">
-                    <span className="text-sm text-muted-foreground">{m.refill.kmLabel}</span>
-                    <span className="tabular font-semibold">{fmt(m.refill.runKm, { km: sheet.km })}</span>
-                  </li>
+                  <div className="flex items-baseline justify-between gap-4 border-b border-border py-3.5 last:border-b-0">
+                    <dt className="text-sm text-muted-foreground">{m.refill.kmLabel}</dt>
+                    <dd className="tabular text-[15px] font-semibold">{fmt(m.refill.runKm, { km: sheet.km })}</dd>
+                  </div>
                 )}
-              </ul>
-            </Panel>
+              </dl>
+            </Section>
           )}
 
           {!sheet.completed_at && (
-            <Panel title={m.refill.boxTitle} hint={m.refill.boxHint}>
+            <Section title={m.refill.boxTitle} hint={m.refill.boxHint}>
               {box.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{m.refill.boxEmpty}</p>
+                <p className="px-1 text-sm text-muted-foreground">{m.refill.boxEmpty}</p>
               ) : (
-                <ul className="flex flex-col divide-y">
+                <RowList>
                   {box.map((row) => (
-                    <li key={row.id} className="flex items-baseline justify-between gap-4 py-2.5">
-                      <span className="min-w-0 truncate">{row.name}</span>
-                      <span className="tabular font-semibold">{row.qty}</span>
+                    <li key={row.id}>
+                      <ListRow leading={<Avatar>{initial(row.name)}</Avatar>} title={row.name} value={String(row.qty)} />
                     </li>
                   ))}
-                </ul>
+                </RowList>
               )}
-            </Panel>
+            </Section>
           )}
 
-          <Panel title={m.refill.notes}>
+          <Section title={m.refill.notes}>
             <NotesForm sheetId={sheet.id} initialNotes={sheet.notes ?? ""} />
-          </Panel>
+          </Section>
         </div>
       </div>
     </>

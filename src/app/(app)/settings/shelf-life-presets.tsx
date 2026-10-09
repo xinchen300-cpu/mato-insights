@@ -2,12 +2,14 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { Plus, Trash2 } from "lucide-react";
+import { Avatar, initial } from "@/components/list-row";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
 import type { ShelfLifePreset } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { deleteShelfLifePreset, saveShelfLifePreset } from "./actions";
 
 // Set a shelf life once per kind of food, instead of on every product.
@@ -23,21 +25,23 @@ export function ShelfLifePresets({ presets }: { presets: ShelfLifePreset[] }) {
     startTransition(() => deleteShelfLifePreset(id));
   }
 
+  // One card: a row per kind of food, then either the way to add one or the form for it.
   return (
-    <div className="flex flex-col gap-3">
+    <div className="surface-card flex flex-col p-2">
       {presets.length > 0 && (
-        <ul className="flex flex-col divide-y">
+        <ul className="flex flex-col">
           {presets.map((preset) => (
-            <li key={preset.id} className="flex items-center justify-between gap-3 py-2.5">
-              <span>
-                <span className="block font-semibold">{preset.name}</span>
-                <span className="text-sm text-muted-foreground">
+            <li key={preset.id} className="flex min-h-16 items-center gap-3.5 rounded-xl px-3 py-3">
+              <Avatar>{initial(preset.name)}</Avatar>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-semibold tracking-[-0.01em]">{preset.name}</span>
+                <span className="mt-0.5 block text-[13px] text-muted-foreground">
                   {fmt(m.products.shelfLifeDays, { days: preset.days })}
                 </span>
               </span>
               <Button
                 variant="ghost"
-                size="icon-sm"
+                size="icon"
                 onClick={() => remove(preset.id)}
                 disabled={isPending}
                 aria-label={m.common.delete}
@@ -50,31 +54,44 @@ export function ShelfLifePresets({ presets }: { presets: ShelfLifePreset[] }) {
       )}
 
       {adding ? (
-        <form action={saveShelfLifePreset} className="flex flex-wrap items-end gap-3 border-t pt-3">
-          <div className="grid gap-1.5">
-            <Label htmlFor="preset-name" className="text-xs text-muted-foreground">
+        <form
+          action={saveShelfLifePreset}
+          className={cn("flex flex-wrap items-end gap-3 px-3 pb-3 pt-3", presets.length > 0 && "mt-1 border-t pt-4")}
+        >
+          <div className="grid min-w-0 flex-1 basis-44 gap-1.5">
+            <Label htmlFor="preset-name" className="text-[13px] text-muted-foreground">
               {m.settings.presetName}
             </Label>
-            <Input id="preset-name" name="name" placeholder={m.settings.presetPlaceholder} className="w-44" required />
+            <Input id="preset-name" name="name" placeholder={m.settings.presetPlaceholder} required />
           </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="preset-days" className="text-xs text-muted-foreground">
+          <div className="grid w-24 gap-1.5">
+            <Label htmlFor="preset-days" className="text-[13px] text-muted-foreground">
               {m.settings.presetDays}
             </Label>
-            <Input id="preset-days" name="days" inputMode="numeric" className="w-24" required />
+            <Input id="preset-days" name="days" inputMode="numeric" required />
           </div>
-          <Button type="submit">{m.common.save}</Button>
-          {presets.length > 0 && (
-            <Button type="button" variant="ghost" onClick={() => setAdding(false)}>
-              {m.common.cancel}
+          <div className="flex gap-2">
+            <Button type="submit" className="h-11">
+              {m.common.save}
             </Button>
-          )}
+            {presets.length > 0 && (
+              <Button type="button" variant="ghost" className="h-11" onClick={() => setAdding(false)}>
+                {m.common.cancel}
+              </Button>
+            )}
+          </div>
         </form>
       ) : (
-        <Button variant="outline" size="sm" onClick={() => setAdding(true)} className="w-fit">
-          <Plus />
-          {m.settings.addPreset}
-        </Button>
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="hover-surface flex min-h-16 w-full items-center gap-3.5 rounded-xl px-3 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+        >
+          <Avatar tone="gold">
+            <Plus />
+          </Avatar>
+          <span className="text-[15px] font-semibold tracking-[-0.01em]">{m.settings.addPreset}</span>
+        </button>
       )}
     </div>
   );

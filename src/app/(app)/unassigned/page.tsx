@@ -1,4 +1,4 @@
-import { Info } from "lucide-react";
+import { CircleCheck, Info } from "lucide-react";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { getI18n } from "@/i18n/server";
 import { getPriceMismatches, getProducts, getUnassigned } from "@/lib/data";
@@ -44,13 +44,19 @@ export default async function UnassignedPage() {
         backHref="/products"
         backLabel={m.nav.products}
       />
-      <div className="flex flex-col gap-8">
+      <div className="flex flex-col gap-12">
         {sections.length === 0 ? (
-          mismatches.length === 0 && <EmptyState title={m.unassigned.allDone} hint={m.unassigned.allDoneHint} />
+          mismatches.length === 0 && (
+            <EmptyState
+              icon={<CircleCheck className="size-5" />}
+              title={m.unassigned.allDone}
+              hint={m.unassigned.allDoneHint}
+            />
+          )
         ) : (
-          <div>
-            <p className="mb-6 flex items-start gap-2 text-sm text-muted-foreground">
-              <Info className="mt-0.5 size-4 shrink-0" />
+          <div className="flex flex-col gap-8">
+            <p className="flex items-start gap-2 px-1 text-[13.5px] leading-snug text-muted-foreground">
+              <Info className="mt-px size-4 shrink-0" />
               {m.unassigned.firstLinkNote}
             </p>
             <UnassignedList sections={sections} products={products} />
