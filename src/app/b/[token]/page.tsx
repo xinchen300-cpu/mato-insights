@@ -12,7 +12,7 @@ import { fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getBusinessByToken, getBusinessFreshness, getRecentSales, getStatsReport } from "@/lib/data";
 import { mediaUrl } from "@/lib/media";
-import { compareCounts, fillDays } from "@/lib/stats";
+import { compareSince, fillDays } from "@/lib/stats";
 import { compareLabelKey } from "@/lib/stats-params";
 import type { Period } from "@/lib/types";
 
@@ -48,8 +48,14 @@ export default async function BusinessSharePage({
     : [null, [], null];
 
   const compareLabel = report ? m.periods[compareLabelKey(report.period)] : undefined;
-  const verdict = report ? compareCounts(report.totals.units, report.totals.prev_units) : undefined;
-  const notes = { tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise };
+  const verdict = report
+    ? compareSince(report.totals.units, report.totals.prev_units, report.first_sale, report.prev_start)
+    : undefined;
+  const notes = {
+    tooFew: m.stats.tooFewToCompare,
+    noise: m.stats.withinNoise,
+    new: report?.first_sale ? fmt(m.stats.newSince, { date: f.dayMonth(report.first_sale) }) : undefined,
+  };
 
   return (
     <div className="mx-auto min-h-svh max-w-3xl px-4 pb-16 pt-4 sm:px-6 sm:pt-6">

@@ -15,9 +15,10 @@ import Link from "next/link";
 import { getBusinesses, getMachines, getPriceMismatches, getProducts, getStatsReport } from "@/lib/data";
 import { mediaUrl } from "@/lib/media";
 import { requireOrgId } from "@/lib/org";
-import { compareCounts, detectableChange, fillDays, MIN_WEEKS, periodDays, weekdayStats } from "@/lib/stats";
+import { compareCounts, compareSince, fillDays, MIN_WEEKS, periodDays, weekdayStats } from "@/lib/stats";
 import { compareLabelKey, parseStatsParams, type StatsSearchParams } from "@/lib/stats-params";
 import type { StatsReport } from "@/lib/types";
+import { MonthlyOverview, MonthlySkeleton } from "./monthly";
 import { StatsFilters } from "./stats-filters";
 
 export async function generateMetadata() {
@@ -30,7 +31,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
   const raw = await searchParams;
   const { m, f } = await getI18n();
   const orgId = await requireOrgId();
-  const { period, from, to, business, machine, product, filters } = parseStatsParams(raw);
+  const { period, from, to, business, machine, product, year, thisYear, filters } = parseStatsParams(raw);
 
   const [report, machines, businesses, products, mismatches] = await Promise.all([
     getStatsReport(orgId, filters),
@@ -68,14 +69,32 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
   const days = periodDays(report).length;
   const longEnough = days >= MIN_WEEKS * 7;
   const weekdays = weekdayStats(report);
-  const unitsVerdict = compareCounts(totals.units, totals.prev_units);
-  const verdictNotes = { tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise };
+  // Something that only began selling after the earlier period started gets
+  // "new since …" instead of a percentage against a half-empty period.
+  const newSince = (firstSale: string | null) =>
+    firstSale ? fmt(m.stats.newSince, { date: f.dayMonth(firstSale) }) : undefined;
+  const since = (row: { units: number; prev_units: number; first_sale: string | null }) =>
+    compareSince(row.units, row.prev_units, row.first_sale, report.prev_start);
+  const unitsVerdict = since({ ...totals, first_sale: report.first_sale });
+  const verdictNotes = { tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise, new: newSince(report.first_sale) };
 
   const exportParams = new URLSearchParams(
     Object.entries({ period, from, to, business, machine, product }).filter(([, v]) => v) as [string, string][],
   );
 
   const { product: productLine } = summary(report, m, f, compare);
+
+  const monthly = (
+    <Suspense fallback={<MonthlySkeleton />}>
+      <MonthlyOverview
+        orgId={orgId}
+        filters={{ machines: filters.machines, businesses: filters.businesses, products: filters.products }}
+        year={year}
+        thisYear={thisYear}
+        params={exportParams}
+      />
+    </Suspense>
+  );
 
   return (
     <>
@@ -110,7 +129,10 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
         </Suspense>
 
         {totals.units === 0 ? (
-          <EmptyState title={m.stats.noSales} icon={<ChartNoAxesColumn className="size-5" />} />
+          <>
+            <EmptyState title={m.stats.noSales} icon={<ChartNoAxesColumn className="size-5" />} />
+            {monthly}
+          </>
         ) : (
           <>
             {/* The one figure this page is about, what it means, then the curve. */}
@@ -171,6 +193,8 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
 
             <StatsGuide m={m} f={f} />
 
+            {monthly}
+
             <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
               <Panel
                 title={m.stats.busiestDays}
@@ -218,11 +242,11 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
 
             <div className="grid gap-8 sm:gap-10 lg:grid-cols-2 lg:gap-6">
               <Section title={m.stats.bestSellers}>
-                <ProductRanking rows={best} m={m} f={f} />
+                <ProductRanking rows={best} prevStart={report.prev_start} m={m} f={f} />
               </Section>
               <Section title={m.stats.worstSellers} hint={longEnough ? m.stats.worstSellersHint : undefined}>
                 {longEnough ? (
-                  <ProductRanking rows={slowest} m={m} f={f} />
+                  <ProductRanking rows={slowest} prevStart={report.prev_start} m={m} f={f} />
                 ) : (
                   <p className="surface-card px-5 py-5 text-sm text-muted-foreground">
                     {fmt(m.stats.worstSellersTooShort, { days })}
@@ -245,8 +269,9 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                           current={row.revenue}
                           previous={row.prev_revenue}
                           f={f}
-                          verdict={compareCounts(row.units, row.prev_units)}
+                          verdict={since(row)}
                           noiseLabel={m.stats.withinNoise}
+                          newLabel={newSince(row.first_sale)}
                           className="text-[13px]"
                         />
                       }
@@ -282,8 +307,9 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                             current={row.revenue}
                             previous={row.prev_revenue}
                             f={f}
-                            verdict={compareCounts(row.units, row.prev_units)}
+                            verdict={since(row)}
                             noiseLabel={m.stats.withinNoise}
+                            newLabel={newSince(row.first_sale)}
                             className="text-[13px]"
                           />
                         }
@@ -308,7 +334,7 @@ function summary(
   const { totals } = report;
   const revenue = f.euro(totals.revenue);
   const ratio = changeRatio(totals.revenue, totals.prev_revenue);
-  const verdict = compareCounts(totals.units, totals.prev_units);
+  const verdict = compareSince(totals.units, totals.prev_units, report.first_sale, report.prev_start);
   const unitRatio = changeRatio(totals.units, totals.prev_units);
   // The verdict counts pieces, the percentage counts euros, and the two can
   // point opposite ways when the mix shifts. Saying "a real increase" above a
@@ -318,7 +344,7 @@ function summary(
     ratio !== null && unitRatio !== null && (verdict === "up" || verdict === "down") && ratio * unitRatio < 0;
 
   const headline =
-    ratio === null
+    ratio === null || verdict === "new"
       ? fmt(m.stats.summaryNoCompare, { revenue })
       : verdict === "tooFew"
         ? fmt(m.stats.summaryTooFew, { revenue })
@@ -346,7 +372,7 @@ function summary(
     if (second && compareCounts(first.units, second.units) !== "up") {
       product = fmt(m.stats.summaryTie, { first: first.product_name!, second: second.product_name! });
     } else {
-      const bestVerdict = compareCounts(first.units, first.prev_units);
+      const bestVerdict = compareSince(first.units, first.prev_units, first.first_sale, report.prev_start);
       const bestRatio = changeRatio(first.units, first.prev_units);
       product =
         bestRatio !== null && (bestVerdict === "up" || bestVerdict === "down")
@@ -360,10 +386,12 @@ function summary(
 
 function ProductRanking({
   rows,
+  prevStart,
   m,
   f,
 }: {
   rows: StatsReport["by_product"];
+  prevStart: string;
   m: Awaited<ReturnType<typeof getI18n>>["m"];
   f: Awaited<ReturnType<typeof getI18n>>["f"];
 }) {
@@ -389,8 +417,9 @@ function ProductRanking({
                 current={row.units}
                 previous={row.prev_units}
                 f={f}
-                verdict={compareCounts(row.units, row.prev_units)}
+                verdict={compareSince(row.units, row.prev_units, row.first_sale, prevStart)}
                 noiseLabel={m.stats.withinNoise}
+                newLabel={row.first_sale ? fmt(m.stats.newSince, { date: f.dayMonth(row.first_sale) }) : undefined}
                 className="text-[13px]"
               />
             }

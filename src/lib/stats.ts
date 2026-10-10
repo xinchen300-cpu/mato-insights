@@ -20,12 +20,42 @@ const Z95 = 1.96;
 /** One-sided 5%/7: the best of seven weekdays has to clear a higher bar. */
 const Z_BEST_OF_7 = 2.45;
 
-export type Verdict = "tooFew" | "noise" | "up" | "down";
+/** "new": the selection only started selling after the earlier period began. */
+export type Verdict = "tooFew" | "new" | "noise" | "up" | "down";
 
 /** Compare two sales counts over equally long periods. */
 export function compareCounts(current: number, previous: number): Verdict {
   if (current + previous < MIN_SALES) return "tooFew";
   const z = (current - previous) / Math.sqrt(DISPERSION * (current + previous));
+  return z >= Z95 ? "up" : z <= -Z95 ? "down" : "noise";
+}
+
+/**
+ * compareCounts, unless the selection's first sale came after the earlier
+ * period began. That period was then partly empty, and the rise is the start,
+ * not growth: a machine placed on 15 September makes October look like +300%.
+ */
+export function compareSince(
+  current: number,
+  previous: number,
+  firstSale: string | null | undefined,
+  previousStart: string,
+): Verdict {
+  if (firstSale && new Date(firstSale) >= new Date(previousStart)) return "new";
+  return compareCounts(current, previous);
+}
+
+/**
+ * Two sales counts over periods of different length, such as a February
+ * against a January: what is compared is the rate per day. With equal lengths
+ * this is exactly compareCounts.
+ */
+export function compareRates(current: number, currentDays: number, previous: number, previousDays: number): Verdict {
+  if (current + previous < MIN_SALES) return "tooFew";
+  const rate = (current + previous) / (currentDays + previousDays);
+  const z =
+    (current / currentDays - previous / previousDays) /
+    Math.sqrt(DISPERSION * rate * (1 / currentDays + 1 / previousDays));
   return z >= Z95 ? "up" : z <= -Z95 ? "down" : "noise";
 }
 

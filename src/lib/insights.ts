@@ -1,4 +1,4 @@
-import { busiestWeekday, compareCounts, periodDays } from "@/lib/stats";
+import { busiestWeekday, compareCounts, compareSince, periodDays } from "@/lib/stats";
 import type { StatsReport } from "@/lib/types";
 
 // Plain-language observations, kept as data so each language renders its own
@@ -33,7 +33,7 @@ export function buildInsights(
     if (second && compareCounts(first.units, second.units) !== "up") {
       insights.push({ kind: "sharedLead", first: first.product_name!, second: second.product_name! });
     } else {
-      const verdict = compareCounts(first.units, first.prev_units);
+      const verdict = compareSince(first.units, first.prev_units, first.first_sale, month.prev_start);
       insights.push({
         kind: "bestSeller",
         product: first.product_name!,

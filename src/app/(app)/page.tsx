@@ -24,7 +24,7 @@ import {
 } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildInsights } from "@/lib/insights";
-import { compareCounts, fillDays, lastFullWeeks } from "@/lib/stats";
+import { compareSince, fillDays, lastFullWeeks } from "@/lib/stats";
 import { terminalStatus } from "@/lib/terminal-status";
 import { getCurrentOrgId, isOperator } from "@/lib/org";
 import { fillLevel, needsAttention } from "@/lib/stock";
@@ -213,13 +213,16 @@ export default async function OverviewPage() {
   const onlineCount = counted.filter(
     (mc) => terminalStatus(mc.last_connected_at, mc.last_disconnected_at) === "online",
   ).length;
-  const notes = { tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise };
+  // Something that only began selling after the earlier period started gets
+  // "new since …" instead of a percentage against a half-empty period.
+  const newSince = (firstSale: string | null) =>
+    firstSale ? fmt(m.stats.newSince, { date: f.dayMonth(firstSale) }) : undefined;
   const compareOf = (report: typeof month, label?: string) => ({
     current: report.totals.revenue,
     previous: report.totals.prev_revenue,
     label,
-    verdict: compareCounts(report.totals.units, report.totals.prev_units),
-    notes,
+    verdict: compareSince(report.totals.units, report.totals.prev_units, report.first_sale, report.prev_start),
+    notes: { tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise, new: newSince(report.first_sale) },
   });
 
   return (
@@ -301,8 +304,9 @@ export default async function OverviewPage() {
                       current={row.revenue}
                       previous={row.prev_revenue}
                       f={f}
-                      verdict={compareCounts(row.units, row.prev_units)}
+                      verdict={compareSince(row.units, row.prev_units, row.first_sale, month.prev_start)}
                       noiseLabel={m.stats.withinNoise}
+                      newLabel={newSince(row.first_sale)}
                       className="text-[13px]"
                     />
                   }

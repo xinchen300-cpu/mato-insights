@@ -1,5 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getScope } from "@/lib/org";
+import { DISPLAY_TIME_ZONE } from "@/i18n/format";
+import { reportDay } from "@/lib/stats";
 import type {
   Producer,
   RunSummaryRow,
@@ -116,6 +118,67 @@ export async function getStatsReport(orgId: string, filters: StatsFilters): Prom
   });
   if (error) throw new Error(error.message);
   return data as StatsReport;
+}
+
+export type MonthTotals = {
+  /** "2026-09" */
+  month: string;
+  /** Days the month counts: all of them once it is over, up to today while it runs. */
+  days: number;
+  complete: boolean;
+  revenue: number;
+  units: number;
+};
+
+const lastDayOf = (month: string) =>
+  `${month}-${String(new Date(Date.UTC(+month.slice(0, 4), +month.slice(5, 7), 0)).getUTCDate()).padStart(2, "0")}`;
+
+/**
+ * One calendar year month by month, plus the December before it so January
+ * has something to be compared with. Every month is an ordinary stats report,
+ * so scoping, start dates and the € 0 rule are exactly those of every other
+ * figure: nothing here counts sales on its own.
+ */
+export async function getMonthlyReport(
+  orgId: string,
+  filters: Pick<StatsFilters, "machines" | "businesses" | "products">,
+  year: number,
+): Promise<{ months: MonthTotals[]; firstSale: string | null }> {
+  const today = reportDay(new Date(), DISPLAY_TIME_ZONE);
+  const thisMonth = today.slice(0, 7);
+  const months: string[] = [];
+  for (let i = 0; i <= 12; i++) {
+    const month = new Date(Date.UTC(year - 1, 11 + i, 1)).toISOString().slice(0, 7);
+    if (month > thisMonth) break;
+    months.push(month);
+  }
+
+  const reports = await Promise.all(
+    months.map((month) =>
+      getStatsReport(orgId, {
+        machines: filters.machines,
+        businesses: filters.businesses,
+        products: filters.products,
+        period: "custom",
+        from: `${month}-01`,
+        to: month < thisMonth ? lastDayOf(month) : today,
+      }),
+    ),
+  );
+
+  return {
+    months: months.map((month, i) => {
+      const complete = month < thisMonth;
+      return {
+        month,
+        days: Number((complete ? lastDayOf(month) : today).slice(8, 10)),
+        complete,
+        revenue: Number(reports[i].totals.revenue),
+        units: Number(reports[i].totals.units),
+      };
+    }),
+    firstSale: reports[0]?.first_sale ?? null,
+  };
 }
 
 // One literal: Supabase types the result by parsing this string.

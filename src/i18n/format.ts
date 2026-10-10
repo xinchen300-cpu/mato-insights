@@ -35,6 +35,8 @@ export function makeFormatters(locale: Locale) {
   const date = new Intl.DateTimeFormat(tag, { day: "numeric", month: "short", year: "numeric", timeZone });
   const dayMonth = new Intl.DateTimeFormat(tag, { day: "numeric", month: "short", timeZone });
   const monthYear = new Intl.DateTimeFormat(tag, { month: "2-digit", year: "numeric", timeZone });
+  const monthLong = new Intl.DateTimeFormat(tag, { month: "long", timeZone });
+  const monthShort = new Intl.DateTimeFormat(tag, { month: "short", timeZone });
   const dateTime = new Intl.DateTimeFormat(tag, {
     day: "numeric",
     month: "short",
@@ -55,6 +57,9 @@ export function makeFormatters(locale: Locale) {
     dayMonth: (value: string | Date) => dayMonth.format(new Date(value)),
     /** "10/2026": enough for food that keeps for months. */
     monthYear: (value: string | Date) => monthYear.format(new Date(value)),
+    /** A calendar month ("2026-09") by name: "september", "sep". */
+    monthLong: (month: string) => monthLong.format(new Date(`${month}-15T12:00:00Z`)),
+    monthShort: (month: string) => monthShort.format(new Date(`${month}-15T12:00:00Z`)),
     dateTime: (value: string | Date) => dateTime.format(new Date(value)),
     /** "3 minutes ago", "yesterday", … Only render this on the server. */
     relative: (value: string | Date) => {

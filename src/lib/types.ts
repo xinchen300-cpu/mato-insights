@@ -16,12 +16,19 @@ export type StatsReport = {
   cur_end: string;
   prev_start: string;
   prev_end: string;
+  /** The selection's first counted sale ever, with the same filters and start dates. */
+  first_sale: string | null;
   totals: Totals;
   by_day: { day: string; revenue: number; units: number }[];
   by_hour: { hour: number; revenue: number; units: number }[];
   by_weekday: { weekday: number; revenue: number; units: number }[];
-  by_machine: ({ machine_id: string; machine_name: string; business_name: string | null } & Totals)[];
-  by_product: ({ product_id: string | null; product_name: string | null; photo_path: string | null } & Totals)[];
+  by_machine: ({ machine_id: string; machine_name: string; business_name: string | null; first_sale: string | null } & Totals)[];
+  by_product: ({
+    product_id: string | null;
+    product_name: string | null;
+    photo_path: string | null;
+    first_sale: string | null;
+  } & Totals)[];
 };
 
 export type Machine = {

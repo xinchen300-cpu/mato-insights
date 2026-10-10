@@ -8,7 +8,9 @@ const FLAT = 0.02;
 
 /**
  * A percentage change. With a verdict, only a real change gets colour and an
- * arrow; normal swing shows grey with a "~", and too few sales shows nothing.
+ * arrow; normal swing shows grey with a "≈", and too few sales shows nothing.
+ * Something that only started selling during the earlier period gets no
+ * percentage at all, only its grey "new since" label.
  */
 export function Delta({
   current,
@@ -16,6 +18,7 @@ export function Delta({
   f,
   verdict,
   noiseLabel,
+  newLabel,
   className,
 }: {
   current: number;
@@ -24,8 +27,15 @@ export function Delta({
   verdict?: Verdict;
   /** Tooltip for a change that is within normal swing. */
   noiseLabel?: string;
+  /** Shown instead of a percentage when the verdict is "new". */
+  newLabel?: string;
   className?: string;
 }) {
+  if (verdict === "new") {
+    return newLabel ? (
+      <span className={cn("text-sm font-medium text-muted-foreground", className)}>{newLabel}</span>
+    ) : null;
+  }
   const ratio = changeRatio(current, previous);
   if (ratio === null || verdict === "tooFew") return null;
 

@@ -1,4 +1,6 @@
 import type { StatsFilters } from "@/lib/data";
+import { DISPLAY_TIME_ZONE } from "@/i18n/format";
+import { reportDay } from "@/lib/stats";
 import { PERIODS, type Period } from "@/lib/types";
 
 export type StatsSearchParams = {
@@ -8,6 +10,8 @@ export type StatsSearchParams = {
   business?: string;
   machine?: string;
   product?: string;
+  /** The year the month-by-month overview shows. */
+  year?: string;
 };
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -20,6 +24,9 @@ export function parseStatsParams(params: StatsSearchParams) {
   const business = params.business && UUID.test(params.business) ? params.business : null;
   const machine = params.machine && UUID.test(params.machine) ? params.machine : null;
   const product = params.product && UUID.test(params.product) ? params.product : null;
+  const thisYear = Number(reportDay(new Date(), DISPLAY_TIME_ZONE).slice(0, 4));
+  const asked = params.year && /^\d{4}$/.test(params.year) ? Number(params.year) : thisYear;
+  const year = Math.min(Math.max(asked, 2000), thisYear);
 
   const filters: StatsFilters = {
     period: period === "custom" && (!from || !to) ? "last30" : period,
@@ -29,7 +36,7 @@ export function parseStatsParams(params: StatsSearchParams) {
     machines: machine ? [machine] : null,
     products: product ? [product] : null,
   };
-  return { period, from, to, business, machine, product, filters };
+  return { period, from, to, business, machine, product, year, thisYear, filters };
 }
 
 export function compareLabelKey(period: Period) {

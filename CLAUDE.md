@@ -46,8 +46,11 @@ defecten waarvan 11 door de fixes zelf waren veroorzaakt.
 ranking suggereert loopt door `src/lib/stats.ts` — `compareCounts` (tooFew / noise / up /
 down; onder 30 sales geen uitspraak; z = diff / √(4·(a+b)) ≥ 1,96) en `busiestWeekday`
 (minstens 4 van elke weekdag, Bonferroni-verhoogde lat voor een best-of-7). Weekdagen zijn
-gemiddelden per voorkomende dag, nooit totalen. Ruis toon je grijs met "~" en leg je uit,
-nooit gekleurd. Vending-verkoop spreidt ~4× breder dan Poisson: dat is gemeten op MATO's
+gemiddelden per voorkomende dag, nooit totalen. Ruis toon je grijs met "≈" en leg je uit,
+nooit gekleurd. Begon de selectie pas te verkopen na het begin van de vorige periode, dan geen
+% maar "Nieuw sinds …" (`compareSince`, op `first_sale` uit `stats_report`): een automaat van
+15 september maakt oktober anders +300%. Perioden van ongelijke lengte (maanden) vergelijk je
+per dag met `compareRates`. Vending-verkoop spreidt ~4× breder dan Poisson: dat is gemeten op MATO's
 eigen data, verzin er geen andere factor bij. Houd de tabel in de "Zo lees je deze cijfers"-
 gids gegenereerd uit `detectableChange`, zodat les en app elkaar niet kunnen tegenspreken.
 
