@@ -536,6 +536,7 @@ export const nl: Messages = {
     create: "Account aanmaken",
     creating: "Aanmaken…",
     passwordHint: "Minstens 8 tekens",
+    passwordLeaked: "Dit wachtwoord dook op in een gekend datalek. Kies een ander.",
     checkInbox: "Kijk in je mailbox",
     checkInboxHint: "We stuurden een link naar {email}. Open die en log dan hier in.",
     toSignIn: "Naar inloggen",

@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n/client";
+import { isLeakedPassword } from "@/lib/pwned";
 import { createClient } from "@/lib/supabase/client";
 
 /** The one-time code out of a mailed link, whatever shape the link has. */
@@ -43,6 +44,7 @@ export function NewPasswordForm() {
   const searchParams = useSearchParams();
   const [state, setState] = useState<"checking" | "ready" | "paste" | "saving" | "expired">("checking");
   const [pasteError, setPasteError] = useState(false);
+  const [leaked, setLeaked] = useState(false);
 
   /** Trade a one-time code for a session, without any redirect. */
   async function use(token: string) {
@@ -81,9 +83,11 @@ export function NewPasswordForm() {
 
   async function submit(formData: FormData) {
     setState("saving");
-    const { error } = await createClient().auth.updateUser({
-      password: String(formData.get("password")),
-    });
+    const password = String(formData.get("password"));
+    const isLeaked = await isLeakedPassword(password);
+    setLeaked(isLeaked);
+    if (isLeaked) return setState("ready");
+    const { error } = await createClient().auth.updateUser({ password });
     if (error) return setState("expired");
     router.push("/");
     router.refresh();
@@ -147,6 +151,7 @@ export function NewPasswordForm() {
           />
           <span className={authFieldHint}>{m.auth.passwordHint}</span>
         </div>
+        {leaked && <p className={authError}>{m.auth.passwordLeaked}</p>}
         <Button type="submit" size="lg" disabled={state !== "ready"} className="mt-1 w-full">
           {state === "saving" ? m.auth.resetSaving : m.auth.resetSave}
         </Button>

@@ -536,6 +536,7 @@ export const en = {
     create: "Create account",
     creating: "Creating…",
     passwordHint: "At least 8 characters",
+    passwordLeaked: "This password has turned up in a known data breach. Choose another one.",
     checkInbox: "Check your inbox",
     checkInboxHint: "We sent a link to {email}. Open it, then sign in here.",
     toSignIn: "Go to sign in",

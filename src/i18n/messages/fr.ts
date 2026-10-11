@@ -536,6 +536,7 @@ export const fr: Messages = {
     create: "Créer le compte",
     creating: "Création…",
     passwordHint: "Au moins 8 caractères",
+    passwordLeaked: "Ce mot de passe figure dans une fuite de données connue. Choisissez-en un autre.",
     checkInbox: "Vérifiez votre boîte mail",
     checkInboxHint: "Nous avons envoyé un lien à {email}. Ouvrez-le, puis connectez-vous ici.",
     toSignIn: "Vers la connexion",

@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
+import { isLeakedPassword } from "@/lib/pwned";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { checkInvite } from "./actions";
@@ -33,15 +34,20 @@ export function SignupForm() {
     setLoading(true);
     setError(null);
     const email = String(formData.get("email"));
+    const password = String(formData.get("password"));
 
     if (!(await checkInvite(email))) {
       setLoading(false);
       return setError(m.auth.notInvited);
     }
+    if (await isLeakedPassword(password)) {
+      setLoading(false);
+      return setError(m.auth.passwordLeaked);
+    }
 
     const { data, error } = await createClient().auth.signUp({
       email,
-      password: String(formData.get("password")),
+      password,
       options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     });
     setLoading(false);
