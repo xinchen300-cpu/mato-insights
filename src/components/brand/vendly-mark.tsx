@@ -1,61 +1,46 @@
-/**
- * The mark: a machine's face in ink, with three columns rising inside it — and
- * the tallest breaking out through the top. That is the whole product in one
- * shape: what the machines sell, and the one number that goes past what you
- * can see from the front. Gold is the site's gold, used generously.
- */
+// Xin's Vendly logo (11-10-2026): "vendly" in Inter between two gold brackets,
+// and [v] as the mark. The source files, ready for print and ads, are in
+// public/brand. Drawn inline so it stays sharp and needs no extra request; the
+// text is pinned to its measured width (textLength) so the brackets sit right
+// even before Inter has loaded.
+
+const GOLD = "#A6752C";
+const INK = "#2A2520";
+
+/** [v]: the mark on its own, for small places. */
 export function VendlyMark({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden="true">
-      <defs>
-        <linearGradient id="vendly-gold" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0" stopColor="#a97a1f" />
-          <stop offset="1" stopColor="#c99a3d" />
-        </linearGradient>
-      </defs>
-      {/* the cabinet */}
-      <path d="M4 6h24v24H4z" fill="#1c1812" />
-      {/* two columns inside it */}
-      <path d="M8.5 18h4v8h-4zM14 13h4v13h-4z" fill="url(#vendly-gold)" />
-      {/* the third rises past the top edge */}
-      <path d="M19.5 2h4v24h-4z" fill="#c99a3d" />
+    <svg viewBox="14 15 92 60" className={className} aria-hidden="true">
+      <path d="M34,20 L20,20 L20,70 L34,70" fill="none" stroke={GOLD} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M86,20 L100,20 L100,70 L86,70" fill="none" stroke={GOLD} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+      <text
+        x="60"
+        y="61"
+        textAnchor="middle"
+        fill={INK}
+        style={{ fontFamily: "var(--font-inter), Inter, sans-serif", fontWeight: 600, fontSize: 44, letterSpacing: -1.3 }}
+      >
+        v
+      </text>
     </svg>
   );
 }
 
-/**
- * The Vendly logo: the mark, and VENDLY beside it in the logo's own face
- * (Montserrat, bold, set wide). One SVG, so the two never drift apart, it stays
- * sharp at any size, and the word follows the text colour.
- */
+/** [vendly]: the logo. The word takes the text colour; the brackets stay gold. */
 export function VendlyWordmark({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 1480 260"
-      role="img"
-      aria-label="Vendly"
-      className={className ?? "h-[28px] w-auto text-foreground"}
-    >
-      <defs>
-        <linearGradient id="vendly-wordmark-gold" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0" stopColor="#a97a1f" />
-          <stop offset="1" stopColor="#c99a3d" />
-        </linearGradient>
-      </defs>
-      <g transform="scale(8.125)">
-        <path d="M4 6h24v24H4z" fill="currentColor" />
-        <path d="M8.5 18h4v8h-4zM14 13h4v13h-4z" fill="url(#vendly-wordmark-gold)" />
-        <path d="M19.5 2h4v24h-4z" fill="#c99a3d" />
-      </g>
+    <svg viewBox="4 16 189 58" role="img" aria-label="Vendly" className={className ?? "h-[30px] w-auto text-[#2a2520]"}>
+      <path d="M22,20 L8,20 L8,70 L22,70" fill="none" stroke={GOLD} strokeWidth="4.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M175,20 L189,20 L189,70 L175,70" fill="none" stroke={GOLD} strokeWidth="4.6" strokeLinecap="round" strokeLinejoin="round" />
       <text
-        x="320"
-        y="244"
-        textLength="1160"
+        x="34"
+        y="61"
+        textLength="129"
         lengthAdjust="spacing"
         fill="currentColor"
-        style={{ fontFamily: "var(--font-montserrat), Montserrat, sans-serif", fontWeight: 700, fontSize: 252 }}
+        style={{ fontFamily: "var(--font-inter), Inter, sans-serif", fontWeight: 600, fontSize: 42, letterSpacing: -1.26 }}
       >
-        VENDLY
+        vendly
       </text>
     </svg>
   );
