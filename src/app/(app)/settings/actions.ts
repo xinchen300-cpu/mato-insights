@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getCurrentBusinessId, getCurrentOrgId, requireOperator } from "@/lib/org";
+import { denyFillerAccess, getCurrentBusinessId, getCurrentOrgId, requireOperator } from "@/lib/org";
 import { triggerPayterSync } from "@/lib/sync";
 
 async function requireOrgId() {
@@ -102,6 +102,8 @@ export async function saveRunCost(perHour: number, perKm: number): Promise<boole
 /** Remember this browser as somewhere Vendly may send a notification. */
 export async function rememberDevice(sub: { endpoint: string; p256dh: string; auth: string; label: string }) {
   const orgId = await requireOrgId();
+  // The evening digest is the operator's or a shop's; a filler gets none.
+  await denyFillerAccess();
   const businessId = await getCurrentBusinessId();
   if (!sub.endpoint || !sub.p256dh || !sub.auth) return;
 
@@ -123,5 +125,6 @@ export async function rememberDevice(sub: { endpoint: string; p256dh: string; au
 
 export async function forgetDevice(endpoint: string) {
   const orgId = await requireOrgId();
+  await denyFillerAccess();
   await createAdminClient().from("push_subscriptions").delete().eq("endpoint", endpoint).eq("org_id", orgId);
 }

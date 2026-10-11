@@ -42,6 +42,7 @@ async function recompute(token: string, packed: string[]): Promise<RefillLine[] 
     .from("refill_sheets")
     .select("id, org_id, machine_ids, lines, completed_at")
     .eq("share_token", token)
+    .eq("flow_version", 1)
     .maybeSingle();
   if (!sheet || sheet.completed_at) return null;
 
@@ -75,6 +76,7 @@ export async function saveBox(token: string, box: Record<string, number>) {
     .from("refill_sheets")
     .update({ box: clean })
     .eq("share_token", token)
+    .eq("flow_version", 1)
     .is("completed_at", null);
 }
 

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getI18n } from "@/i18n/server";
-import { getCurrentOrgId, isOperator } from "@/lib/org";
+import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
 import { paymentsEnabled } from "@/lib/billing";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Wizard } from "./wizard";
@@ -11,6 +11,7 @@ export async function generateMetadata() {
 }
 
 export default async function WelcomePage({ searchParams }: { searchParams: Promise<{ betaald?: string }> }) {
+  await denyFiller();
   const orgId = await getCurrentOrgId();
   if (!orgId) redirect("/login");
   // Setting up the fleet is the operator's job; a shop account has no business here.

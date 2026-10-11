@@ -5,8 +5,8 @@ import { EmptyState, PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getMachines, getMachineStock, getRefillSheets, getShortages, getStatsReport } from "@/lib/data";
-import { isOperator, requireOrgId } from "@/lib/org";
+import { getMachines, getMachineStock, getOpenRounds, getRefillSheets, getShortages, getStatsReport, type OpenRound } from "@/lib/data";
+import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fillLevel, needsAttention } from "@/lib/stock";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
@@ -20,7 +20,52 @@ export async function generateMetadata() {
 
 export default async function RefillPage() {
   const { m, f } = await getI18n();
+  // A filler gets their own view of the refill work: rounds and pieces, no money.
+  if (await isFiller()) {
+    const fillerOrg = await requireRefillAccess();
+    const [rounds, fleet, slots] = await Promise.all([
+      getOpenRounds(fillerOrg),
+      getMachines(fillerOrg),
+      getMachineStock(fillerOrg),
+    ]);
+    const pieces = new Map<string, { toAdd: number; counted: number; low: number }>();
+    for (const slot of slots) {
+      if (!slot.product_id) continue;
+      const entry = pieces.get(slot.machine_id) ?? { toAdd: 0, counted: 0, low: 0 };
+      if (needsAttention(fillLevel(slot.stock, slot.capacity))) entry.low += 1;
+      if (slot.stock !== null) {
+        entry.counted += 1;
+        entry.toAdd += slot.capacity - slot.stock;
+      }
+      pieces.set(slot.machine_id, entry);
+    }
+    const choices = fleet
+      .filter((mc) => pieces.has(mc.id))
+      .map((mc) => {
+        const p = pieces.get(mc.id)!;
+        return {
+          id: mc.id,
+          name: mc.name,
+          low: p.low > 0,
+          hint: p.counted === 0 ? m.overview.stockUnknown : fmt(m.refill.items, { count: p.toAdd }),
+        };
+      });
+    return (
+      <>
+        <PageHeader title={m.refill.title} />
+        <div className="flex flex-col gap-10">
+          <OpenRounds rounds={rounds} m={m} f={f} />
+          {choices.length > 0 ? (
+            <MachinePicker machines={choices} />
+          ) : (
+            <EmptyState title={m.team.fillerWelcome} hint={m.team.fillerWelcomeHint} icon={<ClipboardList className="size-5" />} />
+          )}
+        </div>
+      </>
+    );
+  }
   const orgId = await requireOrgId();
+  const openRounds = (await isOperator()) ? await getOpenRounds(orgId) : [];
   const [machines, stock, sheets, shortages, { data: org }, weeks] = await Promise.all([
     getMachines(orgId),
     getMachineStock(orgId),
@@ -147,6 +192,7 @@ export default async function RefillPage() {
       <PageHeader title={m.refill.title} />
 
       <div className="flex flex-col gap-10">
+        <OpenRounds rounds={openRounds} m={m} f={f} />
         {!(await isOperator()) ? (
           <p className="max-w-[60ch] px-1 text-[15px] text-muted-foreground">{m.refill.operatorOnly}</p>
         ) : pickable.length === 0 ? (
@@ -249,5 +295,44 @@ export default async function RefillPage() {
         </Section>
       </div>
     </>
+  );
+}
+
+/** Rounds started but not finished: tap to carry on filling. */
+function OpenRounds({
+  rounds,
+  m,
+  f,
+}: {
+  rounds: OpenRound[];
+  m: Awaited<ReturnType<typeof getI18n>>["m"];
+  f: Awaited<ReturnType<typeof getI18n>>["f"];
+}) {
+  if (rounds.length === 0) return null;
+  return (
+    <Section title={m.refill.openRounds}>
+      <RowList>
+        {rounds.map((round) => (
+          <li key={round.id}>
+            <ListRow
+              href={`/vullen/${round.id}`}
+              leading={
+                <Avatar tone={round.readyAt ? "warning" : "neutral"}>
+                  <ClipboardList />
+                </Avatar>
+              }
+              title={f.dateTime(round.createdAt)}
+              subtitle={round.machines.map((machine) => machine.name).join(", ")}
+              value={fmt(m.refill.roundProgress, {
+                done: round.machines.filter((machine) => machine.done).length,
+                total: round.machines.length,
+              })}
+              valueSub={<span className="text-muted-foreground">{round.readyAt ? m.refill.roundUnderway : m.refill.roundPicking}</span>}
+              chevron
+            />
+          </li>
+        ))}
+      </RowList>
+    </Section>
   );
 }

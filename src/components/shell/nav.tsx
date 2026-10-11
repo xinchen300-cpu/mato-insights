@@ -22,18 +22,21 @@ const items: { href: string; label: keyof Messages["nav"]; icon: LucideIcon }[] 
   { href: "/statistics", label: "statistics", icon: ChartColumn },
 ];
 
+/** What a filler may open: the refill work and nothing else. */
+const fillerItems = items.filter((item) => item.href === "/refill");
+
 function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
 }
 
 /** The left rail on large screens: icon and word, the current page on a soft grey. */
-export function SidebarNav() {
+export function SidebarNav({ filler = false }: { filler?: boolean }) {
   const pathname = usePathname();
   const { m } = useI18n();
 
   return (
     <nav className="flex flex-col gap-1">
-      {items.map(({ href, label, icon: Icon }) => {
+      {(filler ? fillerItems : items).map(({ href, label, icon: Icon }) => {
         const active = isActive(pathname, href);
         return (
           <Link
@@ -57,9 +60,11 @@ export function SidebarNav() {
 }
 
 /** Phones and tablets: a tab bar at the thumb, like a native app. */
-export function MobileNav() {
+export function MobileNav({ filler = false }: { filler?: boolean }) {
   const pathname = usePathname();
   const { m } = useI18n();
+  // One destination needs no tab bar.
+  if (filler) return null;
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">

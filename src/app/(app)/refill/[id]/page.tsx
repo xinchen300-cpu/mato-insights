@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { CircleCheck, FileSpreadsheet, Printer } from "lucide-react";
 import { KpiHero } from "@/components/kpi";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
@@ -8,8 +8,9 @@ import { SheetTables } from "@/components/refill/sheet-tables";
 import { buttonVariants } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getRefillSheet, getRunSummary } from "@/lib/data";
-import { requireOrgId } from "@/lib/org";
+import { getMachines, getRefillSheet, getRunSummary } from "@/lib/data";
+import { linesToFill } from "@/lib/refill";
+import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
 import { cn } from "@/lib/utils";
 import { NotesForm } from "./notes-form";
 import { RunReport } from "./run-report";
@@ -22,6 +23,11 @@ export async function generateMetadata() {
 
 export default async function RefillSheetPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  // The operator's view of a round (notes, links, report). A filler fills it.
+  if (await isFiller()) {
+    await requireRefillAccess();
+    redirect(/^[0-9a-f-]{36}$/i.test(id) ? `/vullen/${id}` : "/refill");
+  }
   const { m, f } = await getI18n();
   const orgId = await requireOrgId();
 
@@ -30,6 +36,11 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
 
   // Only a closed run has something to report.
   const summary = sheet.completed_at ? await getRunSummary(orgId, sheet.id) : [];
+  // A stop with nothing to fill has no line to borrow a name from.
+  const step = sheet.flow_version === 2;
+  // A shop follows the round; doing it is for the operator and their fillers.
+  const canFill = step && (await isOperator());
+  const machineName = new Map(step ? (await getMachines(orgId)).map((machine) => [machine.id, machine.name]) : []);
 
   const total = sheet.lines.reduce((sum, l) => sum + l.to_add, 0);
 
@@ -39,8 +50,9 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
   // that dropped out of the plan would otherwise render as a nameless "—".
   // A product that dropped out of the plan is still in the van, so it stays on
   // the list with a dash for a name. Hiding it would claim an empty cool box.
+  // Flow 2 keys the box per machine and product; flow 1 per product.
   const box = Object.entries(sheet.box ?? {})
-    .map(([id, qty]) => ({ id, name: nameOf.get(id) ?? "—", qty }))
+    .map(([key, qty]) => ({ id: key, name: nameOf.get(step ? key.split(":")[1] : key) ?? "—", qty }))
     .sort((a, b) => b.qty - a.qty);
 
   const minutes =
@@ -89,7 +101,7 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
       )}
 
       <div className="grid gap-10 lg:grid-cols-[1.5fr_1fr] lg:gap-8">
-        <SheetTables lines={sheet.lines} m={m} />
+        <SheetTables lines={linesToFill(sheet.lines)} m={m} />
         {/* On a phone an open sheet leads with what the operator does next:
             share it, leave a note. A closed one leads with the list. */}
         <div
@@ -98,11 +110,49 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
             !sheet.completed_at && "order-first lg:order-none",
           )}
         >
-          {!sheet.completed_at && sheet.share_token && (
+          {!sheet.completed_at && canFill && (
+            <section className="surface-card flex flex-col gap-3 p-5 sm:p-6">
+              <p className="text-[14.5px] text-muted-foreground">{m.refill.fillerFindsIt}</p>
+              <Link href={`/vullen/${sheet.id}`} className={buttonVariants({ size: "lg" })}>
+                {m.refill.fillYourself}
+              </Link>
+            </section>
+          )}
+          {!sheet.completed_at && !step && sheet.share_token && (
             <section className="surface-card p-5 sm:p-6">
               <h2 className="mb-3 text-[18px] font-semibold tracking-[-0.02em]">{m.refill.share}</h2>
               <ShareBox token={sheet.share_token} />
             </section>
+          )}
+          {step && (
+            <Section title={m.refill.stopsTitle}>
+              <RowList>
+                {sheet.machine_ids.map((machineId) => {
+                  const stop = sheet.stops?.[machineId];
+                  const name =
+                    machineName.get(machineId) ??
+                    sheet.lines.find((line) => line.machine_id === machineId)?.machine_name ??
+                    "—";
+                  return (
+                    <li key={machineId}>
+                      <ListRow
+                        leading={
+                          <Avatar tone={stop?.completedAt ? (stop.skipped ? "warning" : "positive") : "neutral"}>
+                            {stop?.completedAt && !stop.skipped ? <CircleCheck /> : initial(name)}
+                          </Avatar>
+                        }
+                        title={name}
+                        value={
+                          <span className="text-[13.5px] font-medium text-muted-foreground">
+                            {stop?.completedAt ? (stop.skipped ? m.refill.stopSkipped : m.refill.stopDone) : m.refill.stopOpen}
+                          </span>
+                        }
+                      />
+                    </li>
+                  );
+                })}
+              </RowList>
+            </Section>
           )}
           {(minutes !== null || sheet.km !== null || sheet.filled_by) && (
             <Section title={m.refill.runFacts}>

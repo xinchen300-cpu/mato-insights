@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/page-header";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getMachine, getMachineStock, getProducts, getShelfLifePresets } from "@/lib/data";
-import { requireOrgId } from "@/lib/org";
+import { denyFiller, requireOrgId } from "@/lib/org";
 import { StockForm } from "./stock-form";
 
 export async function generateMetadata() {
@@ -18,6 +18,7 @@ export default async function RefillMachinePage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ mode?: string }>;
 }) {
+  await denyFiller();
   const [{ id }, { mode: rawMode }] = await Promise.all([params, searchParams]);
   const mode = rawMode === "correction" ? "correction" : "refill";
   const { m } = await getI18n();

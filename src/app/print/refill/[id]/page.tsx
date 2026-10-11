@@ -4,7 +4,8 @@ import { SheetTables } from "@/components/refill/sheet-tables";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getRefillSheet } from "@/lib/data";
-import { requireOrgId } from "@/lib/org";
+import { denyFiller, requireOrgId } from "@/lib/org";
+import { linesToFill } from "@/lib/refill";
 import { AutoPrint } from "./auto-print";
 
 export async function generateMetadata() {
@@ -14,6 +15,7 @@ export async function generateMetadata() {
 
 // A4, black on white, with tick boxes: printed or saved as PDF from the browser.
 export default async function PrintRefillSheetPage({ params }: { params: Promise<{ id: string }> }) {
+  await denyFiller();
   const { id } = await params;
   const { m, f } = await getI18n();
   const orgId = await requireOrgId();
@@ -42,7 +44,7 @@ export default async function PrintRefillSheetPage({ params }: { params: Promise
           <p className="whitespace-pre-wrap">{sheet.notes}</p>
         </div>
       )}
-      <SheetTables lines={sheet.lines} m={m} printable />
+      <SheetTables lines={linesToFill(sheet.lines)} m={m} printable />
     </div>
   );
 }

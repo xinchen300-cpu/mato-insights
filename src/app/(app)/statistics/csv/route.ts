@@ -1,11 +1,12 @@
 import { csvResponse } from "@/lib/csv";
 import { getStatsReport } from "@/lib/data";
 import { getI18n } from "@/i18n/server";
-import { requireOrgId } from "@/lib/org";
+import { denyFiller, requireOrgId } from "@/lib/org";
 import { parseStatsParams } from "@/lib/stats-params";
 import { reportDay } from "@/lib/stats";
 
 export async function GET(request: Request) {
+  await denyFiller();
   const { m } = await getI18n();
   const orgId = await requireOrgId();
   const params = Object.fromEntries(new URL(request.url).searchParams);

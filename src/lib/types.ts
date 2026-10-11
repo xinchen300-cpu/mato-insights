@@ -1,3 +1,5 @@
+import type { StopRecord } from "@/lib/refill-flow";
+
 export type Period = "today" | "week" | "month" | "last30" | "custom";
 export const PERIODS: Period[] = ["today", "week", "month", "last30", "custom"];
 
@@ -149,6 +151,10 @@ export type RefillSheet = {
   km: number | null;
   /** Pieces per product the filler has taken from the fridge so far. */
   box: Record<string, number>;
+  /** 1: filled through a share link at once. 2: step by step in Vendly, per stop. */
+  flow_version: number;
+  /** Flow 2: per machine id, when it was finished or skipped. */
+  stops: Record<string, StopRecord>;
 };
 
 export type Producer = {

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { ChevronDown, CircleAlert, KeyRound, LayoutTemplate, Nfc, PlugZap, RefreshCw, Trash2, Users } from "lucide-react";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { PageHeader, Section } from "@/components/page-header";
@@ -14,11 +15,13 @@ import {
   getLayoutTemplates,
   getMachines,
   getShelfLifePresets,
+  getTeam,
 } from "@/lib/data";
 import { mediaUrl } from "@/lib/media";
 import { getBilling, linkedMachineCount, paymentsEnabled } from "@/lib/billing";
-import { getCurrentOrgId, isOperator } from "@/lib/org";
+import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { connectPayter, deleteTemplate } from "./actions";
 import { CostForm } from "./cost-form";
@@ -26,6 +29,7 @@ import { NotifyToggle } from "./notify-toggle";
 import { ShelfLifePresets } from "./shelf-life-presets";
 import { SubscriptionPanel } from "./subscription-panel";
 import { SyncNowButton } from "./sync-now-button";
+import { TeamPanel } from "./team-panel";
 import { LanguageToggle } from "@/components/shell/language-toggle";
 
 export async function generateMetadata() {
@@ -34,6 +38,7 @@ export async function generateMetadata() {
 }
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ betaald?: string }> }) {
+  await denyFiller();
   const { m, f } = await getI18n();
   const orgId = await getCurrentOrgId();
   const admin = createAdminClient();
@@ -72,6 +77,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
   const payterConnected = Boolean(credentials || vendor?.is_demo);
 
+  // Who is in this organisation: the operator's to see and change.
+  const team = operator && orgId ? await getTeam(orgId) : null;
+  const {
+    data: { user },
+  } = await (await createClient()).auth.getUser();
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  const signupUrl = `${requestHeaders.get("x-forwarded-proto") ?? "https"}://${host}/signup`;
+
   return (
     <div className="max-w-2xl">
       <PageHeader title={m.settings.title} actions={<LanguageToggle />} />
@@ -107,6 +121,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               </li>
             </RowList>
           </Section>
+        )}
+
+        {team && (
+          <TeamPanel members={team.members} invites={team.invites} youId={user?.id ?? null} signupUrl={signupUrl} />
         )}
 
         <Section title={m.settings.payter}>

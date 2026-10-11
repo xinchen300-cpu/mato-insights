@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { isOperator, requireOrgId } from "@/lib/org";
+import { isOperator, requireOperator, requireOrgId } from "@/lib/org";
 import { getMachine, requireMachineAccess, requireProductAccess } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MACHINE_TYPES, SLOT_SIZES, type LayoutRowSpec, type MachineType, type SlotSize } from "@/lib/types";
@@ -151,6 +151,8 @@ export async function saveLayout(
 
 export async function saveLayoutTemplate(name: string, type: MachineType, rows: LayoutRowSpec[]) {
   const orgId = await requireOrgId();
+  // A template is the whole organisation's, so it is the operator's to add.
+  await requireOperator();
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Name is required");
 

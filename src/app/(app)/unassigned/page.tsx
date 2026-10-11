@@ -2,7 +2,7 @@ import { CircleCheck, Info } from "lucide-react";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { getI18n } from "@/i18n/server";
 import { getPriceMismatches, getProducts, getUnassigned } from "@/lib/data";
-import { requireOrgId } from "@/lib/org";
+import { denyFiller, requireOrgId } from "@/lib/org";
 import { PriceMismatches } from "./price-mismatches";
 import { UnassignedList } from "./unassigned-list";
 
@@ -12,6 +12,7 @@ export async function generateMetadata() {
 }
 
 export default async function UnassignedPage() {
+  await denyFiller();
   const { m, f } = await getI18n();
   const orgId = await requireOrgId();
   const [groups, products, mismatches] = await Promise.all([

@@ -14,7 +14,7 @@ import { getI18n } from "@/i18n/server";
 import Link from "next/link";
 import { getBusinesses, getMachines, getPriceMismatches, getProducts, getStatsReport } from "@/lib/data";
 import { mediaUrl } from "@/lib/media";
-import { requireOrgId } from "@/lib/org";
+import { denyFiller, requireOrgId } from "@/lib/org";
 import { compareCounts, compareSince, fillDays, MIN_WEEKS, periodDays, weekdayStats } from "@/lib/stats";
 import { compareLabelKey, parseStatsParams, type StatsSearchParams } from "@/lib/stats-params";
 import type { StatsReport } from "@/lib/types";
@@ -28,6 +28,7 @@ export async function generateMetadata() {
 
 
 export default async function StatisticsPage({ searchParams }: { searchParams: Promise<StatsSearchParams> }) {
+  await denyFiller();
   const raw = await searchParams;
   const { m, f } = await getI18n();
   const orgId = await requireOrgId();

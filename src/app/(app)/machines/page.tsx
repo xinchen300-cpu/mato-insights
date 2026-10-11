@@ -9,7 +9,7 @@ import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getBusinesses, getLastSales, getMachines, getMachineStock } from "@/lib/data";
 import { mediaUrl } from "@/lib/media";
-import { requireOrgId } from "@/lib/org";
+import { denyFiller, requireOrgId } from "@/lib/org";
 import { fillLevel, levelColor, needsAttention } from "@/lib/stock";
 import { terminalStatus } from "@/lib/terminal-status";
 
@@ -19,6 +19,7 @@ export async function generateMetadata() {
 }
 
 export default async function MachinesPage() {
+  await denyFiller();
   const { m, f } = await getI18n();
   const orgId = await requireOrgId();
   const [machines, stock, lastSales, businesses] = await Promise.all([

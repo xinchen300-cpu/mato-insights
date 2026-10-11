@@ -19,6 +19,7 @@ import { createCustomer } from "./actions";
 export function CustomerForm({ signupUrl }: { signupUrl: string }) {
   const { m } = useI18n();
   const [done, setDone] = useState<string | null>(null);
+  const [link, setLink] = useState(signupUrl);
   const [failed, setFailed] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -28,14 +29,16 @@ export function CustomerForm({ signupUrl }: { signupUrl: string }) {
     setDone(null);
     startTransition(async () => {
       const result = await createCustomer(formData);
-      if (result.ok) setDone(result.email);
-      else setFailed(result.reason);
+      if (result.ok) {
+        setDone(result.email);
+        setLink(result.token ? `${signupUrl}?invite=${encodeURIComponent(result.token)}` : signupUrl);
+      } else setFailed(result.reason);
     });
   }
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(signupUrl);
+      await navigator.clipboard.writeText(link);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -77,7 +80,7 @@ export function CustomerForm({ signupUrl }: { signupUrl: string }) {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <code className="min-w-0 flex-1 basis-56 truncate rounded-xl bg-card px-3.5 py-2.5 font-mono text-[13px] shadow-[0_0_0_1px_var(--border)]">
-                {signupUrl}
+                {link}
               </code>
               <Button variant="outline" onClick={copy} className="shrink-0">
                 {copied ? <Check /> : <Copy />}

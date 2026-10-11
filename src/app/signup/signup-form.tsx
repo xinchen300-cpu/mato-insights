@@ -24,7 +24,7 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { checkInvite } from "./actions";
 
-export function SignupForm() {
+export function SignupForm({ invite }: { invite: string | null }) {
   const { m } = useI18n();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -48,7 +48,11 @@ export function SignupForm() {
     const { data, error } = await createClient().auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        // Without the token from the invitation link, the account is made but joins no organisation.
+        data: invite ? { invite } : undefined,
+      },
     });
     setLoading(false);
     if (error) return setError(error.message);

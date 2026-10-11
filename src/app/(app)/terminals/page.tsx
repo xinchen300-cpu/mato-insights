@@ -5,7 +5,7 @@ import { EmptyState, PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { getI18n } from "@/i18n/server";
 import { getBilling, paymentsEnabled } from "@/lib/billing";
-import { isOperator, requireOrgId } from "@/lib/org";
+import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { listPayterTerminals } from "@/lib/sync";
 import { TerminalPicker, type TerminalRow } from "./terminal-picker";
@@ -16,6 +16,7 @@ export async function generateMetadata() {
 }
 
 export default async function TerminalsPage() {
+  await denyFiller();
   const { m, f } = await getI18n();
   const orgId = await requireOrgId();
   // Which terminals exist on the Payter login, and what the operator calls

@@ -1,5 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getScope } from "@/lib/org";
+import { denyFillerAccess, getScope, requireOperator, requireRefillAccess, type Role } from "@/lib/org";
+import { onlyMine, slotKey, type FlowLine, type ShopView, type StopRecord } from "@/lib/refill-flow";
+import { terminalStatus, type TerminalStatus } from "@/lib/terminal-status";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
 import { reportDay } from "@/lib/stats";
 import type {
@@ -18,6 +20,7 @@ import type {
   Product,
   RecentSale,
   RefillEvent,
+  RefillLine,
   RefillSheet,
   SlotStock,
   ShelfLifePreset,
@@ -46,19 +49,21 @@ export type StatsFilters = {
  */
 const NOTHING = "00000000-0000-0000-0000-000000000000";
 
-/**
- * One van run often covers two customers' machines. Owning one of them is not
- * a reason to read the other: the sheet comes back with only the caller's own
- * machines on it, lines and all.
- */
-function onlyMine(sheet: RefillSheet, mine: string[]): RefillSheet {
+/** What a shop may see of a run: its machines, its products, its slots right now. */
+async function shopView(orgId: string, businessId: string, machines: string[]): Promise<ShopView> {
+  const admin = createAdminClient();
+  const [{ data: products }, { data: slots }] = await Promise.all([
+    admin.from("products").select("id").eq("org_id", orgId).eq("business_id", businessId),
+    admin.rpc("machine_stock", { target_org: orgId, machine_filter: machines.length ? machines : [NOTHING] }),
+  ]);
   return {
-    ...sheet,
-    // The filler's link opens the whole run, every machine on the round, so a
-    // shop never gets it: it would hand over the co-tenant's slots in one click.
-    share_token: "",
-    machine_ids: sheet.machine_ids.filter((id) => mine.includes(id)),
-    lines: sheet.lines.filter((line) => mine.includes(line.machine_id)),
+    machines,
+    products: new Set((products ?? []).map((row) => row.id as string)),
+    slots: new Set(
+      ((slots ?? []) as SlotStock[])
+        .filter((slot) => slot.business_id === businessId)
+        .map((slot) => slotKey(slot.machine_id, slot.selection_number)),
+    ),
   };
 }
 
@@ -92,6 +97,7 @@ function onlyAsked(asked: string[] | null | undefined, allowed: string[] | null)
 }
 
 export async function getStatsReport(orgId: string, filters: StatsFilters): Promise<StatsReport> {
+  await denyFillerAccess();
   // A membership tied to one business narrows every report to it, whatever the
   // page asked for — the filter is enforced here, not at the call site. Asking
   // for a business, machine or product that is not yours answers with nothing.
@@ -118,6 +124,212 @@ export async function getStatsReport(orgId: string, filters: StatsFilters): Prom
   });
   if (error) throw new Error(error.message);
   return data as StatsReport;
+}
+
+export type RoundMachine = { id: string; name: string; status: TerminalStatus; lastSale: string | null };
+/** Every slot of a machine on the round, for "something is wrong here" on any slot, planned or not. */
+export type RoundSlot = {
+  machineId: string;
+  selection: string;
+  row: number;
+  slot: number;
+  productId: string;
+  productName: string | null;
+  capacity: number;
+  stock: number | null;
+};
+
+export type RefillRound = {
+  id: string;
+  flowVersion: number;
+  createdAt: string;
+  startedAt: string | null;
+  readyAt: string | null;
+  completedAt: string | null;
+  /** In the order of the round. */
+  machines: RoundMachine[];
+  lines: FlowLine[];
+  slots: RoundSlot[];
+  picked: Record<string, number>;
+  stops: Record<string, StopRecord>;
+};
+
+/** What Vendly knows is in a slot, or null when it cannot know (never counted, or oversold since). */
+function knownStock(slot: SlotStock): number | null {
+  if (slot.stock === null || slot.level_after === null) return null;
+  if (slot.sales_since > slot.level_after) return null;
+  return slot.stock;
+}
+
+/**
+ * One refill round for whoever fills it: the operator or a filler of this
+ * organisation, never a shop. Products, slots and counts only: no prices, no
+ * revenue, so a filler's screen carries no money at all.
+ */
+export async function getRefillRound(orgId: string, sheetId: string): Promise<RefillRound | null> {
+  if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
+  const admin = createAdminClient();
+  const { data: sheet } = await admin
+    .from("refill_sheets")
+    .select("id, flow_version, created_at, started_at, ready_at, completed_at, machine_ids, lines, box, stops")
+    .eq("id", sheetId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (!sheet) return null;
+
+  const machineIds = (sheet.machine_ids ?? []) as string[];
+  const [{ data: machineRows }, stock, lastSales] = await Promise.all([
+    admin
+      .from("machines")
+      .select("id, name, last_connected_at, last_disconnected_at")
+      .eq("org_id", orgId)
+      .in("id", machineIds.length ? machineIds : [NOTHING]),
+    getMachineStock(orgId, machineIds.length ? machineIds : [NOTHING]),
+    getLastSales(orgId),
+  ]);
+  const byId = new Map((machineRows ?? []).map((row) => [row.id as string, row]));
+  const live = new Map(stock.map((slot) => [slotKey(slot.machine_id, slot.selection_number), slot]));
+
+  const lines: FlowLine[] = ((sheet.lines ?? []) as RefillLine[])
+    .filter((line) => byId.has(line.machine_id))
+    .map((line) => {
+      const now = live.get(slotKey(line.machine_id, line.selection_number));
+      return {
+        machineId: line.machine_id,
+        selection: line.selection_number,
+        row: line.row_position,
+        slot: line.slot_position,
+        productId: line.product_id,
+        productName: line.product_name,
+        photoPath: line.photo_path,
+        capacity: now?.capacity ?? line.capacity,
+        stock: now ? knownStock(now) : null,
+        take: Math.min(line.capacity, line.to_add + (line.qty_expired ?? 0)),
+        expired: line.qty_expired ?? 0,
+      };
+    });
+
+  return {
+    id: sheet.id as string,
+    flowVersion: Number(sheet.flow_version ?? 1),
+    createdAt: sheet.created_at as string,
+    startedAt: (sheet.started_at as string | null) ?? null,
+    readyAt: (sheet.ready_at as string | null) ?? null,
+    completedAt: (sheet.completed_at as string | null) ?? null,
+    machines: machineIds
+      .filter((id) => byId.has(id))
+      .map((id) => {
+        const row = byId.get(id)!;
+        return {
+          id,
+          name: row.name as string,
+          status: terminalStatus(row.last_connected_at as string | null, row.last_disconnected_at as string | null),
+          lastSale: lastSales.get(id) ?? null,
+        };
+      }),
+    lines,
+    slots: stock
+      .filter((slot) => slot.product_id)
+      .sort((a, b) => a.row_position - b.row_position || a.slot_position - b.slot_position)
+      .map((slot) => ({
+        machineId: slot.machine_id,
+        selection: slot.selection_number,
+        row: slot.row_position,
+        slot: slot.slot_position,
+        productId: slot.product_id as string,
+        productName: slot.product_name,
+        capacity: slot.capacity,
+        stock: knownStock(slot),
+      })),
+    picked: (sheet.box ?? {}) as Record<string, number>,
+    stops: (sheet.stops ?? {}) as Record<string, StopRecord>,
+  };
+}
+
+export type OpenRound = {
+  id: string;
+  createdAt: string;
+  readyAt: string | null;
+  machines: { id: string; name: string; done: boolean }[];
+};
+
+/**
+ * Step-by-step rounds that are not finished yet, for whoever fills them: the
+ * operator or a filler. Names and progress only.
+ */
+export async function getOpenRounds(orgId: string): Promise<OpenRound[]> {
+  if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
+  const admin = createAdminClient();
+  const { data: sheets } = await admin
+    .from("refill_sheets")
+    .select("id, created_at, ready_at, machine_ids, stops")
+    .eq("org_id", orgId)
+    .eq("flow_version", 2)
+    .is("completed_at", null)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  const ids = [...new Set((sheets ?? []).flatMap((sheet) => (sheet.machine_ids ?? []) as string[]))];
+  const { data: machines } = await admin
+    .from("machines")
+    .select("id, name")
+    .eq("org_id", orgId)
+    .in("id", ids.length ? ids : [NOTHING]);
+  const name = new Map((machines ?? []).map((row) => [row.id as string, row.name as string]));
+  return (sheets ?? []).map((sheet) => {
+    const stops = (sheet.stops ?? {}) as Record<string, StopRecord>;
+    return {
+      id: sheet.id as string,
+      createdAt: sheet.created_at as string,
+      readyAt: (sheet.ready_at as string | null) ?? null,
+      machines: ((sheet.machine_ids ?? []) as string[])
+        .filter((id) => name.has(id))
+        .map((id) => ({ id, name: name.get(id)!, done: Boolean(stops[id]?.completedAt) })),
+    };
+  });
+}
+
+export type TeamMember = { userId: string; email: string | null; role: Role; businessName: string | null };
+export type TeamInvite = { email: string; role: Role; invitedAt: string; token: string | null };
+
+/**
+ * Everyone who can open this organisation, and who is still invited. The
+ * operator's to see: a filler or a shop never learns who else is in.
+ */
+export async function getTeam(orgId: string): Promise<{ members: TeamMember[]; invites: TeamInvite[] }> {
+  await requireOperator();
+  const admin = createAdminClient();
+  const [{ data: rows }, { data: invites }] = await Promise.all([
+    admin.from("memberships").select("user_id, role, businesses(name)").eq("org_id", orgId),
+    admin
+      .from("allowed_emails")
+      .select("email, role, invited_at, token")
+      .eq("org_id", orgId)
+      .is("claimed_at", null)
+      .order("invited_at", { ascending: true }),
+  ]);
+  const members = await Promise.all(
+    (rows ?? []).map(async (row) => {
+      const { data } = await admin.auth.admin.getUserById(row.user_id as string);
+      const business = row.businesses as { name: string } | { name: string }[] | null;
+      return {
+        userId: row.user_id as string,
+        email: data.user?.email ?? null,
+        role: row.role as Role,
+        businessName: (Array.isArray(business) ? business[0]?.name : business?.name) ?? null,
+      };
+    }),
+  );
+  const order: Record<Role, number> = { owner: 0, admin: 1, filler: 2, member: 3 };
+  members.sort((a, b) => order[a.role] - order[b.role] || (a.email ?? "").localeCompare(b.email ?? ""));
+  return {
+    members,
+    invites: (invites ?? []).map((row) => ({
+      email: row.email as string,
+      role: row.role as Role,
+      invitedAt: row.invited_at as string,
+      token: (row.token as string | null) ?? null,
+    })),
+  };
 }
 
 export type MonthTotals = {
@@ -256,14 +468,15 @@ function toMachine(row: MachineRow): Machine {
 }
 
 export async function getMachineStock(orgId: string, machineIds?: string[]): Promise<SlotStock[]> {
-  const { businessId } = await getScope();
+  const { businessId, role } = await getScope();
   const { data, error } = await createAdminClient().rpc("machine_stock", {
     target_org: orgId,
     machine_filter: machineIds?.length ? machineIds : null,
   });
   if (error) throw new Error(error.message);
   const slots = (data ?? []) as SlotStock[];
-  if (!businessId) return slots;
+  // A filler fills slots; what a piece sells for is not theirs to see.
+  if (!businessId) return role === "filler" ? slots.map((slot) => ({ ...slot, price: null })) : slots;
 
   // On a fridge two shops share, the co-tenant's slots stay on the drawing —
   // taking them out would leave holes and make the machine unreadable — but
@@ -290,6 +503,7 @@ export async function getMachineStock(orgId: string, machineIds?: string[]): Pro
 
 /** Per machine: payments that went through and those that did not, since a date. */
 export async function getPaymentHealth(orgId: string, since: Date): Promise<Map<string, PaymentHealth>> {
+  await denyFillerAccess();
   const { data, error } = await createAdminClient().rpc("payment_health", {
     target_org: orgId,
     since: since.toISOString(),
@@ -312,6 +526,7 @@ export async function getPaymentHealth(orgId: string, since: Date): Promise<Map<
 
 /** The machine's latest payments: the ones that worked and the ones that did not. */
 export async function getPaymentFeed(orgId: string, machineId: string, limit = 12): Promise<PaymentEntry[]> {
+  await denyFillerAccess();
   const { data, error } = await createAdminClient().rpc("payment_feed", {
     target_org: orgId,
     target_machine: machineId,
@@ -326,6 +541,7 @@ export async function getMachineSalesSplit(
   machineId: string,
   since: Date,
 ): Promise<MachineSalesSplit[]> {
+  await denyFillerAccess();
   const { businessId } = await getScope();
   const { data, error } = await createAdminClient().rpc("machine_sales_split", {
     target_org: orgId,
@@ -353,6 +569,7 @@ export const PRODUCT_COLUMNS =
   "id, name, price, photo_path, archived, business_id, shelf_life_days, shelf_life_preset_id, producer_id";
 
 export async function getProducts(orgId: string, { includeArchived = false } = {}): Promise<Product[]> {
+  await denyFillerAccess();
   const { businessId } = await getScope();
   let query = createAdminClient()
     .from("products")
@@ -367,6 +584,7 @@ export async function getProducts(orgId: string, { includeArchived = false } = {
 }
 
 export async function getShelfLifePresets(orgId: string): Promise<ShelfLifePreset[]> {
+  await denyFillerAccess();
   const { data, error } = await createAdminClient()
     .from("shelf_life_presets")
     .select("id, name, days")
@@ -377,6 +595,7 @@ export async function getShelfLifePresets(orgId: string): Promise<ShelfLifePrese
 }
 
 export async function getProductSlotCounts(orgId: string): Promise<Map<string, number>> {
+  await denyFillerAccess();
   const { data } = await createAdminClient()
     .from("selection_assignments")
     .select("product_id")
@@ -390,6 +609,7 @@ export async function getProductSlotCounts(orgId: string): Promise<Map<string, n
 const BUSINESS_COLUMNS = "id, name, logo_path, started_on, contact_name, email, phone, notes, share_token";
 
 export async function getBusiness(orgId: string, id: string): Promise<Business | null> {
+  await denyFillerAccess();
   // A guessed id must not open another customer's contact details or share link.
   const { businessId } = await getScope();
   if (businessId && id !== businessId) return null;
@@ -428,6 +648,7 @@ export function businessMachineIds(machines: Machine[]): Map<string, Set<string>
 }
 
 export async function getRecentSales(orgId: string, businessId: string): Promise<RecentSale[]> {
+  await denyFillerAccess();
   const { data, error } = await createAdminClient().rpc("business_recent_sales", {
     target_org: orgId,
     target_business: businessId,
@@ -437,6 +658,7 @@ export async function getRecentSales(orgId: string, businessId: string): Promise
 }
 
 export async function getBusinesses(orgId: string): Promise<Business[]> {
+  await denyFillerAccess();
   const { businessId } = await getScope();
   let query = createAdminClient()
     .from("businesses")
@@ -450,6 +672,7 @@ export async function getBusinesses(orgId: string): Promise<Business[]> {
 
 /** Slots with stock over date or going over within the day, worst first. */
 export async function getExpiryAlerts(orgId: string): Promise<ExpiryAlert[]> {
+  await denyFillerAccess();
   const { businessId } = await getScope();
   const { data, error } = await createAdminClient().rpc("expiry_alerts", { target_org: orgId });
   if (error) throw new Error(error.message);
@@ -465,6 +688,7 @@ export async function getExpiryAlerts(orgId: string): Promise<ExpiryAlert[]> {
 
 /** Slots where a full load cannot sell out before its date. */
 export async function getSlowMovers(orgId: string): Promise<SlowMover[]> {
+  await denyFillerAccess();
   const { businessId } = await getScope();
   const { data, error } = await createAdminClient().rpc("slow_movers", { target_org: orgId });
   if (error) throw new Error(error.message);
@@ -483,6 +707,7 @@ export async function getSlowMovers(orgId: string): Promise<SlowMover[]> {
  * screen can forget it.
  */
 export async function getWasteReport(orgId: string, daysBack = 60): Promise<WasteRow[]> {
+  await denyFillerAccess();
   const { businessId } = await getScope();
   const { data, error } = await createAdminClient().rpc("waste_report", {
     target_org: orgId,
@@ -513,6 +738,7 @@ export async function getBusinessFreshness(orgId: string, businessId: string): P
 }
 
 export async function getUnassigned(orgId: string): Promise<UnassignedGroup[]> {
+  await denyFillerAccess();
   const mine = await ownMachineIds(orgId);
   const { data, error } = await createAdminClient().rpc("unassigned_sales", { target_org: orgId });
   if (error) throw new Error(error.message);
@@ -527,6 +753,7 @@ export async function getUnassigned(orgId: string): Promise<UnassignedGroup[]> {
 }
 
 export async function getCurrentAssignments(orgId: string, machineId: string): Promise<Map<string, string>> {
+  await denyFillerAccess();
   const { data } = await createAdminClient()
     .from("selection_assignments")
     .select("selection_number, product_id")
@@ -537,6 +764,7 @@ export async function getCurrentAssignments(orgId: string, machineId: string): P
 }
 
 export async function getRefillHistory(orgId: string, machineId: string): Promise<RefillEvent[]> {
+  await denyFillerAccess();
   const { data } = await createAdminClient()
     .from("stock_events")
     .select("occurred_at, type, delta, refill_sheet_id, filled_by")
@@ -565,6 +793,7 @@ export async function getRefillHistory(orgId: string, machineId: string): Promis
 }
 
 export async function getLayoutTemplates(orgId: string): Promise<LayoutTemplate[]> {
+  await denyFillerAccess();
   const { data } = await createAdminClient()
     .from("layout_templates")
     .select("id, org_id, name, machine_type, layout")
@@ -574,34 +803,40 @@ export async function getLayoutTemplates(orgId: string): Promise<LayoutTemplate[
 }
 
 export async function getRefillSheets(orgId: string): Promise<RefillSheet[]> {
+  await denyFillerAccess();
   const mine = await ownMachineIds(orgId);
   const { data } = await createAdminClient()
     .from("refill_sheets")
-    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box")
+    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box, flow_version, stops")
     .eq("org_id", orgId)
     .order("created_at", { ascending: false })
     .limit(mine ? 60 : 10);
   const sheets = (data ?? []) as RefillSheet[];
   // A run belongs to whoever owns the machines it visited.
   if (!mine) return sheets;
+  const { businessId } = await getScope();
+  const view = await shopView(orgId, businessId!, mine);
   return sheets
     .filter((sheet) => sheet.machine_ids.some((id) => mine.includes(id)))
-    .map((sheet) => onlyMine(sheet, mine))
+    .map((sheet) => onlyMine(sheet, view))
     .slice(0, 10);
 }
 
 export async function getRefillSheet(orgId: string, id: string): Promise<RefillSheet | null> {
+  await denyFillerAccess();
   const mine = await ownMachineIds(orgId);
   const { data } = await createAdminClient()
     .from("refill_sheets")
-    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box")
+    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box, flow_version, stops")
     .eq("org_id", orgId)
     .eq("id", id)
     .maybeSingle();
   const sheet = (data as RefillSheet) ?? null;
   // Guessing a sheet id must not print another customer's run.
   if (!sheet || !mine) return sheet;
-  return sheet.machine_ids.some((machineId) => mine.includes(machineId)) ? onlyMine(sheet, mine) : null;
+  if (!sheet.machine_ids.some((machineId) => mine.includes(machineId))) return null;
+  const { businessId } = await getScope();
+  return onlyMine(sheet, await shopView(orgId, businessId!, mine));
 }
 
 // Public: the share link carries the unguessable token instead of a login.
@@ -609,8 +844,10 @@ export async function getRefillSheetByToken(token: string): Promise<RefillSheet 
   if (!/^[A-Za-z0-9_-]{20,}$/.test(token)) return null;
   const { data } = await createAdminClient()
     .from("refill_sheets")
-    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box")
+    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box, flow_version, stops")
     .eq("share_token", token)
+    // A step-by-step round (flow 2) is filled in Vendly itself, never through a link.
+    .eq("flow_version", 1)
     .maybeSingle();
   return (data as RefillSheet) ?? null;
 }
@@ -626,6 +863,7 @@ export async function getLastSyncedAt(orgId: string): Promise<string | null> {
 
 /** What the fridge came up short on, newest first, over the last 60 days. */
 export async function getShortages(orgId: string, days = 60): Promise<Shortage[]> {
+  await denyFillerAccess();
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
   const { businessId } = await getScope();
   let query = createAdminClient()
@@ -649,6 +887,7 @@ export async function getShortages(orgId: string, days = 60): Promise<Shortage[]
 
 /** Who makes the food, so a shortage or a batch going off has an address. */
 export async function getProducers(orgId: string): Promise<Producer[]> {
+  await denyFillerAccess();
   const { businessId } = await getScope();
   const { data } = await createAdminClient()
     .from("producers")
@@ -664,12 +903,23 @@ export async function getProducers(orgId: string): Promise<Producer[]> {
 
 /** The report that closes a run: filled, out of date and short, per product. */
 export async function getRunSummary(orgId: string, sheetId: string): Promise<RunSummaryRow[]> {
+  await denyFillerAccess();
+  const { businessId } = await getScope();
   const { data, error } = await createAdminClient().rpc("run_summary", {
     target_org: orgId,
     sheet: sheetId,
   });
   if (error) throw new Error(error.message);
-  return (data ?? []) as RunSummaryRow[];
+  const rows = (data ?? []) as RunSummaryRow[];
+  if (!businessId) return rows;
+  // A shop on a shared run reads its own products only, not the co-tenant's.
+  const { data: own } = await createAdminClient()
+    .from("products")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("business_id", businessId);
+  const mine = new Set((own ?? []).map((row) => row.id as string));
+  return rows.filter((row) => mine.has(row.product_id));
 }
 
 /**
@@ -679,6 +929,7 @@ export async function getRunSummary(orgId: string, sheetId: string): Promise<Run
  * through that one number and the per-product figures cannot be trusted.
  */
 export async function getPriceMismatches(orgId: string, daysBack = 90): Promise<PriceMismatch[]> {
+  await denyFillerAccess();
   const { businessId } = await getScope();
   const { data, error } = await createAdminClient().rpc("price_mismatch", {
     target_org: orgId,
@@ -714,6 +965,7 @@ export type SetupState = {
  * someone who just bought the app: what do I do next?
  */
 export async function getSetupState(orgId: string): Promise<SetupState> {
+  await denyFillerAccess();
   const admin = createAdminClient();
   const [credentials, org, machines, slots, products, assignments] = await Promise.all([
     admin.from("payter_credentials").select("org_id").eq("org_id", orgId).maybeSingle(),
@@ -752,11 +1004,13 @@ export async function getSetupState(orgId: string): Promise<SetupState> {
 
 /** Refuses unless the caller's scope contains this machine. */
 export async function requireMachineAccess(orgId: string, machineId: string): Promise<void> {
+  await denyFillerAccess();
   if (!(await getMachine(orgId, machineId))) throw new Error("Not found");
 }
 
 /** Refuses unless the caller's scope contains this product. */
 export async function requireProductAccess(orgId: string, productId: string): Promise<void> {
+  await denyFillerAccess();
   const { businessId } = await getScope();
   if (!businessId) return;
   const { data } = await createAdminClient()

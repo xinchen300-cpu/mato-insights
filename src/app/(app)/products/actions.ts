@@ -1,9 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { PRODUCT_COLUMNS, requireProductAccess } from "@/lib/data";
+import { PRODUCT_COLUMNS, requireMachineAccess, requireProductAccess } from "@/lib/data";
 import { CUSTOM_SHELF_LIFE } from "@/lib/expiry";
-import { requireBusinessAccess, requireOrgId } from "@/lib/org";
+import { denyFillerAccess, getScope, requireBusinessAccess, requireOrgId } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Product } from "@/lib/types";
 import { imageFrom, removeImage, uploadImage } from "@/lib/upload";
@@ -17,6 +17,7 @@ function parsePrice(raw: FormDataEntryValue | null): number | null {
 
 export async function saveProduct(formData: FormData): Promise<Product> {
   const orgId = await requireOrgId();
+  await denyFillerAccess();
   const admin = createAdminClient();
 
   const id = String(formData.get("id") ?? "") || null;
@@ -26,7 +27,10 @@ export async function saveProduct(formData: FormData): Promise<Product> {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Name is required");
   const price = parsePrice(formData.get("price"));
-  const business_id = String(formData.get("businessId") ?? "") || null;
+  // A shop's products are always its own: it can neither hand one to the whole
+  // organisation (an empty choice) nor to another shop.
+  const { businessId: own } = await getScope();
+  const business_id = own ?? (String(formData.get("businessId") ?? "") || null);
   if (business_id) await requireBusinessAccess(business_id);
   const producer_id = String(formData.get("producerId") ?? "") || null;
   const shelfRaw = Number(String(formData.get("shelfLifeDays") ?? "").trim());
@@ -78,6 +82,9 @@ export async function createProduct(
   machineId: string | null = null,
 ): Promise<Product> {
   const orgId = await requireOrgId();
+  await denyFillerAccess();
+  // The machine decides whose product this is, so it must be the caller's own.
+  if (machineId) await requireMachineAccess(orgId, machineId);
   const admin = createAdminClient();
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Name is required");
@@ -86,9 +93,11 @@ export async function createProduct(
     ? await admin.from("machines").select("business_id").eq("id", machineId).eq("org_id", orgId).maybeSingle()
     : { data: null };
 
+  // Whose product: a shop's own always; otherwise the machine's business.
+  const { businessId: own } = await getScope();
   const { data, error } = await admin
     .from("products")
-    .insert({ org_id: orgId, name: trimmed, price, business_id: machine?.business_id ?? null })
+    .insert({ org_id: orgId, name: trimmed, price, business_id: own ?? machine?.business_id ?? null })
     .select(PRODUCT_COLUMNS)
     .single();
   if (error) throw new Error(error.message);

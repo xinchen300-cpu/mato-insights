@@ -2,7 +2,7 @@ import { CalendarCheck } from "lucide-react";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { getI18n } from "@/i18n/server";
 import { getExpiryAlerts, getSlowMovers, getWasteReport } from "@/lib/data";
-import { requireOrgId } from "@/lib/org";
+import { denyFiller, requireOrgId } from "@/lib/org";
 import { ExpiryList } from "./expiry-list";
 import { WasteList } from "./waste-list";
 
@@ -12,6 +12,7 @@ export async function generateMetadata() {
 }
 
 export default async function ExpiryPage() {
+  await denyFiller();
   const { m } = await getI18n();
   const orgId = await requireOrgId();
   const [alerts, slowMovers, waste] = await Promise.all([

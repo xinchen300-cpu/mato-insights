@@ -9,12 +9,15 @@ export async function generateMetadata() {
   return { title: m.auth.createAccount };
 }
 
-export default async function SignupPage() {
+export default async function SignupPage({ searchParams }: { searchParams: Promise<{ invite?: string }> }) {
   if (!(await canSignUp())) redirect("/login");
   const { m } = await getI18n();
+  // The invitation link's token: what attaches the new account to its organisation.
+  const { invite } = await searchParams;
+  const token = invite && /^[A-Za-z0-9_-]{16,64}$/.test(invite) ? invite : null;
   return (
     <AuthFrame tagline={m.brand.tagline}>
-      <SignupForm />
+      <SignupForm invite={token} />
     </AuthFrame>
   );
 }

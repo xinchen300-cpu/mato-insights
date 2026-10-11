@@ -70,8 +70,10 @@ niet uit `lastConnected` (dat is geen heartbeat). Een geweigerde betaling zit in
 
 ## Nooit committen
 De hardgecodeerde scope in `getScope` (voor lokaal testen zonder account) en de
-`VERCEL_OIDC_TOKEN` die `vercel link` in `.env.local` plakt. Na elke lokale test:
-`git checkout -- src/lib/org.ts`.
+`VERCEL_OIDC_TOKEN` die `vercel link` in `.env.local` plakt. Na elke lokale test
+de hack weghalen: `git checkout -- src/lib/org.ts` alleen als dat bestand verder ongewijzigd is;
+heeft het eigen, nog niet gecommitte wijzigingen, haal dan alleen de hackregel weg (een checkout
+wist die wijzigingen mee, gebeurd op 11-10-2026). Controleer met `grep -n HACK src/lib/org.ts`.
 
 ## Bouwen, deployen
 Gebruik `/vendly-deploy`. Kort: nooit in deze map bouwen (iCloud evict `node_modules` en

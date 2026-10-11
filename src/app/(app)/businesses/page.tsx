@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/page-header";
 import { getI18n } from "@/i18n/server";
 import { businessMachineIds, getBusinesses, getMachines } from "@/lib/data";
-import { requireOrgId } from "@/lib/org";
+import { denyFiller, requireOrgId } from "@/lib/org";
 import { AddBusiness, BusinessList } from "./business-list";
 
 export async function generateMetadata() {
@@ -10,6 +10,7 @@ export async function generateMetadata() {
 }
 
 export default async function BusinessesPage() {
+  await denyFiller();
   const { m } = await getI18n();
   const orgId = await requireOrgId();
   const [businesses, machines] = await Promise.all([getBusinesses(orgId), getMachines(orgId)]);

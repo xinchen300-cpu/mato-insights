@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireOperator, requireOrgId } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export type NewCustomer = { ok: true; email: string } | { ok: false; reason: string };
+export type NewCustomer = { ok: true; email: string; token: string | null } | { ok: false; reason: string };
 
 /**
  * One customer: their own organisation plus the invitation they register with.
@@ -25,6 +25,8 @@ export async function createCustomer(formData: FormData): Promise<NewCustomer> {
   });
   if (error) return { ok: false, reason: error.message };
 
+  // The invitation's token goes in the link; without it the address alone claims nothing.
+  const { data: invite } = await createAdminClient().from("allowed_emails").select("token").eq("email", email).maybeSingle();
   revalidatePath("/klanten");
-  return { ok: true, email };
+  return { ok: true, email, token: (invite?.token as string | null) ?? null };
 }

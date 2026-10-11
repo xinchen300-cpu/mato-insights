@@ -18,7 +18,7 @@ import {
 } from "@/lib/data";
 import { toFrontRows } from "@/lib/layout";
 import { mediaUrl } from "@/lib/media";
-import { requireOrgId } from "@/lib/org";
+import { denyFiller, requireOrgId } from "@/lib/org";
 import { fillLevel, levelColor } from "@/lib/stock";
 import { cn } from "@/lib/utils";
 import { MachineDetailsForm } from "./machine-details-form";
@@ -27,6 +27,7 @@ import { MachineStatus, TerminalPanel } from "./terminal-panel";
 const PAYMENT_WINDOW_DAYS = 30;
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  await denyFiller();
   const { id } = await params;
   const orgId = await requireOrgId();
   const machine = await getMachine(orgId, id);
@@ -34,6 +35,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 }
 
 export default async function MachinePage({ params }: { params: Promise<{ id: string }> }) {
+  await denyFiller();
   const { id } = await params;
   const { m, f } = await getI18n();
   const orgId = await requireOrgId();

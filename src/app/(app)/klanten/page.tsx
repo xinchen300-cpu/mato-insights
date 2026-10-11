@@ -4,7 +4,7 @@ import { Avatar, RowList, initial } from "@/components/list-row";
 import { PageHeader, Section } from "@/components/page-header";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { isOperator, requireOrgId } from "@/lib/org";
+import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
 import { planById } from "@/lib/plans";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,7 @@ export async function generateMetadata() {
 }
 
 export default async function CustomersPage() {
+  await denyFiller();
   const { m, f } = await getI18n();
   const orgId = await requireOrgId();
   const admin = createAdminClient();

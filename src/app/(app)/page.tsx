@@ -26,7 +26,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { buildInsights } from "@/lib/insights";
 import { compareSince, fillDays, lastFullWeeks } from "@/lib/stats";
 import { terminalStatus } from "@/lib/terminal-status";
-import { getCurrentOrgId, isOperator } from "@/lib/org";
+import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
 import { fillLevel, needsAttention } from "@/lib/stock";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +42,7 @@ const toneAvatar: Record<Tone, "negative" | "warning" | "neutral"> = {
 const LOW_ROWS = 3;
 
 export default async function OverviewPage() {
+  await denyFiller();
   const { m, f } = await getI18n();
   const orgId = await getCurrentOrgId();
 

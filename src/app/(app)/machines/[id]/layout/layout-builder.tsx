@@ -75,6 +75,7 @@ export function LayoutBuilder({
   products: initialProducts,
   initialAssignments,
   owners,
+  canSaveTemplate,
 }: {
   machineId: string;
   machineName: string;
@@ -86,6 +87,8 @@ export function LayoutBuilder({
   initialAssignments: Record<string, string>;
   /** Both businesses of a shared machine, first one first; empty otherwise. */
   owners: Owner[];
+  /** Templates are the whole organisation's: only the operator adds them. */
+  canSaveTemplate: boolean;
 }) {
   const { m } = useI18n();
   const router = useRouter();
@@ -587,7 +590,7 @@ export function LayoutBuilder({
           <Button size="lg" onClick={save} disabled={isPending || rows.length === 0} className="w-full sm:w-auto">
             {isPending ? m.common.saving : m.layout.save}
           </Button>
-          {rows.length > 0 && (
+          {rows.length > 0 && canSaveTemplate && (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
               <div className="grid gap-2">
                 <Label htmlFor="template-name" className={fieldLabel}>

@@ -11,7 +11,7 @@ import {
   getMachineStock,
   getProducts,
 } from "@/lib/data";
-import { requireOrgId } from "@/lib/org";
+import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
 import { LayoutBuilder, type CopySource, type ExistingSlot } from "./layout-builder";
 
 export async function generateMetadata() {
@@ -20,6 +20,7 @@ export async function generateMetadata() {
 }
 
 export default async function LayoutPage({ params }: { params: Promise<{ id: string }> }) {
+  await denyFiller();
   const { id } = await params;
   const { m } = await getI18n();
   const orgId = await requireOrgId();
@@ -78,6 +79,7 @@ export default async function LayoutPage({ params }: { params: Promise<{ id: str
         products={products}
         initialAssignments={Object.fromEntries(assignments)}
         owners={owners}
+        canSaveTemplate={await isOperator()}
       />
     </>
   );

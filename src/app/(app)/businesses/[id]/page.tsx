@@ -8,11 +8,12 @@ import { fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { businessMachineIds, getBusiness, getMachines, getProducts } from "@/lib/data";
 import { mediaUrl } from "@/lib/media";
-import { requireOrgId, isOperator } from "@/lib/org";
+import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
 import { BusinessSettings, MachineStarts } from "./business-settings";
 import { ShareLink } from "./share-link";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  await denyFiller();
   const { id } = await params;
   const orgId = await requireOrgId();
   const business = await getBusiness(orgId, id);
@@ -20,6 +21,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 }
 
 export default async function BusinessPage({ params }: { params: Promise<{ id: string }> }) {
+  await denyFiller();
   const { id } = await params;
   const { m, f } = await getI18n();
   const orgId = await requireOrgId();

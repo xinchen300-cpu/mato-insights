@@ -19,6 +19,15 @@ export function lineKey(line: Pick<RefillLine, "machine_id" | "selection_number"
   return `${line.machine_id}:${line.selection_number}`;
 }
 
+/**
+ * The lines with something to put in. A finished flow-2 round also keeps a
+ * line with nothing to add for a slot outside the plan that something past
+ * its date came out of: it counts in the waste report, not on a pick list.
+ */
+export function linesToFill(lines: RefillLine[]): RefillLine[] {
+  return lines.filter((line) => line.to_add > 0);
+}
+
 /** What to take from storage: all selected machines together, most first. */
 export function combineByProduct(lines: RefillLine[]) {
   const totals = new Map<string, { productId: string; name: string; photoPath: string | null; quantity: number }>();

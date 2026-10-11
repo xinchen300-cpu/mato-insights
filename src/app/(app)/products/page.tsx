@@ -12,7 +12,7 @@ import {
   getShelfLifePresets,
   getUnassigned,
 } from "@/lib/data";
-import { requireOrgId } from "@/lib/org";
+import { denyFiller, requireOrgId } from "@/lib/org";
 import { ProductGrid } from "./product-grid";
 
 export async function generateMetadata() {
@@ -21,6 +21,7 @@ export async function generateMetadata() {
 }
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ business?: string }> }) {
+  await denyFiller();
   const { business } = await searchParams;
   const { m } = await getI18n();
   const orgId = await requireOrgId();

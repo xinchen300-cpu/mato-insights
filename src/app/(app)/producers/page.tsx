@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/page-header";
 import { getI18n } from "@/i18n/server";
 import { getProducers, getProducts, getShortages } from "@/lib/data";
-import { requireOrgId } from "@/lib/org";
+import { denyFiller, requireOrgId } from "@/lib/org";
 import { ProducerList } from "./producer-list";
 
 export async function generateMetadata() {
@@ -10,6 +10,7 @@ export async function generateMetadata() {
 }
 
 export default async function ProducersPage() {
+  await denyFiller();
   const { m } = await getI18n();
   const orgId = await requireOrgId();
   const [producers, products, shortages] = await Promise.all([

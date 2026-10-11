@@ -85,6 +85,9 @@ export async function getBilling(orgId: string): Promise<Billing> {
 export async function featureAllowed(orgId: string, feature: Feature): Promise<boolean> {
   const billing = await getBilling(orgId);
   if (billing.isVendor) return true;
+  // A demo shows everything the app can do.
+  const { data: org } = await createAdminClient().from("organizations").select("is_demo").eq("id", orgId).maybeSingle();
+  if (org?.is_demo) return true;
   return planAllows(billing.plan, feature);
 }
 
