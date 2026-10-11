@@ -1,8 +1,8 @@
 @AGENTS.md
 
-# MATO Insights — dashboard voor vending-uitbaters
+# Vendly — dashboard voor vending-uitbaters
 
-**Naam:** naar de gebruiker toe heet dit sinds 30-09-2026 **MATO Insights** (`src/app/layout.tsx`, 18 plaatsen in elk `messages/*.ts`). De map, de `package.json`-naam en het Vercel-project heten nog `vendly` — laat dat zo tenzij Xin het vraagt, en schrijf "Vendly" nergens meer in tekst die een gebruiker leest.
+**Naam:** naar de gebruiker toe heet dit sinds 11-10-2026 weer **Vendly** (van 30-09 tot 11-10 heette het "MATO Insights"). De naam staat in `src/app/layout.tsx`, `src/app/manifest.ts`, het logo `src/components/brand/vendly-mark.tsx` en op ±20 plaatsen in elk `messages/*.ts`. Schrijf "MATO Insights" nergens meer in tekst die een gebruiker leest. De repo heet nog `mato-insights` (hernoemd op 04-10-2026); het Vercel-project heet `vendly`.
 
 **Drie dingen moeten `vendly` blijven heten, hernoemen breekt ze:**
 - `LOCALE_COOKIE = "vendly-locale"` in `src/i18n/config.ts` — hernoemen wist ieders taalkeuze.

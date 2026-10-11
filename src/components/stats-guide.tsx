@@ -7,7 +7,7 @@ import { detectableChange, DISPERSION, MIN_SALES, MIN_WEEKS } from "@/lib/stats"
 const SAMPLE_SIZES = [30, 100, 300, 1000];
 
 // A short course in reading sales figures. The table comes from the same rule
-// MATO Insights uses to judge a change, so what it teaches is what the app does.
+// Vendly uses to judge a change, so what it teaches is what the app does.
 // Closed it is one quiet row; open it reads like a page of notes.
 export function StatsGuide({ m, f }: { m: Messages; f: Formatters }) {
   const lessons = [

@@ -16,7 +16,7 @@ function toBytes(base64: string) {
 }
 
 /**
- * Turns this browser into a device MATO Insights may reach. Nothing is sent from
+ * Turns this browser into a device Vendly may reach. Nothing is sent from
  * here; it only hands over the address the browser vends.
  */
 export function NotifyToggle({ publicKey }: { publicKey: string }) {

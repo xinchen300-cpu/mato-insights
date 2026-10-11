@@ -1,4 +1,4 @@
-import { MatoWordmark } from "@/components/brand/mato-mark";
+import { VendlyWordmark } from "@/components/brand/vendly-mark";
 import { LanguageToggle } from "@/components/shell/language-toggle";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
@@ -24,7 +24,7 @@ export default async function SharedRefillSheetPage({ params }: { params: Promis
   return (
     <div className="mx-auto min-h-svh max-w-2xl px-4 pt-4 sm:px-6 sm:pt-6">
       <header className="mb-8 flex h-10 items-center justify-between gap-3">
-        <MatoWordmark />
+        <VendlyWordmark />
         <LanguageToggle />
       </header>
 

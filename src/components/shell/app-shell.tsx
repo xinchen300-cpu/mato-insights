@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { LogOut, Settings } from "lucide-react";
-import { MatoWordmark } from "@/components/brand/mato-mark";
+import { VendlyWordmark } from "@/components/brand/vendly-mark";
 import { getI18n } from "@/i18n/server";
 import { createClient } from "@/lib/supabase/server";
 import { HideNumbers } from "./hide-numbers";
@@ -20,7 +20,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       {/* Large screens: one calm rail. The pages up top, the rest at the bottom. */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r bg-card/50 px-4 pb-5 pt-6 lg:flex">
         <Link href="/" aria-label={m.nav.overview} className="px-3">
-          <MatoWordmark />
+          <VendlyWordmark />
         </Link>
         <div className="mt-9">
           <SidebarNav />
@@ -46,7 +46,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur-xl lg:hidden">
         <div className="mx-auto flex h-14 max-w-5xl items-center gap-2 px-4 sm:px-6">
           <Link href="/" aria-label={m.nav.overview}>
-            <MatoWordmark />
+            <VendlyWordmark />
           </Link>
           <div className="ml-auto flex items-center gap-1">
             <HideNumbers />

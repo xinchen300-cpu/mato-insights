@@ -14,10 +14,10 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: { default: "MATO Insights", template: "%s · MATO Insights" },
+  title: { default: "Vendly", template: "%s · Vendly" },
   description: "Vending Data Solutions. Statistics Won't Lie.",
-  applicationName: "MATO Insights",
-  appleWebApp: { capable: true, title: "MATO Insights", statusBarStyle: "default" },
+  applicationName: "Vendly",
+  appleWebApp: { capable: true, title: "Vendly", statusBarStyle: "default" },
   icons: { apple: "/pwa-icon/180" },
 };
 

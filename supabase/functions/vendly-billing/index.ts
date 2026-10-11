@@ -128,12 +128,12 @@ Deno.serve(async (req) => {
       const daysLeft = dayNumber(chargeDay) - dayNumber(today);
       if (daysLeft >= 0 && daysLeft <= NOTICE_DAYS && !(await alreadySent(org.id, "trial_ending", chargeDay))) {
         const withMandate = Boolean(mollieKey && org.mollie_mandate_id);
-        const subject = `Je proef van MATO Insights loopt af op ${longDate(chargeDay)}`;
+        const subject = `Je proef van Vendly loopt af op ${longDate(chargeDay)}`;
         const body = withMandate
           ? [
               `Dag ${org.name},`,
               ``,
-              `Je gratis proef van MATO Insights loopt af. Op ${longDate(chargeDay)} start je pakket ${name}: ` +
+              `Je gratis proef van Vendly loopt af. Op ${longDate(chargeDay)} start je pakket ${name}: ` +
                 `we schrijven dan ${euro(price.incl)} af (${euro(price.excl)} excl. btw), en daarna elke maand op dezelfde dag hetzelfde bedrag.`,
               ``,
               `Wil je niet verder? Zeg dan vóór ${longDate(chargeDay)} op, dan betaal je niets: ${cancelLink}`,
@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
           : [
               `Dag ${org.name},`,
               ``,
-              `Je gratis proef van MATO Insights loopt af op ${longDate(chargeDay)}. Daarna kost ${name} ` +
+              `Je gratis proef van Vendly loopt af op ${longDate(chargeDay)}. Daarna kost ${name} ` +
                 `${euro(price.excl)} per maand excl. btw (${euro(price.incl)} incl. btw).`,
               ``,
               mollieKey
@@ -170,7 +170,7 @@ Deno.serve(async (req) => {
 
     const outcome = await send(
       org.billing_email,
-      `Je nieuwe bedrag voor MATO Insights vanaf ${longDate(next)}`,
+      `Je nieuwe bedrag voor Vendly vanaf ${longDate(next)}`,
       [
         `Dag ${org.name},`,
         ``,

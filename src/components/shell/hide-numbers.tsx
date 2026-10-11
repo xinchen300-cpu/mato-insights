@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 export const HIDE_NUMBERS_KEY = "vendly:hide-numbers";
 
 /**
- * Blurs every figure in the app so you can show MATO Insights to someone without
+ * Blurs every figure in the app so you can show Vendly to someone without
  * showing what it earns. Kept in this browser only: it is about who is looking
  * over your shoulder, not about who may see the data.
  */

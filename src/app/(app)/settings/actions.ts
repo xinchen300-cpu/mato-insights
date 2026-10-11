@@ -99,7 +99,7 @@ export async function saveRunCost(perHour: number, perKm: number): Promise<boole
   return true;
 }
 
-/** Remember this browser as somewhere MATO Insights may send a notification. */
+/** Remember this browser as somewhere Vendly may send a notification. */
 export async function rememberDevice(sub: { endpoint: string; p256dh: string; auth: string; label: string }) {
   const orgId = await requireOrgId();
   const businessId = await getCurrentBusinessId();

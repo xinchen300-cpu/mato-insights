@@ -10,7 +10,7 @@ const isoFormat = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 
-/** A date as "2026-09-25", read in Belgian time like the rest of MATO Insights. */
+/** A date as "2026-09-25", read in Belgian time like the rest of Vendly. */
 export function isoDay(date: Date): string {
   return isoFormat.format(date);
 }

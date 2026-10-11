@@ -1,4 +1,4 @@
-import { MatoWordmark } from "@/components/brand/mato-mark";
+import { VendlyWordmark } from "@/components/brand/vendly-mark";
 import { LanguageToggle } from "@/components/shell/language-toggle";
 
 /**
@@ -27,7 +27,7 @@ export function AuthFrame({ tagline, children }: { tagline: string; children: Re
       <main className="mx-auto flex w-full max-w-[420px] flex-1 flex-col justify-center pb-16 pt-2 sm:pb-24">
         {/* The brand sits above the card, the way an app opens on its own name. */}
         <div className="mb-8 flex flex-col items-center gap-2.5 text-center">
-          <MatoWordmark />
+          <VendlyWordmark />
           <p className="text-[13px] font-medium text-muted-foreground">{tagline}</p>
         </div>
         {children}
