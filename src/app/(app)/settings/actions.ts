@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { checkPayterLogin } from "@/lib/payter-login";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { denyFillerAccess, getCurrentBusinessId, getCurrentOrgId, requireOperator } from "@/lib/org";
 import { triggerPayterSync } from "@/lib/sync";
@@ -22,13 +23,23 @@ async function requireOrgOwner() {
   return orgId;
 }
 
-export async function connectPayter(formData: FormData) {
+export type PayterConnectResult = { ok: true } | { ok: false; reason: "missing" | "rejected" | "unreachable" };
+
+/**
+ * Stores the MyPayter login only once Payter has accepted it. A refused login
+ * is never saved: the sync would retry it every five minutes, and enough
+ * failed logins can lock the customer's Payter account.
+ */
+export async function connectPayter(formData: FormData): Promise<PayterConnectResult> {
   const orgId = await requireOrgOwner();
 
   const username = String(formData.get("username") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const domain = String(formData.get("domain") ?? "").trim();
-  if (!username || !password || !domain) throw new Error("Username, password and domain are required");
+  if (!username || !password || !domain) return { ok: false, reason: "missing" };
+
+  const check = await checkPayterLogin(username, password, domain);
+  if (check !== "ok") return { ok: false, reason: check };
 
   const { error } = await createAdminClient().rpc("set_payter_credentials", {
     target_org: orgId,
@@ -36,9 +47,10 @@ export async function connectPayter(formData: FormData) {
     p_password: password,
     p_domain: domain,
   });
-  if (error) throw new Error(error.message);
+  if (error) return { ok: false, reason: "unreachable" };
 
   revalidatePath("/settings");
+  return { ok: true };
 }
 
 export async function syncNow() {

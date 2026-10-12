@@ -133,13 +133,18 @@ export function Wizard({
   }, [index, m.welcome.stepOf]);
 
   function submitPayter(formData: FormData) {
+    setError(null);
     startTransition(async () => {
       try {
-        await connectPayter(formData);
-        setConnected(true);
-        go("machines");
+        const result = await connectPayter(formData);
+        if (result.ok) {
+          setConnected(true);
+          go("machines");
+        } else {
+          setError(result.reason === "unreachable" ? m.settings.payterUnreachable : m.settings.payterFailed);
+        }
       } catch {
-        setError(m.settings.payterFailed);
+        setError(m.settings.payterUnreachable);
       }
     });
   }
@@ -271,7 +276,16 @@ export function Wizard({
                 >
                   <div className="grid gap-2">
                     <Label htmlFor="username">{m.settings.username}</Label>
-                    <Input id="username" name="username" required autoComplete="username" className={inputClass} />
+                    <Input
+                      id="username"
+                      name="username"
+                      required
+                      autoComplete="username"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      className={inputClass}
+                    />
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="password">{m.settings.password}</Label>
@@ -286,7 +300,20 @@ export function Wizard({
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="domain">{m.settings.domain}</Label>
-                    <Input id="domain" name="domain" required className={inputClass} />
+                    <Input
+                      id="domain"
+                      name="domain"
+                      required
+                      autoComplete="off"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      aria-describedby="domain-hint"
+                      className={inputClass}
+                    />
+                    <p id="domain-hint" className="text-[13px] leading-snug text-muted-foreground">
+                      {m.settings.domainHint}
+                    </p>
                   </div>
                   <p className="flex items-start gap-2 text-[13.5px] leading-snug text-muted-foreground">
                     <ShieldCheck className="mt-px size-4 shrink-0 text-positive" />

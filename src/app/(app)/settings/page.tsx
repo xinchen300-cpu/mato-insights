@@ -4,10 +4,7 @@ import { ChevronDown, CircleAlert, KeyRound, LayoutTemplate, Nfc, PlugZap, Refre
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { PageHeader, Section } from "@/components/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { fmt, plural } from "@/i18n/format";
-import type { Messages } from "@/i18n/messages";
 import { getI18n } from "@/i18n/server";
 import {
   businessMachineIds,
@@ -23,7 +20,8 @@ import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
-import { connectPayter, deleteTemplate } from "./actions";
+import { PayterForm } from "./payter-form";
+import { deleteTemplate } from "./actions";
 import { CostForm } from "./cost-form";
 import { NotifyToggle } from "./notify-toggle";
 import { ShelfLifePresets } from "./shelf-life-presets";
@@ -177,7 +175,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                     />
                   </summary>
                   <div className="px-3 pb-4 pt-1 sm:pl-[66px]">
-                    <PayterForm m={m} submitLabel={m.common.save} />
+                    <PayterForm submitLabel={m.common.save} />
                   </div>
                 </details>
               </>
@@ -185,7 +183,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
             {!credentials && !vendor?.is_demo && (
               <div className="px-3 pb-4 pt-2">
-                <PayterForm m={m} submitLabel={m.settings.connect} />
+                <PayterForm submitLabel={m.settings.connect} />
               </div>
             )}
           </div>
@@ -345,24 +343,3 @@ function SettingRow({
   );
 }
 
-function PayterForm({ m, submitLabel }: { m: Messages; submitLabel: string }) {
-  return (
-    <form action={connectPayter} className="grid max-w-md gap-4">
-      <div className="grid gap-2">
-        <Label htmlFor="username">{m.settings.username}</Label>
-        <Input id="username" name="username" required autoComplete="off" />
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="password">{m.settings.password}</Label>
-        <Input id="password" name="password" type="password" required autoComplete="off" />
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="domain">{m.settings.domain}</Label>
-        <Input id="domain" name="domain" required autoComplete="off" />
-      </div>
-      <Button type="submit" className="mt-1 w-fit">
-        {submitLabel}
-      </Button>
-    </form>
-  );
-}
