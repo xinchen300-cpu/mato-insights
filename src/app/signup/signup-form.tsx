@@ -24,11 +24,24 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { checkInvite } from "./actions";
 
-export function SignupForm({ invite }: { invite: string | null }) {
+export function SignupForm({
+  invite,
+  invitedEmail,
+  intro,
+  linkInvalid,
+}: {
+  invite: string | null;
+  invitedEmail: string | null;
+  intro: string | null;
+  linkInvalid: boolean;
+}) {
   const { m } = useI18n();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
+  const [exists, setExists] = useState(false);
+  // Back here after signing in, so the invitation can be taken up.
+  const signInHref = invite ? `/login?next=${encodeURIComponent(`/signup?invite=${invite}`)}` : "/login";
 
   async function submit(formData: FormData) {
     setLoading(true);
@@ -36,7 +49,7 @@ export function SignupForm({ invite }: { invite: string | null }) {
     const email = String(formData.get("email"));
     const password = String(formData.get("password"));
 
-    if (!(await checkInvite(email))) {
+    if (!(await checkInvite(email, invite))) {
       setLoading(false);
       return setError(m.auth.notInvited);
     }
@@ -55,6 +68,11 @@ export function SignupForm({ invite }: { invite: string | null }) {
       },
     });
     setLoading(false);
+    // The address already has an account: sign in, then take up the invitation.
+    // (With confirmation on, Supabase answers with a user without identities.)
+    if (error?.code === "user_already_exists" || (data.user && data.user.identities?.length === 0)) {
+      return setExists(true);
+    }
     if (error) return setError(error.message);
     // With email confirmation off, Supabase signs the user in right away.
     if (data.session) window.location.href = "/";
@@ -77,11 +95,21 @@ export function SignupForm({ invite }: { invite: string | null }) {
     <>
       <div className={authCard}>
         <h1 className={authTitle}>{m.auth.createAccount}</h1>
-        <p className={authHint}>{m.auth.createHint}</p>
+        <p className={authHint}>{intro ?? m.auth.createHint}</p>
+        {linkInvalid && <p className={authError}>{m.auth.inviteInvalid}</p>}
         <form action={submit} className={authForm}>
           <div className={authField}>
             <Label htmlFor="email">{m.auth.email}</Label>
-            <Input id="email" name="email" type="email" required autoComplete="email" className={authInput} />
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              required
+              autoComplete="email"
+              className={authInput}
+              defaultValue={invitedEmail ?? undefined}
+              readOnly={Boolean(invitedEmail)}
+            />
           </div>
           <div className={authField}>
             <Label htmlFor="password">{m.auth.password}</Label>
@@ -97,6 +125,14 @@ export function SignupForm({ invite }: { invite: string | null }) {
             <p className={authFieldHint}>{m.auth.passwordHint}</p>
           </div>
           {error && <p className={authError}>{error}</p>}
+          {exists && (
+            <p className={authError}>
+              {m.auth.accountExists}{" "}
+              <Link href={signInHref} className={authLink}>
+                {m.auth.signIn}
+              </Link>
+            </p>
+          )}
           <Button type="submit" size="lg" disabled={loading} className="mt-1 w-full">
             {loading ? m.auth.creating : m.auth.create}
           </Button>
@@ -104,7 +140,7 @@ export function SignupForm({ invite }: { invite: string | null }) {
       </div>
       <p className={authAside}>
         {m.auth.haveAccount}{" "}
-        <Link href="/login" className={authLink}>
+        <Link href={signInHref} className={authLink}>
           {m.auth.signIn}
         </Link>
       </p>

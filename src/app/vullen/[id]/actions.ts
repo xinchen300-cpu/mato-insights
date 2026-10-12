@@ -162,17 +162,19 @@ export async function completeStop(sheetId: string, machineId: string, input: St
     });
   }
 
-  // One event per slot, at the level it was left at.
+  // One event per slot, at the level it was left at. Only what went in is a
+  // refill, with a fresh batch behind it; a slot seen full or counted without
+  // filling is a correction, of stock whose age nobody knows.
   const refills: { selection: string; level_after: number }[] = [];
   const corrections = new Map<string, { selection: string; level_after: number }[]>();
   for (const line of lines) {
     const slot = slots.get(line.selection)!;
     const level = levelAfter(slot, slot.stock, line);
     if (level === null) continue;
-    if (line.filled > 0 || line.full) {
+    if (line.filled > 0) {
       refills.push({ selection: line.selection, level_after: level });
     } else {
-      const reason = line.countAfter !== null ? "count" : (line.removed[0]?.reason ?? "count");
+      const reason = line.countAfter !== null || line.full ? "count" : (line.removed[0]?.reason ?? "count");
       corrections.set(reason, [...(corrections.get(reason) ?? []), { selection: line.selection, level_after: level }]);
     }
   }

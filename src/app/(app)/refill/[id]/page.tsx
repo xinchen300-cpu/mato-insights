@@ -6,7 +6,7 @@ import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { PageHeader, Section } from "@/components/page-header";
 import { SheetTables } from "@/components/refill/sheet-tables";
 import { buttonVariants } from "@/components/ui/button";
-import { fmt } from "@/i18n/format";
+import { duration, fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getMachines, getRefillSheet, getRunSummary } from "@/lib/data";
 import { linesToFill } from "@/lib/refill";
@@ -125,10 +125,22 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
             </section>
           )}
           {step && (
-            <Section title={m.refill.stopsTitle}>
+            <Section title={m.refill.stopsTitle} hint={sheet.started_at ? m.refill.stopsHint : undefined}>
               <RowList>
                 {sheet.machine_ids.map((machineId) => {
                   const stop = sheet.stops?.[machineId];
+                  // Minutes since the stop before it was done (or since the
+                  // start): the drive there and the work at the machine.
+                  const doneAt = stop?.completedAt ?? null;
+                  const done = doneAt ? new Date(doneAt).getTime() : null;
+                  const previous = Object.values(sheet.stops ?? {})
+                    .map((other) => (other.completedAt ? new Date(other.completedAt).getTime() : NaN))
+                    .filter((at) => done !== null && at < done)
+                    .reduce((latest, at) => Math.max(latest, at), -Infinity);
+                  const start = sheet.started_at ? new Date(sheet.started_at).getTime() : NaN;
+                  const first = !Number.isFinite(previous);
+                  const since = first ? start : previous;
+                  const gap = done !== null && Number.isFinite(since) ? (done - since) / 60000 : null;
                   const name =
                     machineName.get(machineId) ??
                     sheet.lines.find((line) => line.machine_id === machineId)?.machine_name ??
@@ -146,6 +158,17 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
                           <span className="text-[13.5px] font-medium text-muted-foreground">
                             {stop?.completedAt ? (stop.skipped ? m.refill.stopSkipped : m.refill.stopDone) : m.refill.stopOpen}
                           </span>
+                        }
+                        valueSub={
+                          doneAt && (
+                            <span className="tabular text-muted-foreground">
+                              {f.time(doneAt)}
+                              {gap !== null &&
+                                ` · ${fmt(first ? m.refill.stopGapStart : m.refill.stopGap, {
+                                  time: duration(gap, m.refill.runTime, m.refill.runTimeHours),
+                                })}`}
+                            </span>
+                          )
                         }
                       />
                     </li>
@@ -165,8 +188,10 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
                 )}
                 {minutes !== null && (
                   <div className="flex items-baseline justify-between gap-4 border-b border-border py-3.5 last:border-b-0">
-                    <dt className="text-sm text-muted-foreground">{m.machines.history}</dt>
-                    <dd className="tabular text-[15px] font-semibold">{fmt(m.refill.runTime, { minutes })}</dd>
+                    <dt className="text-sm text-muted-foreground">{m.refill.duration}</dt>
+                    <dd className="tabular text-[15px] font-semibold">
+                      {duration(minutes, m.refill.runTime, m.refill.runTimeHours)}
+                    </dd>
                   </div>
                 )}
                 {sheet.km !== null && (

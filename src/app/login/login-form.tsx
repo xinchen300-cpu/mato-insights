@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n/client";
+import { samePath } from "@/lib/safe-path";
 import { createClient } from "@/lib/supabase/client";
 
 export function LoginForm({ canSignUp }: { canSignUp: boolean }) {
@@ -48,8 +49,7 @@ export function LoginForm({ canSignUp }: { canSignUp: boolean }) {
       setLoading(false);
       return;
     }
-    const next = searchParams.get("next");
-    router.push(next && next.startsWith("/") && !next.startsWith("//") ? next : "/");
+    router.push(samePath(searchParams.get("next"), window.location.origin));
     router.refresh();
   }
 

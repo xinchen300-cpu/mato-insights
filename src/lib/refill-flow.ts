@@ -116,13 +116,15 @@ export function allocate(lines: FlowLine[], picked: Record<string, number>): Rec
 /**
  * What a slot holds after the stop. A count wins; then "seen full"; otherwise
  * what was in it plus what went in, capped at what fits. A slot Vendly could
- * not see into stays unknown unless somebody looked: null means "write nothing".
+ * not see into stays unknown unless somebody looked — or a whole slot's worth
+ * went in, which only fits in an empty slot, so it is full now. The plan takes
+ * exactly that for a slot it cannot see into. Null means "write nothing".
  */
 export function levelAfter(line: Pick<FlowLine, "capacity">, stockNow: number | null, stop: StopLine): number | null {
   const cap = line.capacity;
   if (stop.countAfter !== null) return Math.min(cap, Math.max(0, Math.round(stop.countAfter)));
   if (stop.full) return cap;
-  if (stockNow === null) return null;
+  if (stockNow === null) return stop.filled >= cap ? cap : null;
   const removed = stop.removed.reduce((sum, r) => sum + r.qty, 0);
   return Math.min(cap, Math.max(0, stockNow - removed) + stop.filled);
 }
@@ -205,6 +207,8 @@ export function onlyMine(sheet: RefillSheet, view: ShopView): RefillSheet {
     // The filler's link opens the whole run, every machine on the round, so a
     // shop never gets it: it would hand over the co-tenant's slots in one click.
     share_token: "",
+    // Who filled is the operator's staff; their e-mail address is not the shop's.
+    filled_by: null,
     machine_ids: sheet.machine_ids.filter((id) => view.machines.includes(id)),
     lines,
     // Flow 2 keeps progress per machine and the box per machine and product.

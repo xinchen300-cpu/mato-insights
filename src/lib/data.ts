@@ -764,18 +764,31 @@ export async function getCurrentAssignments(orgId: string, machineId: string): P
 }
 
 export async function getRefillHistory(orgId: string, machineId: string): Promise<RefillEvent[]> {
-  await denyFillerAccess();
-  const { data } = await createAdminClient()
+  await requireMachineAccess(orgId, machineId);
+  const { businessId } = await getScope();
+  const admin = createAdminClient();
+  const { data } = await admin
     .from("stock_events")
-    .select("occurred_at, type, delta, refill_sheet_id, filled_by")
+    .select("occurred_at, type, delta, refill_sheet_id, filled_by, selection_number")
     .eq("org_id", orgId)
     .eq("machine_id", machineId)
     .order("occurred_at", { ascending: false })
     .limit(500);
 
+  // A shop on a shared fridge counts its own slots only, and does not get the
+  // e-mail address of whoever filled: that is the operator's staff, not theirs.
+  let rows = data ?? [];
+  if (businessId) {
+    const { data: slots } = await admin.rpc("machine_stock", { target_org: orgId, machine_filter: [machineId] });
+    const own = new Set(
+      ((slots ?? []) as SlotStock[]).filter((slot) => slot.business_id === businessId).map((slot) => slot.selection_number),
+    );
+    rows = rows.filter((row) => own.has(row.selection_number as string)).map((row) => ({ ...row, filled_by: null }));
+  }
+
   // One refill or correction writes a row per slot with the same timestamp.
   const events = new Map<string, RefillEvent>();
-  for (const row of data ?? []) {
+  for (const row of rows) {
     const key = `${row.occurred_at}|${row.type}`;
     const event = events.get(key) ?? {
       occurred_at: row.occurred_at,

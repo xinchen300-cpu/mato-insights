@@ -23,6 +23,7 @@ import {
   getSetupState,
 } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { buildInsights } from "@/lib/insights";
 import { compareSince, fillDays, lastFullWeeks } from "@/lib/stats";
 import { terminalStatus } from "@/lib/terminal-status";
@@ -59,6 +60,12 @@ export default async function OverviewPage() {
   }
 
   if (!orgId) {
+    // Signed in but in no organisation: registered without the invitation's
+    // link. Settings would be a dead end; the link is the way in.
+    const {
+      data: { user },
+    } = await (await createClient()).auth.getUser();
+    if (user) return <EmptyState title={m.overview.noOrgTitle} hint={m.overview.noOrgHint} />;
     return (
       <EmptyState
         title={m.overview.noData}

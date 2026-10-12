@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronRight, TriangleAlert } from "lucide-react";
+import { Check, ChevronRight, Timer, TriangleAlert } from "lucide-react";
 import { VendlyWordmark } from "@/components/brand/vendly-mark";
 import { useI18n } from "@/i18n/client";
-import { fmt } from "@/i18n/format";
+import { duration, fmt } from "@/i18n/format";
 import type { RefillRound } from "@/lib/data";
 import {
   allocate,
@@ -71,6 +71,7 @@ export function RoundFlow({ round: initial }: { round: RefillRound }) {
   const [readyAt, setReadyAt] = useState(initial.readyAt);
   const [stops, setStops] = useState<Record<string, StopRecord>>(initial.stops);
   const [completed, setCompleted] = useState(Boolean(initial.completedAt));
+  const [completedAt, setCompletedAt] = useState(initial.completedAt);
   const [picked, setPicked] = useState<Record<string, number>>(initial.picked);
   const [touched, setTouched] = useState(Object.keys(initial.picked).length > 0);
   const [drafts, setDrafts] = useState<Record<string, StopDraft>>({});
@@ -252,9 +253,13 @@ export function RoundFlow({ round: initial }: { round: RefillRound }) {
   }
 
   const header = (
-    <div className="flex items-center justify-between">
+    <div className="flex items-center justify-between gap-3">
       <VendlyWordmark className="h-[24px] w-auto text-[#2a2520]" />
-      {error && <span className="text-[13px] font-semibold text-negative">{error}</span>}
+      {error ? (
+        <span className="text-[13px] font-semibold text-negative">{error}</span>
+      ) : (
+        readyAt && !completed && <RoundClock since={readyAt} />
+      )}
     </div>
   );
 
@@ -280,6 +285,17 @@ export function RoundFlow({ round: initial }: { round: RefillRound }) {
               back: leftover,
             })}
           </p>
+          {readyAt && completedAt && (
+            <p className="tabular text-[16px] font-semibold">
+              {fmt(t.took, {
+                time: duration(
+                  (new Date(completedAt).getTime() - new Date(readyAt).getTime()) / 60000,
+                  m.refill.runTime,
+                  m.refill.runTimeHours,
+                ),
+              })}
+            </p>
+          )}
         </div>
       </Screen>
     );
@@ -475,6 +491,7 @@ export function RoundFlow({ round: initial }: { round: RefillRound }) {
             () => completeRound(initial.id, choices),
             () => {
               setCompleted(true);
+              setCompletedAt(new Date().toISOString());
               try {
                 localStorage.removeItem(storageKey(initial.id));
               } catch {
@@ -874,6 +891,36 @@ function ReturnsScreen({
         </button>
       </BottomBar>
     </Screen>
+  );
+}
+
+/**
+ * How long the round has been going, from "Start ronde" on. It runs by itself:
+ * a timer the filler has to start and stop gets forgotten, and then the
+ * number is worse than none.
+ */
+function RoundClock({ since }: { since: string }) {
+  const { m } = useI18n();
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    const first = setTimeout(tick, 0);
+    const every = setInterval(tick, 15_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(every);
+    };
+  }, []);
+  if (now === null) return null;
+  const minutes = (now - new Date(since).getTime()) / 60000;
+  return (
+    <span
+      className="tabular flex items-center gap-1.5 rounded-full bg-surface px-3 py-1 text-[13.5px] font-semibold"
+      aria-label={fmt(m.round.clockLabel, { time: duration(minutes, m.refill.runTime, m.refill.runTimeHours) })}
+    >
+      <Timer className="size-4" strokeWidth={2.2} aria-hidden="true" />
+      {duration(minutes, m.refill.runTime, m.refill.runTimeHours)}
+    </span>
   );
 }
 

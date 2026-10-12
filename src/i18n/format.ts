@@ -13,6 +13,13 @@ export function plural(count: number, one: string, other: string): string {
   return count === 1 ? one : fmt(other, { count });
 }
 
+/** "42 min" or "1 u 05 min": how long a round took, from its minutes. */
+export function duration(minutes: number, short: string, long: string): string {
+  const total = Math.max(0, Math.round(minutes));
+  if (total < 60) return fmt(short, { minutes: total });
+  return fmt(long, { hours: Math.floor(total / 60), minutes: String(total % 60).padStart(2, "0") });
+}
+
 export type Formatters = ReturnType<typeof makeFormatters>;
 
 export function makeFormatters(locale: Locale) {
@@ -44,6 +51,7 @@ export function makeFormatters(locale: Locale) {
     minute: "2-digit",
     timeZone,
   });
+  const clock = new Intl.DateTimeFormat(tag, { hour: "2-digit", minute: "2-digit", timeZone });
   const relative = new Intl.RelativeTimeFormat(tag, { numeric: "auto" });
 
   return {
@@ -61,6 +69,7 @@ export function makeFormatters(locale: Locale) {
     monthLong: (month: string) => monthLong.format(new Date(`${month}-15T12:00:00Z`)),
     monthShort: (month: string) => monthShort.format(new Date(`${month}-15T12:00:00Z`)),
     dateTime: (value: string | Date) => dateTime.format(new Date(value)),
+    time: (value: string | Date) => clock.format(new Date(value)),
     /** "3 minutes ago", "yesterday", … Only render this on the server. */
     relative: (value: string | Date) => {
       const seconds = (new Date(value).getTime() - Date.now()) / 1000;

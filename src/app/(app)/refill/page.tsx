@@ -3,7 +3,7 @@ import { CircleCheck, ClipboardList } from "lucide-react";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
-import { fmt } from "@/i18n/format";
+import { duration, fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getMachines, getMachineStock, getOpenRounds, getRefillSheets, getShortages, getStatsReport, type OpenRound } from "@/lib/data";
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
@@ -254,7 +254,9 @@ export default async function RefillPage() {
                       valueSub={
                         (minutes !== null || sheet.km !== null || open) && (
                           <span className="ml-auto flex max-w-28 flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-muted-foreground sm:max-w-none">
-                            {minutes !== null && <span className="tabular">{fmt(m.refill.runTime, { minutes })}</span>}
+                            {minutes !== null && (
+                              <span className="tabular">{duration(minutes, m.refill.runTime, m.refill.runTimeHours)}</span>
+                            )}
                             {sheet.km !== null && <span className="tabular">{fmt(m.refill.runKm, { km: sheet.km })}</span>}
                             {open && (
                               <span className="inline-flex items-center gap-1.5 font-medium text-warning">

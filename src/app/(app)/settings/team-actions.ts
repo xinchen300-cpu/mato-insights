@@ -16,7 +16,8 @@ export type InviteResult = { ok: true; email: string; token: string } | { ok: fa
  * Lets someone in: they sign up through the link with this address and land
  * in this organisation with this role. The link carries a token; signing up
  * with the address but without the token attaches nobody, so knowing an
- * invited address is not enough to take the seat.
+ * invited address is not enough to take the seat. Someone who already has an
+ * account opens the same link signed in and takes it up there.
  */
 export async function inviteTeamMember(email: string, role: string): Promise<InviteResult> {
   const orgId = await requireOrgId();
@@ -30,10 +31,12 @@ export async function inviteTeamMember(email: string, role: string): Promise<Inv
   // on it. Saying "taken" tells nothing about which organisation has it.
   const { data: existing } = await admin.from("allowed_emails").select("email").eq("email", address).maybeSingle();
   if (existing) return { ok: false, reason: "taken" };
-  // An address that already has an account could never claim an invitation,
-  // and would keep the signup page open for nothing.
-  const { data: hasAccount } = await admin.rpc("email_has_account", { address });
-  if (hasAccount) return { ok: false, reason: "taken" };
+  // An account that already belongs to an organisation cannot join a second.
+  // One that belongs nowhere yet (registered without the link) can: signed in,
+  // it takes up the invitation through the same link.
+  const { data: state, error: stateError } = await admin.rpc("email_account_state", { address });
+  if (stateError) return { ok: false, reason: "failed" };
+  if (state === "member") return { ok: false, reason: "taken" };
 
   const token = randomBytes(18).toString("base64url");
   const { error } = await admin

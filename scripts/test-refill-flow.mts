@@ -13,7 +13,9 @@ ok("unknown slot gets its share", prep[slotKey("m1","3")] === 2);
 const base = { selection: "1", prepared: 2, filled: 2, removed: [], countAfter: null, full: false };
 ok("known: stock + filled, capped", levelAfter({ capacity: 2 }, 1, { ...base, filled: 2 }) === 2);
 ok("known: removal subtracts first", levelAfter({ capacity: 2 }, 2, { ...base, filled: 1, removed: [{ reason: "expired", qty: 1 }] }) === 2);
-ok("unknown without looking stays unknown", levelAfter({ capacity: 2 }, null, base) === null);
+ok("unknown, nothing filled, nobody looked: stays unknown", levelAfter({ capacity: 2 }, null, { ...base, filled: 0 }) === null);
+ok("unknown + a whole slot's worth filled = full", levelAfter({ capacity: 2 }, null, { ...base, filled: 2 }) === 2);
+ok("unknown + less than a slot's worth stays unknown", levelAfter({ capacity: 2 }, null, { ...base, filled: 1 }) === null);
 ok("seen full writes capacity", levelAfter({ capacity: 2 }, null, { ...base, full: true }) === 2);
 ok("count wins and is clamped", levelAfter({ capacity: 2 }, 0, { ...base, countAfter: 5 }) === 2);
 const rets = returnsFor(lines, [], { [pickKey("m1","bami")]: 3, [pickKey("m1","nasi")]: 2 },
