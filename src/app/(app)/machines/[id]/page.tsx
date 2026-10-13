@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ClipboardList, LayoutGrid, Pencil } from "lucide-react";
 import { Avatar, RowList } from "@/components/list-row";
-import { FrontView, OWNER_TONES, OwnerLegend, StockLegend } from "@/components/machine/front-view";
+import { OWNER_TONES, OwnerLegend, StockLegend } from "@/components/machine/front-view";
+import { SlotProducts } from "@/components/machine/slot-products";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { fmt, weekdayIndex } from "@/i18n/format";
@@ -14,6 +15,7 @@ import {
   getMachineSalesSplit,
   getPaymentFeed,
   getPaymentHealth,
+  getProducts,
   getRefillHistory,
 } from "@/lib/data";
 import { toFrontRows } from "@/lib/layout";
@@ -21,6 +23,7 @@ import { mediaUrl } from "@/lib/media";
 import { denyFiller, requireOrgId } from "@/lib/org";
 import { fillLevel, levelColor } from "@/lib/stock";
 import { cn } from "@/lib/utils";
+import { assignProduct, createProductForMachine } from "../actions";
 import { MachineDetailsForm } from "./machine-details-form";
 import { MachineStatus, TerminalPanel } from "./terminal-panel";
 
@@ -44,13 +47,14 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   if (!machine) notFound();
 
   const since = new Date(Date.now() - PAYMENT_WINDOW_DAYS * 86_400_000);
-  const [slots, businesses, history, health, payments, split] = await Promise.all([
+  const [slots, businesses, history, health, payments, split, products] = await Promise.all([
     getMachineStock(orgId, [id]),
     getBusinesses(orgId),
     getRefillHistory(orgId, id),
     getPaymentHealth(orgId, since),
     getPaymentFeed(orgId, id),
     getMachineSalesSplit(orgId, id, since),
+    getProducts(orgId),
   ]);
 
   // A shared machine: every slot belongs to one of its two businesses.
@@ -175,7 +179,12 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
             )}
 
             <div className="mt-7 sm:mt-8">
-              <FrontView rows={toFrontRows(slots, shared ? toneOf : undefined)} />
+              <SlotProducts
+                rows={toFrontRows(slots, shared ? toneOf : undefined)}
+                products={products}
+                onAssign={assignProduct.bind(null, id)}
+                onCreate={createProductForMachine.bind(null, id)}
+              />
             </div>
             <div className="mt-4 flex flex-col gap-2">
               {shared && <OwnerLegend owners={owners} />}

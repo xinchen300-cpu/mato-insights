@@ -48,7 +48,6 @@ export function WasteList({ rows }: { rows: WasteRow[] }) {
                   subtitle={
                     <>
                       <span className="figure block truncate">
-                        {row.producer_name ? `${row.producer_name} · ` : ""}
                         {fmt(m.expiry.binSold, { count: row.qty_sold })}
                       </span>
                       <span

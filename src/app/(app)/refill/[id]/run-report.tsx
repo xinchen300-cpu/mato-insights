@@ -7,20 +7,16 @@ import { useI18n } from "@/i18n/client";
 import type { RunSummaryRow } from "@/lib/types";
 
 /**
- * What the shop and each producer need to hear after a run, ready to paste
- * into a message. Grouped by producer, because that is who acts on it.
+ * What happened on a run, product by product, ready to paste into a message.
+ * One list: producers are not something Vendly asks about any more.
  */
 export function RunReport({ rows, when }: { rows: RunSummaryRow[]; when: string }) {
   const { m } = useI18n();
   const [copied, setCopied] = useState<string | null>(null);
 
-  const groups = new Map<string, { name: string; rows: RunSummaryRow[] }>();
-  for (const row of rows) {
-    const key = row.producer_id ?? "none";
-    const group = groups.get(key) ?? { name: row.producer_name ?? m.refill.reportNoProducer, rows: [] };
-    group.rows.push(row);
-    groups.set(key, group);
-  }
+  const groups = new Map<string, { name: string; rows: RunSummaryRow[] }>(
+    rows.length ? [["round", { name: m.refill.reportNoProducer, rows }]] : [],
+  );
 
   function lineOf(row: RunSummaryRow) {
     return [

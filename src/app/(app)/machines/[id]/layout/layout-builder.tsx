@@ -3,9 +3,9 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, LayoutTemplate, Plus, Square, Trash2 } from "lucide-react";
-import { FrontView, OWNER_TONES, OwnerLegend, type FrontSlot } from "@/components/machine/front-view";
+import { OWNER_TONES, OwnerLegend, type FrontSlot } from "@/components/machine/front-view";
+import { SlotProducts } from "@/components/machine/slot-products";
 import { Panel, Section } from "@/components/page-header";
-import { ProductPicker } from "@/components/product-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -109,7 +109,6 @@ export function LayoutBuilder({
     OWNER_TONES[Math.max(0, owners.findIndex((o) => o.id === ownerId)) % OWNER_TONES.length];
   const setOwner = (selections: string[], ownerId: string) =>
     setSlotOwners((current) => ({ ...current, ...Object.fromEntries(selections.map((sel) => [sel, ownerId])) }));
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState("");
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -131,14 +130,13 @@ export function LayoutBuilder({
         capacity: row.depth,
         stock: null,
         productName: product?.name ?? null,
+        productId: product?.id ?? null,
         photoUrl: mediaUrl(product?.photo_path),
         ownerTone: shared ? toneOf(ownerOf(selection)) : null,
       };
     }),
   );
 
-  const [selRow, selIndex] = selectedKey ? selectedKey.split(":").map(Number) : [null, null];
-  const selectedSelection = selRow !== null && selIndex !== null ? rows[selRow]?.selections[selIndex] : undefined;
 
   /**
    * A product link and a slot's owner hang on the selection number, so when a
@@ -204,7 +202,6 @@ export function LayoutBuilder({
 
     setRows((current) => current.map((r, i) => (i === index ? next : r)));
     renumbered(index, row.selections, next.selections);
-    setSelectedKey(null);
   }
 
   function setSelectionAt(rowIndex: number, slotIndex: number, value: string) {
@@ -216,18 +213,6 @@ export function LayoutBuilder({
       ),
     );
     if (was && was !== clean) renumbered(rowIndex, [was], [clean]);
-  }
-
-  function setSelection(value: string) {
-    if (selRow === null || selIndex === null) return;
-    const clean = value.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
-    const was = rows[selRow]?.selections[selIndex];
-    setRows((current) =>
-      current.map((row, i) =>
-        i === selRow ? { ...row, selections: row.selections.map((s, j) => (j === selIndex ? clean : s)) } : row,
-      ),
-    );
-    if (was && was !== clean) renumbered(selRow, [was], [clean]);
   }
 
   function addRow() {
@@ -243,21 +228,18 @@ export function LayoutBuilder({
 
   function removeRow(index: number) {
     setRows((current) => current.filter((_, i) => i !== index));
-    setSelectedKey(null);
   }
 
   function applyRows(next: EditorRow[], nextType?: MachineType | null) {
     setRows(next);
     if (nextType && nextType !== "other") setType(nextType);
-    setSelectedKey(null);
     setMessage(null);
   }
 
-  async function createAndAssign(name: string) {
-    if (!selectedSelection) return;
+  async function createForSlot(name: string) {
     const product = await createProduct(name, null, machineId);
     setProducts((list) => [...list, product].sort((a, b) => a.name.localeCompare(b.name)));
-    setAssignments((a) => ({ ...a, [selectedSelection]: product.id }));
+    return product;
   }
 
   function save() {
@@ -503,71 +485,39 @@ export function LayoutBuilder({
             }
             className="gap-4 lg:sticky lg:top-24 lg:self-start"
           >
-            <div className="overflow-hidden rounded-2xl">
-              <FrontView
-                rows={frontRows}
-                showStock={false}
-                selectedKey={selectedKey}
-                onSlotClick={(slot) => setSelectedKey(slot.key === selectedKey ? null : slot.key)}
-              />
-            </div>
+            <SlotProducts
+              rows={frontRows}
+              products={products}
+              showStock={false}
+              hint={m.layout.tapSlotBuilder}
+              onAssign={async (selection, productId) => {
+                setAssignments((a) => ({ ...a, [selection]: productId }));
+              }}
+              onCreate={createForSlot}
+              extra={
+                shared
+                  ? (slot) => (
+                      <label className="mb-3 grid gap-1.5">
+                        <span className={fieldLabel}>{m.layout.slotOwner}</span>
+                        <select
+                          value={ownerOf(slot.selection) ?? ""}
+                          onChange={(e) => setOwner([slot.selection], e.target.value)}
+                          className={numberInput}
+                        >
+                          {owners.map((o) => (
+                            <option key={o.id} value={o.id}>
+                              {o.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )
+                  : undefined
+              }
+            />
             {shared && (
               <div className="px-1">
                 <OwnerLegend owners={owners.map((o) => ({ name: o.name, tone: toneOf(o.id) }))} />
-              </div>
-            )}
-
-            {selectedSelection !== undefined && (
-              <div className="surface-card grid gap-5 p-5 ring-1 ring-primary/40 sm:p-6">
-                <p className="font-heading text-[18px] font-semibold tracking-[-0.02em] text-heading">
-                  {fmt(m.layout.editSlot, { number: selectedSelection || "?" })}
-                </p>
-                <div className="grid gap-4 sm:grid-cols-[7rem_minmax(0,1fr)]">
-                  <div className="grid gap-2">
-                    <Label htmlFor="slot-selection" className={fieldLabel}>
-                      {m.layout.selection}
-                    </Label>
-                    <Input
-                      id="slot-selection"
-                      inputMode="numeric"
-                      value={selectedSelection}
-                      onChange={(e) => setSelection(e.target.value)}
-                    />
-                  </div>
-                  <div className="grid min-w-0 gap-2">
-                    <Label className={fieldLabel}>{m.layout.product}</Label>
-                    <ProductPicker
-                      products={products}
-                      value={selectedSelection ? (assignments[selectedSelection] ?? null) : null}
-                      onSelect={(id) =>
-                        selectedSelection && setAssignments((a) => ({ ...a, [selectedSelection]: id }))
-                      }
-                      onCreate={createAndAssign}
-                      allowNone
-                      noneLabel={m.layout.noProduct}
-                      disabled={!selectedSelection}
-                    />
-                  </div>
-                  {shared && selectedSelection && (
-                    <div className="grid gap-2 sm:col-span-2">
-                      <Label htmlFor="slot-owner" className={fieldLabel}>
-                        {m.layout.slotOwner}
-                      </Label>
-                      <select
-                        id="slot-owner"
-                        value={ownerOf(selectedSelection) ?? ""}
-                        onChange={(e) => setOwner([selectedSelection], e.target.value)}
-                        className={numberInput}
-                      >
-                        {owners.map((o) => (
-                          <option key={o.id} value={o.id}>
-                            {o.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </div>
               </div>
             )}
           </Section>

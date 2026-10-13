@@ -1,12 +1,9 @@
-import Link from "next/link";
-import { Factory, Link2 } from "lucide-react";
+import { Link2 } from "lucide-react";
 import { Avatar, ListRow, RowList } from "@/components/list-row";
-import { buttonVariants } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import {
   getBusinesses,
-  getProducers,
   getProducts,
   getProductSlotCounts,
   getShelfLifePresets,
@@ -25,24 +22,17 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const { business } = await searchParams;
   const { m } = await getI18n();
   const orgId = await requireOrgId();
-  const [products, slotCounts, unassigned, businesses, presets, producers] = await Promise.all([
+  const [products, slotCounts, unassigned, businesses, presets] = await Promise.all([
     getProducts(orgId, { includeArchived: true }),
     getProductSlotCounts(orgId),
     getUnassigned(orgId),
     getBusinesses(orgId),
     getShelfLifePresets(orgId),
-    getProducers(orgId),
   ]);
 
   return (
     <ProductGrid
       title={m.products.title}
-      actions={
-        <Link href="/producers" className={buttonVariants({ variant: "outline" })}>
-          <Factory />
-          {m.producers.title}
-        </Link>
-      }
       notice={
         unassigned.length > 0 && (
           <RowList className="mb-6">
@@ -70,7 +60,6 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
       businesses={businesses.map((b) => ({ id: b.id, name: b.name }))}
       initialBusiness={businesses.some((b) => b.id === business) ? business : ""}
       presets={presets}
-      producers={producers.map((p) => ({ id: p.id, name: p.name }))}
     />
   );
 }

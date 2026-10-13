@@ -9,6 +9,8 @@ export type FrontSlot = {
   capacity: number;
   stock: number | null;
   productName: string | null;
+  /** The product in the slot, for screens that change it; absent where nobody may. */
+  productId?: string | null;
   photoUrl: string | null;
   /** Colour of the business the slot belongs to, only on a shared machine. */
   ownerTone?: string | null;

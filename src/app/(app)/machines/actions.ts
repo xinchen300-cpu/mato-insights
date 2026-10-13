@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { isOperator, requireOperator, requireOrgId } from "@/lib/org";
 import { getMachine, requireMachineAccess, requireProductAccess } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { MACHINE_TYPES, SLOT_SIZES, type LayoutRowSpec, type MachineType, type SlotSize } from "@/lib/types";
+import { MACHINE_TYPES, SLOT_SIZES, type LayoutRowSpec, type MachineType, type Product, type SlotSize } from "@/lib/types";
+import { createProduct } from "../products/actions";
 
 export async function assignProduct(machineId: string, selection: string, productId: string | null) {
   const orgId = await requireOrgId();
@@ -18,6 +19,13 @@ export async function assignProduct(machineId: string, selection: string, produc
   });
   if (error) throw new Error(error.message);
   revalidatePath("/", "layout");
+}
+
+/** A new product made from a slot of this machine, owned the way the machine decides. */
+export async function createProductForMachine(machineId: string, name: string): Promise<Product> {
+  const orgId = await requireOrgId();
+  await requireMachineAccess(orgId, machineId);
+  return createProduct(name, null, machineId);
 }
 
 export async function updateMachineDetails(

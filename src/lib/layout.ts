@@ -13,6 +13,7 @@ export function toFrontRows(slots: SlotStock[], ownerTone?: (businessId: string 
       capacity: s.capacity,
       stock: s.stock,
       productName: s.product_name,
+      productId: s.product_id,
       photoUrl: mediaUrl(s.photo_path),
       ownerTone: ownerTone?.(s.business_id) ?? null,
     });
