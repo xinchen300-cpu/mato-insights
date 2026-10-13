@@ -410,3 +410,37 @@ export function roundTimings(rounds: TimedRound[]): RoundTimings {
     legs: averages(legs),
   };
 }
+
+export type RoundCost = {
+  minutes: number;
+  km: number | null;
+  /** Where the kilometres came from: written on the round, or the one machine's distance there and back. */
+  kmFrom: "round" | "machine" | null;
+  time: number;
+  /** Null while nobody wrote the kilometres down: unknown, never zero. */
+  drive: number | null;
+  total: number;
+};
+
+/**
+ * What a round cost: its time at the hourly rate plus its kilometres at the
+ * kilometre rate, as set in Settings. The kilometres are the ones written on
+ * the round; a round to a single machine falls back to that machine's
+ * distance there and back. Without either, only the time is counted.
+ */
+export function roundCost(input: {
+  minutes: number;
+  km: number | null;
+  /** The distance there and back of every machine the round went to, where it is known. */
+  machineKm: (number | null)[];
+  perHour: number;
+  perKm: number;
+}): RoundCost {
+  const single = input.machineKm.length === 1 ? input.machineKm[0] : null;
+  const km = input.km ?? single ?? null;
+  const kmFrom = input.km !== null ? "round" : single !== null ? "machine" : null;
+  const time = (input.minutes / 60) * input.perHour;
+  const drive = km === null ? null : km * input.perKm;
+  return { minutes: input.minutes, km, kmFrom, time, drive, total: time + (drive ?? 0) };
+}
+

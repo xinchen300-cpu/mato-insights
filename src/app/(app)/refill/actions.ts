@@ -60,3 +60,19 @@ export async function saveSheetNotes(sheetId: string, notes: string) {
     .eq("org_id", orgId);
   revalidatePath(`/refill/${sheetId}`);
 }
+
+/** The kilometres of a round, written or corrected by the operator: the drive in its cost. */
+export async function saveRunKm(sheetId: string, km: number | null) {
+  const orgId = await requireOrgId();
+  await requireOperator();
+  const value = km === null ? null : Math.round(km * 10) / 10;
+  if (value !== null && !(value > 0 && value <= 2000)) throw new Error("Not a distance");
+  const { error } = await createAdminClient()
+    .from("refill_sheets")
+    .update({ km: value })
+    .eq("id", sheetId)
+    .eq("org_id", orgId);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/refill/${sheetId}`);
+}
+

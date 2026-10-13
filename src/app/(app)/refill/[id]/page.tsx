@@ -9,13 +9,14 @@ import { buttonVariants } from "@/components/ui/button";
 import { duration, fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { LiveRounds } from "@/components/refill/live-rounds";
-import { getMachines, getOpenRounds, getRefillSheet, getRunSummary } from "@/lib/data";
+import { getMachines, getOpenRounds, getRefillSheet, getRunRates, getRunSummary } from "@/lib/data";
 import { linesToFill } from "@/lib/refill";
-import { itemReport } from "@/lib/refill-flow";
+import { itemReport, roundCost } from "@/lib/refill-flow";
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
 import { cn } from "@/lib/utils";
 import { NotesForm } from "./notes-form";
 import { RoundReport } from "./round-report";
+import { RunKm } from "./run-km";
 import { RunReport } from "./run-report";
 import { ShareBox } from "./share-box";
 import { MachineIcon } from "@/components/machine/machine-icon";
@@ -43,10 +44,13 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
   // A stop with nothing to fill has no line to borrow a name from.
   const step = sheet.flow_version === 2;
   // A shop follows the round; doing it is for the operator and their fillers.
-  const canFill = step && (await isOperator());
+  const operator = await isOperator();
+  const canFill = step && operator;
   // Out right now: the same live card as on the overview, kept fresh.
   const live = canFill && sheet.started_at && !sheet.completed_at ? (await getOpenRounds(orgId)).filter((r) => r.id === sheet.id) : [];
-  const machineName = new Map(step ? (await getMachines(orgId)).map((machine) => [machine.id, machine.name]) : []);
+  // Names for the stops, and each machine's distance there and back for the cost.
+  const fleet = step || (operator && sheet.completed_at) ? await getMachines(orgId) : [];
+  const machineName = new Map(fleet.map((machine) => [machine.id, machine.name]));
 
   const total = sheet.lines.reduce((sum, l) => sum + l.to_add, 0);
 
@@ -93,6 +97,34 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
       ? Math.max(1, Math.round((new Date(sheet.completed_at).getTime() - new Date(sheet.started_at).getTime()) / 60000))
       : null;
 
+  // What the round cost, for the operator only: its time and its kilometres at
+  // the rates in Settings, with the sum written out next to it.
+  const km = sheet.km === null ? null : Number(sheet.km);
+  const rates = operator && sheet.completed_at && minutes !== null ? await getRunRates(orgId) : null;
+  const cost =
+    rates && minutes !== null
+      ? roundCost({
+          minutes,
+          km,
+          machineKm: sheet.machine_ids
+            .filter((id) => !sheet.stops?.[id]?.skipped)
+            .map((id) => fleet.find((machine) => machine.id === id)?.km_round_trip ?? null),
+          ...rates,
+        })
+      : null;
+  const costCalc =
+    cost && rates
+      ? fmt(
+          cost.kmFrom === "round" ? m.refill.costCalc : cost.kmFrom === "machine" ? m.refill.costCalcMachine : m.refill.costCalcNoKm,
+          {
+            time: duration(cost.minutes, m.refill.runTime, m.refill.runTimeHours),
+            perHour: f.euro(rates.perHour),
+            km: cost.km === null ? "" : f.number(cost.km),
+            perKm: f.euro(rates.perKm),
+          },
+        )
+      : null;
+
   return (
     <>
       <PageHeader
@@ -126,6 +158,18 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
             <CircleCheck className="size-[18px]" />
             {fmt(m.refill.completedAt, { date: f.dateTime(sheet.completed_at) })}
           </p>
+        )}
+        {cost && costCalc && (
+          <div className="mt-6 flex flex-col gap-1">
+            <p className="text-[14px] font-medium text-muted-foreground">{m.refill.costTitle}</p>
+            <p className="tabular text-[28px] font-semibold leading-tight tracking-[-0.03em]">{f.euro(cost.total)}</p>
+            <p className="max-w-xl text-[13.5px] leading-snug text-muted-foreground">
+              <span className="tabular">{costCalc}</span>{" "}
+              <Link href="/settings" className="font-medium underline underline-offset-2 hover:text-foreground">
+                {m.refill.costRates}
+              </Link>
+            </p>
+          </div>
         )}
       </div>
 
@@ -248,10 +292,16 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
                     </dd>
                   </div>
                 )}
-                {sheet.km !== null && (
-                  <div className="flex items-baseline justify-between gap-4 border-b border-border py-3.5 last:border-b-0">
-                    <dt className="text-sm text-muted-foreground">{m.refill.kmLabel}</dt>
-                    <dd className="tabular text-[15px] font-semibold">{fmt(m.refill.runKm, { km: sheet.km })}</dd>
+                {(km !== null || (operator && sheet.completed_at)) && (
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border py-3.5 last:border-b-0">
+                    <dt className="min-w-0 text-sm text-muted-foreground">{m.refill.kmLabel}</dt>
+                    <dd className="ml-auto shrink-0">
+                      {operator && sheet.completed_at ? (
+                        <RunKm sheetId={sheet.id} km={km} estimate={cost?.kmFrom === "machine" ? cost.km : null} />
+                      ) : (
+                        <span className="tabular text-[15px] font-semibold">{fmt(m.refill.runKm, { km: f.number(km ?? 0) })}</span>
+                      )}
+                    </dd>
                   </div>
                 )}
               </dl>

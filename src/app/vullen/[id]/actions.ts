@@ -283,6 +283,7 @@ async function finishStop(
 export async function completeRound(
   sheetId: string,
   choices: { productId: string; source: "leftover" | "removed"; reason: string | null; disposition: string }[],
+  km: number | null = null,
 ): Promise<void> {
   const { orgId, round } = await openRound(sheetId);
   // Closing is the last step: after the start, with every machine done or skipped.
@@ -351,6 +352,8 @@ export async function completeRound(
       returns: rows,
       lines,
       completed_at: new Date().toISOString(),
+      // Kilometres are optional; a number that is no distance is left out, not refused.
+      ...(typeof km === "number" && km > 0 && km <= 2000 ? { km: Math.round(km * 10) / 10 } : {}),
       // Whoever started the round filled it; the name was kept at the start.
       filled_by: (sheet?.filled_by as string | null) ?? (await fillerName()),
     })

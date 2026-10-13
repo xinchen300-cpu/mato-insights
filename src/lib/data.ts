@@ -368,6 +368,18 @@ export async function getFillerOverview(orgId: string): Promise<FillerOverview> 
   };
 }
 
+/** What an hour and a kilometre of refilling cost this operator, as set in Settings. */
+export async function getRunRates(orgId: string): Promise<{ perHour: number; perKm: number }> {
+  await requireOperator();
+  if ((await getScope()).orgId !== orgId) throw new Error("Not found");
+  const { data } = await createAdminClient()
+    .from("organizations")
+    .select("cost_per_hour, cost_per_km")
+    .eq("id", orgId)
+    .maybeSingle();
+  return { perHour: Number(data?.cost_per_hour ?? 25), perKm: Number(data?.cost_per_km ?? 0.42) };
+}
+
 export type TeamMember = { userId: string; email: string | null; role: Role; businessName: string | null };
 export type TeamInvite = { email: string; role: Role; invitedAt: string; token: string | null };
 

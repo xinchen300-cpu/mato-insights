@@ -1,6 +1,6 @@
 // Checks the refill round logic (src/lib/refill-flow.ts). Run: npm run test:flow
 import { uncovered } from "../src/lib/assignments.ts";
-import { allocate, itemReport, levelAfter, onlyMine, pickList, returnsFor, roundTimings, slotKey, pickKey, type FlowLine } from "../src/lib/refill-flow.ts";
+import { allocate, itemReport, roundCost, levelAfter, onlyMine, pickList, returnsFor, roundTimings, slotKey, pickKey, type FlowLine } from "../src/lib/refill-flow.ts";
 import type { RefillLine, RefillSheet } from "../src/lib/types.ts";
 const L = (sel: string, product: string, cap: number, stock: number | null, take: number, row = 1): FlowLine =>
   ({ machineId: "m1", selection: sel, row, slot: Number(sel), productId: product, productName: product.toUpperCase(), photoPath: null, capacity: cap, stock, take, expired: 0 });
@@ -107,3 +107,12 @@ ok("gaps: a slot with a product all along has none", uncovered([{ valid_from: "-
 ok("gaps: between two products, the stretch with neither", JSON.stringify(uncovered([{ valid_from: T2, valid_to: null }, { valid_from: "-infinity", valid_to: T1 }])) === JSON.stringify([{ from: T1, to: T2 }]));
 ok("gaps: a cleared slot is open from the moment it was cleared", JSON.stringify(uncovered([{ valid_from: "-infinity", valid_to: T1 }])) === JSON.stringify([{ from: T1, to: null }]));
 ok("gaps: a product swapped at one moment leaves nothing between", uncovered([{ valid_from: "-infinity", valid_to: T1 }, { valid_from: T1, valid_to: null }]).length === 0);
+
+// What a round cost: time at the hourly rate, kilometres at the kilometre rate.
+const cost = roundCost({ minutes: 72, km: 38, machineKm: [12, 20], perHour: 25, perKm: 0.42 });
+ok("cost: time plus kilometres", cost.time === 30 && Math.abs(cost.drive! - 15.96) < 1e-9 && Math.abs(cost.total - 45.96) < 1e-9 && cost.kmFrom === "round");
+const oneMachine = roundCost({ minutes: 30, km: null, machineKm: [24], perHour: 25, perKm: 0.5 });
+ok("cost: one machine falls back to its distance there and back", oneMachine.km === 24 && oneMachine.kmFrom === "machine" && oneMachine.total === 24.5);
+const unknown = roundCost({ minutes: 60, km: null, machineKm: [12, 20], perHour: 25, perKm: 0.42 });
+ok("cost: without kilometres the drive is unknown, not zero", unknown.drive === null && unknown.kmFrom === null && unknown.total === 25);
+
