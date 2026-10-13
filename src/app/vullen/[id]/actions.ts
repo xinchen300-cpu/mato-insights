@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { getRefillRound, type RefillRound } from "@/lib/data";
 import { requireRefillAccess } from "@/lib/org";
 import {
@@ -16,6 +17,9 @@ import {
   type StopLine,
   type StopRecord,
 } from "@/lib/refill-flow";
+import { fmt } from "@/i18n/format";
+import { messages } from "@/i18n/messages";
+import { notifyOperators } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { RefillLine } from "@/lib/types";
@@ -26,6 +30,10 @@ import type { RefillLine } from "@/lib/types";
 // from the round itself, never from what the phone sends.
 
 type Open = { orgId: string; round: RefillRound };
+
+// A notification lands on the operator's phone, whose language Vendly does not
+// keep per organisation; like the evening digest, it speaks Dutch.
+const PUSH = messages.nl.round;
 
 async function openRound(sheetId: string): Promise<Open> {
   const orgId = await requireRefillAccess();
@@ -52,11 +60,16 @@ function cleanPicked(round: RefillRound, picked: Record<string, number>): Record
   return clean;
 }
 
+/**
+ * Who is filling, as the operator should read it: the name they gave when
+ * they signed up, or else the part of their address before the @.
+ */
 async function fillerName(): Promise<string | null> {
   const {
     data: { user },
   } = await (await createClient()).auth.getUser();
-  return user?.email ?? null;
+  const name = typeof user?.user_metadata?.name === "string" ? user.user_metadata.name.trim() : "";
+  return name || user?.email?.split("@")[0] || null;
 }
 
 /** What is in the box so far, kept on the round so another phone can carry on. */
@@ -83,16 +96,28 @@ export async function startRound(sheetId: string, picked: Record<string, number>
   const box = cleanPicked(round, picked);
   const now = new Date().toISOString();
   const admin = createAdminClient();
+  const who = await fillerName();
 
   const { data: updated } = await admin
     .from("refill_sheets")
-    .update({ box, ready_at: now, started_at: round.startedAt ?? now })
+    .update({ box, ready_at: now, started_at: round.startedAt ?? now, filled_by: who })
     .eq("id", sheetId)
     .eq("org_id", orgId)
     .is("ready_at", null)
     .select("id");
-  // Only the call that actually started the round writes the shortages.
+  // Only the call that actually started the round writes the shortages, and says so.
   if (!updated?.length) return;
+  after(() =>
+    notifyOperators(orgId, {
+      title: "Vendly",
+      body: fmt(round.machines.length === 1 ? PUSH.pushStartedOne : PUSH.pushStarted, {
+        name: who ?? PUSH.pushSomeone,
+        count: round.machines.length,
+      }),
+      url: `/refill/${sheetId}`,
+      tag: `round-${sheetId}`,
+    }),
+  );
 
   const short = pickList(round.lines)
     .map((row) => ({ productId: row.productId, qty: row.take - (box[row.key] ?? 0) }))
@@ -173,6 +198,10 @@ export async function completeStop(sheetId: string, machineId: string, input: St
     if (level === null) continue;
     if (line.filled > 0) {
       refills.push({ selection: line.selection, level_after: level });
+    } else if (line.removed.length === 0 && line.countAfter === null && !line.full) {
+      // Nothing went in, nothing came out, nobody counted: write nothing. A
+      // correction at Vendly's own estimate would pass the estimate off as a count.
+      continue;
     } else {
       const reason = line.countAfter !== null || line.full ? "count" : (line.removed[0]?.reason ?? "count");
       corrections.set(reason, [...(corrections.get(reason) ?? []), { selection: line.selection, level_after: level }]);
@@ -281,7 +310,12 @@ export async function completeRound(
     }
   }
   const admin = createAdminClient();
-  const { data: sheet } = await admin.from("refill_sheets").select("lines").eq("id", sheetId).eq("org_id", orgId).single();
+  const { data: sheet } = await admin
+    .from("refill_sheets")
+    .select("lines, filled_by")
+    .eq("id", sheetId)
+    .eq("org_id", orgId)
+    .single();
   const planned = (sheet?.lines ?? []) as RefillLine[];
   const lines: RefillLine[] = planned.map((line) => ({
     ...line,
@@ -313,10 +347,28 @@ export async function completeRound(
 
   await admin
     .from("refill_sheets")
-    .update({ returns: rows, lines, completed_at: new Date().toISOString(), filled_by: await fillerName() })
+    .update({
+      returns: rows,
+      lines,
+      completed_at: new Date().toISOString(),
+      // Whoever started the round filled it; the name was kept at the start.
+      filled_by: (sheet?.filled_by as string | null) ?? (await fillerName()),
+    })
     .eq("id", sheetId)
     .eq("org_id", orgId)
     .is("completed_at", null);
+
+  const who = (sheet?.filled_by as string | null) ?? PUSH.pushSomeone;
+  const minutes = round.readyAt ? Math.max(1, Math.round((Date.now() - new Date(round.readyAt).getTime()) / 60000)) : 0;
+  const visited = Object.values(round.stops).filter((stop) => !stop.skipped).length;
+  after(() =>
+    notifyOperators(orgId, {
+      title: "Vendly",
+      body: fmt(PUSH.pushDone, { name: who, count: visited, minutes }),
+      url: `/refill/${sheetId}`,
+      tag: `round-${sheetId}`,
+    }),
+  );
   revalidatePath("/refill");
   revalidatePath(`/refill/${sheetId}`);
 }

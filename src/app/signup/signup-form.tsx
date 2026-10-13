@@ -48,6 +48,7 @@ export function SignupForm({
     setError(null);
     const email = String(formData.get("email"));
     const password = String(formData.get("password"));
+    const name = String(formData.get("name") ?? "").trim().slice(0, 60);
 
     if (!(await checkInvite(email, invite))) {
       setLoading(false);
@@ -64,7 +65,8 @@ export function SignupForm({
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
         // Without the token from the invitation link, the account is made but joins no organisation.
-        data: invite ? { invite } : undefined,
+        // The name is how the operator sees who is filling.
+        data: { ...(invite ? { invite } : {}), ...(name ? { name } : {}) },
       },
     });
     setLoading(false);
@@ -98,6 +100,10 @@ export function SignupForm({
         <p className={authHint}>{intro ?? m.auth.createHint}</p>
         {linkInvalid && <p className={authError}>{m.auth.inviteInvalid}</p>}
         <form action={submit} className={authForm}>
+          <div className={authField}>
+            <Label htmlFor="name">{m.auth.yourName}</Label>
+            <Input id="name" name="name" required maxLength={60} autoComplete="given-name" className={authInput} />
+          </div>
           <div className={authField}>
             <Label htmlFor="email">{m.auth.email}</Label>
             <Input

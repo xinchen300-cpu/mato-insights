@@ -250,7 +250,9 @@ export type OpenRound = {
   id: string;
   createdAt: string;
   readyAt: string | null;
-  machines: { id: string; name: string; done: boolean }[];
+  /** Who started it ("Start ronde"), as they gave their name. */
+  filledBy: string | null;
+  machines: { id: string; name: string; done: boolean; doneAt: string | null; skipped: boolean }[];
 };
 
 /**
@@ -262,7 +264,7 @@ export async function getOpenRounds(orgId: string): Promise<OpenRound[]> {
   const admin = createAdminClient();
   const { data: sheets } = await admin
     .from("refill_sheets")
-    .select("id, created_at, ready_at, machine_ids, stops")
+    .select("id, created_at, ready_at, machine_ids, stops, filled_by")
     .eq("org_id", orgId)
     .eq("flow_version", 2)
     .is("completed_at", null)
@@ -281,9 +283,16 @@ export async function getOpenRounds(orgId: string): Promise<OpenRound[]> {
       id: sheet.id as string,
       createdAt: sheet.created_at as string,
       readyAt: (sheet.ready_at as string | null) ?? null,
+      filledBy: (sheet.filled_by as string | null) ?? null,
       machines: ((sheet.machine_ids ?? []) as string[])
         .filter((id) => name.has(id))
-        .map((id) => ({ id, name: name.get(id)!, done: Boolean(stops[id]?.completedAt) })),
+        .map((id) => ({
+          id,
+          name: name.get(id)!,
+          done: Boolean(stops[id]?.completedAt),
+          doneAt: stops[id]?.completedAt ?? null,
+          skipped: stops[id]?.skipped === true,
+        })),
     };
   });
 }

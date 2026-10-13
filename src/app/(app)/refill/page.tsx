@@ -6,6 +6,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { duration, fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getMachines, getMachineStock, getOpenRounds, getRefillSheets, getShortages, getStatsReport, type OpenRound } from "@/lib/data";
+import { LiveRounds } from "@/components/refill/live-rounds";
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fillLevel, needsAttention } from "@/lib/stock";
@@ -192,7 +193,7 @@ export default async function RefillPage() {
       <PageHeader title={m.refill.title} />
 
       <div className="flex flex-col gap-10">
-        <OpenRounds rounds={openRounds} m={m} f={f} />
+        <LiveRounds rounds={openRounds} />
         {!(await isOperator()) ? (
           <p className="max-w-[60ch] px-1 text-[15px] text-muted-foreground">{m.refill.operatorOnly}</p>
         ) : pickable.length === 0 ? (

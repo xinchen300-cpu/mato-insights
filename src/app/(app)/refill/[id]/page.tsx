@@ -8,7 +8,8 @@ import { SheetTables } from "@/components/refill/sheet-tables";
 import { buttonVariants } from "@/components/ui/button";
 import { duration, fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getMachines, getRefillSheet, getRunSummary } from "@/lib/data";
+import { LiveRounds } from "@/components/refill/live-rounds";
+import { getMachines, getOpenRounds, getRefillSheet, getRunSummary } from "@/lib/data";
 import { linesToFill } from "@/lib/refill";
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,8 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
   const step = sheet.flow_version === 2;
   // A shop follows the round; doing it is for the operator and their fillers.
   const canFill = step && (await isOperator());
+  // Out right now: the same live card as on the overview, kept fresh.
+  const live = canFill && sheet.started_at && !sheet.completed_at ? (await getOpenRounds(orgId)).filter((r) => r.id === sheet.id) : [];
   const machineName = new Map(step ? (await getMachines(orgId)).map((machine) => [machine.id, machine.name]) : []);
 
   const total = sheet.lines.reduce((sum, l) => sum + l.to_add, 0);
@@ -91,6 +94,12 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
           </p>
         )}
       </div>
+
+      {live.length > 0 && (
+        <div className="mb-10">
+          <LiveRounds rounds={live} link="fill" />
+        </div>
+      )}
 
       {sheet.completed_at && (
         <Section title={m.refill.reportTitle} hint={m.refill.reportHint} className="mb-10">

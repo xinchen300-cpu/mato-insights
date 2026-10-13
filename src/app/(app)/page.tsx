@@ -9,6 +9,7 @@ import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { InsightsList } from "@/components/insights-list";
 import { SetupGuide, nextSetupStep } from "@/components/setup-guide";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
+import { LiveRounds } from "@/components/refill/live-rounds";
 import { buttonVariants } from "@/components/ui/button";
 import { DISPLAY_TIME_ZONE, fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
@@ -16,6 +17,7 @@ import {
   getExpiryAlerts,
   getLastSales,
   getLastSyncedAt,
+  getOpenRounds,
   getMachines,
   getMachineStock,
   getStatsReport,
@@ -78,6 +80,9 @@ export default async function OverviewPage() {
       />
     );
   }
+
+  // Only the rounds actually out (started), and only for the operator.
+  const liveRounds = operator ? (await getOpenRounds(orgId)).filter((round) => round.readyAt) : [];
 
   // Weekday patterns only from whole weeks, and enough of them (see lib/stats).
   const patternWeeks = 8;
@@ -241,6 +246,8 @@ export default async function OverviewPage() {
       />
 
       <div className="flex flex-col gap-10">
+        {/* A round that is out right now comes first: who, how long, where. */}
+        {liveRounds.length > 0 && <LiveRounds rounds={liveRounds} />}
         {/* The balance, as a bank would show it: one figure, its trend, the curve. */}
         <section className="surface-card px-5 pb-4 pt-6 sm:px-8 sm:pb-6 sm:pt-8">
           <KpiHero

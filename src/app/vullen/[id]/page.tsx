@@ -6,7 +6,7 @@ import { RoundFlow } from "./round-flow";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
-  return { title: m.round.pickTitle, robots: { index: false, follow: false } };
+  return { title: m.round.myRound, robots: { index: false, follow: false } };
 }
 
 /**
