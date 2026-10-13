@@ -910,11 +910,13 @@ export async function getBusinessFreshness(orgId: string, businessId: string): P
 
 export async function getUnassigned(orgId: string): Promise<UnassignedGroup[]> {
   await denyFillerAccess();
-  const mine = await ownMachineIds(orgId);
+  const [mine, shared] = await Promise.all([ownMachineIds(orgId), sharedSelections(orgId)]);
   const { data, error } = await createAdminClient().rpc("unassigned_sales", { target_org: orgId });
   if (error) throw new Error(error.message);
   return ((data ?? []) as UnassignedGroup[])
     .filter((g) => !mine || mine.includes(g.machine_id))
+    // On a shared machine a shop sees its own slots' sales, never its neighbour's.
+    .filter((g) => !shared?.has(g.machine_id) || shared.get(g.machine_id)!.has(g.selection_number))
     .map((g) => ({
     ...g,
     sales: Number(g.sales),
@@ -1190,6 +1192,50 @@ export async function getSetupState(orgId: string): Promise<SetupState> {
 export async function requireMachineAccess(orgId: string, machineId: string): Promise<void> {
   await denyFillerAccess();
   if (!(await getMachine(orgId, machineId))) throw new Error("Not found");
+}
+
+/**
+ * The selections a shop owns on each shared machine it is in. On a shared
+ * machine a slot belongs to the business it names, or else to the machine's
+ * first business (as sale_business decides); a selection without a slot
+ * belongs to neither shop. Null for the operator, who owns every slot.
+ */
+async function sharedSelections(orgId: string): Promise<Map<string, Set<string>> | null> {
+  const { businessId } = await getScope();
+  if (!businessId) return null;
+  const admin = createAdminClient();
+  const { data: machines } = await admin
+    .from("machines")
+    .select("id, business_id, shared_business_id")
+    .eq("org_id", orgId)
+    .not("shared_business_id", "is", null);
+  const shared = (machines ?? []).filter((m) => m.business_id === businessId || m.shared_business_id === businessId);
+  const owned = new Map<string, Set<string>>(shared.map((m) => [m.id as string, new Set<string>()]));
+  if (shared.length === 0) return owned;
+  const { data: slots } = await admin
+    .from("slots")
+    .select("machine_id, selection_number, business_id")
+    .eq("org_id", orgId)
+    .in("machine_id", shared.map((m) => m.id as string));
+  for (const slot of slots ?? []) {
+    const machine = shared.find((m) => m.id === slot.machine_id);
+    if (!machine) continue;
+    const owner = [machine.business_id, machine.shared_business_id].includes(slot.business_id)
+      ? slot.business_id
+      : machine.business_id;
+    if (owner === businessId) owned.get(machine.id as string)!.add(slot.selection_number as string);
+  }
+  return owned;
+}
+
+/**
+ * Refuses unless the caller may change this slot: the machine must be theirs,
+ * and on a shared machine a shop owns only its own slots.
+ */
+export async function requireSelectionAccess(orgId: string, machineId: string, selection: string): Promise<void> {
+  await requireMachineAccess(orgId, machineId);
+  const shared = await sharedSelections(orgId);
+  if (shared?.has(machineId) && !shared.get(machineId)!.has(selection)) throw new Error("Not found");
 }
 
 /** Refuses unless the caller's scope contains this product. */

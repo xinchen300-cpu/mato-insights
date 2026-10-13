@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronRight, Trash2 } from "lucide-react";
 import { ImagePicker } from "@/components/image-picker";
-import { Avatar, RowList, initial } from "@/components/list-row";
+import { Avatar, RowList} from "@/components/list-row";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,7 @@ import { mediaUrl } from "@/lib/media";
 import { fmt } from "@/i18n/format";
 import type { Business, Machine } from "@/lib/types";
 import { deleteBusiness, saveBusiness, setMachineDataSince } from "../actions";
+import { MachineIcon } from "@/components/machine/machine-icon";
 
 const hintClass = "text-[13px] leading-snug text-muted-foreground";
 
@@ -160,7 +161,7 @@ function MachineLink({ machine }: { machine: Machine }) {
       href={`/machines/${machine.id}`}
       className="hover-surface -mx-2 -my-1.5 flex min-w-0 flex-1 items-center gap-3.5 rounded-xl px-2 py-1.5"
     >
-      <Avatar>{initial(machine.name)}</Avatar>
+      <Avatar><MachineIcon /></Avatar>
       <span className="min-w-0">
         <span className="flex items-center gap-1 text-[15px] font-semibold tracking-[-0.01em]">
           <span className="truncate">{machine.name}</span>

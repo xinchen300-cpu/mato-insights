@@ -18,6 +18,7 @@ import { NotesForm } from "./notes-form";
 import { RoundReport } from "./round-report";
 import { RunReport } from "./run-report";
 import { ShareBox } from "./share-box";
+import { MachineIcon } from "@/components/machine/machine-icon";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -203,7 +204,7 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
                       <ListRow
                         leading={
                           <Avatar tone={stop?.completedAt ? (stop.skipped ? "warning" : "positive") : "neutral"}>
-                            {stop?.completedAt && !stop.skipped ? <CircleCheck /> : initial(name)}
+                            {stop?.completedAt && !stop.skipped ? <CircleCheck /> : <MachineIcon />}
                           </Avatar>
                         }
                         title={name}

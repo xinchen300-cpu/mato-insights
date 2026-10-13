@@ -8,7 +8,7 @@ import { ProductPicker } from "@/components/product-picker";
 import { useI18n } from "@/i18n/client";
 import { fmt, plural } from "@/i18n/format";
 import type { Product, UnassignedGroup } from "@/lib/types";
-import { assignProduct } from "../machines/actions";
+import { linkUnassigned } from "./actions";
 import { createProduct } from "../products/actions";
 
 type MachineSection = { machineId: string; machineName: string; groups: (UnassignedGroup & { lastSoldLabel: string })[] };
@@ -66,7 +66,7 @@ function UnassignedRow({
     setError(false);
     startTransition(async () => {
       try {
-        await assignProduct(group.machine_id, group.selection_number, productId);
+        await linkUnassigned(group.machine_id, group.selection_number, productId);
         onLinked(productId);
       } catch {
         setError(true);

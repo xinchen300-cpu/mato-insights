@@ -15,6 +15,7 @@ import { mediaUrl } from "@/lib/media";
 import { compareSince, fillDays } from "@/lib/stats";
 import { compareLabelKey } from "@/lib/stats-params";
 import type { Period } from "@/lib/types";
+import { MachineIcon } from "@/components/machine/machine-icon";
 
 const PERIODS: Period[] = ["month", "week", "today", "last30"];
 
@@ -240,7 +241,7 @@ export default async function BusinessSharePage({
                       {report.by_machine.map((row) => (
                         <li key={row.machine_id}>
                           <ListRow
-                            leading={<Avatar>{initial(row.machine_name)}</Avatar>}
+                            leading={<Avatar><MachineIcon /></Avatar>}
                             title={row.machine_name}
                             value={f.euro(row.revenue)}
                           />

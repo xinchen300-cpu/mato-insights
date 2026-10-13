@@ -123,9 +123,9 @@ export const nl: Messages = {
     noSales: "Nog geen verkopen",
     stock: "Voorraad",
     types: {
-      lift: "Lift / diepvries",
-      spiral: "Spiraal",
-      locker: "Locker",
+      lift: "Liftautomaat",
+      spiral: "Spiraalautomaat",
+      locker: "Lockerautomaat",
       other: "Andere (geen voorraad)",
     },
     typeNotSet: "Type niet ingesteld",

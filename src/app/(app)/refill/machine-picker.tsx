@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Check, ClipboardList } from "lucide-react";
-import { Avatar, RowList, initial } from "@/components/list-row";
+import { Avatar, RowList} from "@/components/list-row";
 import { Section } from "@/components/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,7 @@ import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
 import { cheapestWith } from "@/lib/plans";
 import { createRefillSheet } from "./actions";
+import { MachineIcon } from "@/components/machine/machine-icon";
 
 export function MachinePicker({
   machines,
@@ -69,7 +70,7 @@ export function MachinePicker({
                 )}
               >
                 <input type="checkbox" checked={checked} onChange={() => toggle(mc.id)} className="sr-only" />
-                <Avatar>{initial(mc.name)}</Avatar>
+                <Avatar><MachineIcon /></Avatar>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-semibold tracking-[-0.01em]">{mc.name}</span>
                   <span

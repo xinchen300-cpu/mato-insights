@@ -123,9 +123,9 @@ export const en = {
     noSales: "No sales yet",
     stock: "Stock",
     types: {
-      lift: "Lift / freezer",
-      spiral: "Spiral",
-      locker: "Locker",
+      lift: "Lift machine",
+      spiral: "Spiral machine",
+      locker: "Locker machine",
       other: "Other (no stock)",
     },
     typeNotSet: "Type not set",

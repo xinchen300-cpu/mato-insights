@@ -20,6 +20,7 @@ import { compareLabelKey, parseStatsParams, type StatsSearchParams } from "@/lib
 import type { StatsReport } from "@/lib/types";
 import { MonthlyOverview, MonthlySkeleton } from "./monthly";
 import { StatsFilters } from "./stats-filters";
+import { MachineIcon } from "@/components/machine/machine-icon";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -261,7 +262,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                 {report.by_machine.map((row) => (
                   <li key={row.machine_id}>
                     <ListRow
-                      leading={<Avatar>{initial(row.machine_name)}</Avatar>}
+                      leading={<Avatar><MachineIcon /></Avatar>}
                       title={row.machine_name}
                       subtitle={<span className="tabular">{plural(row.units, m.common.unitsOne, m.common.unitsOther)}</span>}
                       value={f.euro(row.revenue)}

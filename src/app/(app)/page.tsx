@@ -5,7 +5,7 @@ import { RevenueChart } from "@/components/charts/revenue-chart";
 import { Delta } from "@/components/delta";
 import { KpiHero, MiniStat } from "@/components/kpi";
 import { StatusDot } from "@/components/machine/status-badge";
-import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
+import { Avatar, ListRow, RowList} from "@/components/list-row";
 import { InsightsList } from "@/components/insights-list";
 import { SetupGuide, nextSetupStep } from "@/components/setup-guide";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
@@ -32,6 +32,7 @@ import { terminalStatus } from "@/lib/terminal-status";
 import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
 import { fillLevel, needsAttention } from "@/lib/stock";
 import { cn } from "@/lib/utils";
+import { MachineIcon } from "@/components/machine/machine-icon";
 
 const RECENT_MS = 90 * 24 * 60 * 60 * 1000;
 
@@ -310,7 +311,7 @@ export default async function OverviewPage() {
               <li key={row.machine_id}>
                 <ListRow
                   href={`/machines/${row.machine_id}`}
-                  leading={<Avatar>{initial(row.machine_name)}</Avatar>}
+                  leading={<Avatar><MachineIcon /></Avatar>}
                   title={row.machine_name}
                   subtitle={<span className="tabular">{plural(row.units, m.common.salesOne, m.common.salesOther)}</span>}
                   value={f.euro(row.revenue)}

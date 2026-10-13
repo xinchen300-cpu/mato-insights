@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Check, Nfc } from "lucide-react";
-import { Avatar, initial } from "@/components/list-row";
+import { Avatar } from "@/components/list-row";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/i18n/client";
@@ -11,6 +11,7 @@ import { needsQuote, planById, LARGEST_PLAN } from "@/lib/plans";
 import { upgradeLine } from "@/lib/billing-copy";
 import { cn } from "@/lib/utils";
 import { saveTerminalChoices } from "./actions";
+import { MachineIcon } from "@/components/machine/machine-icon";
 
 export type TerminalRow = {
   serial: string;
@@ -82,7 +83,7 @@ export function TerminalPicker({
             key={row.serial}
             className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3.5 gap-y-3 rounded-xl px-3 py-3.5 sm:grid-cols-[auto_minmax(0,1fr)_auto_14rem] sm:gap-x-4"
           >
-            <Avatar>{row.name.trim() ? initial(row.name) : <Nfc />}</Avatar>
+            <Avatar>{row.name.trim() ? <MachineIcon /> : <Nfc />}</Avatar>
 
             <span className="min-w-0">
               <span className="block truncate font-mono text-[14px] font-semibold">{row.serial}</span>

@@ -123,9 +123,9 @@ export const fr: Messages = {
     noSales: "Pas encore de ventes",
     stock: "Stock",
     types: {
-      lift: "Ascenseur / congélateur",
-      spiral: "Spirale",
-      locker: "Casiers",
+      lift: "Distributeur à ascenseur",
+      spiral: "Distributeur à spirales",
+      locker: "Distributeur à casiers",
       other: "Autre (sans stock)",
     },
     typeNotSet: "Type non défini",

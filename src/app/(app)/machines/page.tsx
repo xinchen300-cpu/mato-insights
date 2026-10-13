@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, ChevronRight, Store } from "lucide-react";
-import { Avatar, RowList, initial } from "@/components/list-row";
+import { Avatar, RowList } from "@/components/list-row";
 import { StatusBadge } from "@/components/machine/status-badge";
 import { PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { mediaUrl } from "@/lib/media";
 import { denyFiller, requireOrgId } from "@/lib/org";
 import { fillLevel, levelColor, needsAttention } from "@/lib/stock";
 import { terminalStatus } from "@/lib/terminal-status";
+import { MachineIcon } from "@/components/machine/machine-icon";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -117,7 +118,7 @@ export default async function MachinesPage() {
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={mediaUrl(mc.business_logo_path)!} alt="" className="max-h-6 max-w-7 object-contain" />
                     ) : (
-                      initial(mc.name)
+                      <MachineIcon />
                     )}
                   </Avatar>
 

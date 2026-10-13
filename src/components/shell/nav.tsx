@@ -7,16 +7,16 @@ import {
   ClipboardList,
   LayoutDashboard,
   Package,
-  Refrigerator,
   type LucideIcon,
 } from "lucide-react";
+import { MachineIcon } from "@/components/machine/machine-icon";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/client";
 import type { Messages } from "@/i18n/messages";
 
-const items: { href: string; label: keyof Messages["nav"]; icon: LucideIcon }[] = [
+const items: { href: string; label: keyof Messages["nav"]; icon: LucideIcon | typeof MachineIcon }[] = [
   { href: "/", label: "overview", icon: LayoutDashboard },
-  { href: "/machines", label: "machines", icon: Refrigerator },
+  { href: "/machines", label: "machines", icon: MachineIcon },
   { href: "/products", label: "products", icon: Package },
   { href: "/refill", label: "refill", icon: ClipboardList },
   { href: "/statistics", label: "statistics", icon: ChartColumn },

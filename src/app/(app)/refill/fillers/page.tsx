@@ -10,6 +10,7 @@ import { getI18n } from "@/i18n/server";
 import { getFillerOverview, getOpenRounds } from "@/lib/data";
 import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
 import type { Average, FillerTimes } from "@/lib/refill-flow";
+import { MachineIcon } from "@/components/machine/machine-icon";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -145,7 +146,7 @@ export default async function FillersPage() {
                 {machines.map((machine) => (
                   <li key={machine.id}>
                     <ListRow
-                      leading={<Avatar>{initial(machine.name)}</Avatar>}
+                      leading={<Avatar><MachineIcon /></Avatar>}
                       title={machine.name}
                       value={took(machine.average.minutes)}
                       valueSub={<span className="tabular text-muted-foreground">{measured(machine.average)}</span>}

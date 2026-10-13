@@ -1,4 +1,5 @@
 // Checks the refill round logic (src/lib/refill-flow.ts). Run: npm run test:flow
+import { uncovered } from "../src/lib/assignments.ts";
 import { allocate, itemReport, levelAfter, onlyMine, pickList, returnsFor, roundTimings, slotKey, pickKey, type FlowLine } from "../src/lib/refill-flow.ts";
 import type { RefillLine, RefillSheet } from "../src/lib/types.ts";
 const L = (sel: string, product: string, cap: number, stock: number | null, take: number, row = 1): FlowLine =>
@@ -97,3 +98,12 @@ ok("timings: drives in the order really driven", timings.legs["start→kortemark
 ok("timings: a drive with a skip in it is not measured", timings.legs["kortemark→diksmuide"].count === 1 && timings.legs["kortemark→diksmuide"].minutes === 20);
 ok("timings: the way back is its own leg", timings.legs["diksmuide→end"].minutes === 10 && timings.legs["kortemark→end"].minutes === 20);
 ok("timings: a skipped machine is no visit", !("gits" in timings.machines));
+
+// Linking unlinked sales fills only the time no product covers.
+const T1 = "2026-10-06T09:30:00+00:00";
+const T2 = "2026-10-09T12:00:00+00:00";
+ok("gaps: a product since a rearrangement leaves the time before it", JSON.stringify(uncovered([{ valid_from: T1, valid_to: null }])) === JSON.stringify([{ from: "-infinity", to: T1 }]));
+ok("gaps: a slot with a product all along has none", uncovered([{ valid_from: "-infinity", valid_to: null }]).length === 0);
+ok("gaps: between two products, the stretch with neither", JSON.stringify(uncovered([{ valid_from: T2, valid_to: null }, { valid_from: "-infinity", valid_to: T1 }])) === JSON.stringify([{ from: T1, to: T2 }]));
+ok("gaps: a cleared slot is open from the moment it was cleared", JSON.stringify(uncovered([{ valid_from: "-infinity", valid_to: T1 }])) === JSON.stringify([{ from: T1, to: null }]));
+ok("gaps: a product swapped at one moment leaves nothing between", uncovered([{ valid_from: "-infinity", valid_to: T1 }, { valid_from: T1, valid_to: null }]).length === 0);

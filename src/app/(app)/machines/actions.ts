@@ -2,14 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { isOperator, requireOperator, requireOrgId } from "@/lib/org";
-import { getMachine, requireMachineAccess, requireProductAccess } from "@/lib/data";
+import { getMachine, requireMachineAccess, requireProductAccess, requireSelectionAccess } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MACHINE_TYPES, SLOT_SIZES, type LayoutRowSpec, type MachineType, type Product, type SlotSize } from "@/lib/types";
 import { createProduct } from "../products/actions";
 
 export async function assignProduct(machineId: string, selection: string, productId: string | null) {
   const orgId = await requireOrgId();
-  await requireMachineAccess(orgId, machineId);
+  await requireSelectionAccess(orgId, machineId, selection);
   if (productId) await requireProductAccess(orgId, productId);
   const { error } = await createAdminClient().rpc("assign_product", {
     target_org: orgId,

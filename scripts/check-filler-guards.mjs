@@ -27,6 +27,7 @@ const GUARDS = [
   "requireBusinessAccess",
   "requireMachineAccess",
   "requireProductAccess",
+  "requireSelectionAccess",
 ];
 const ALLOWED_BEFORE_GUARD = /^await (params|searchParams|isFiller\(\)|getI18n\(\))/;
 
