@@ -22,6 +22,8 @@ export async function saveTerminalChoices(choices: TerminalChoice[]): Promise<{ 
   // Which machines exist at all is the operator's call, never a shop's.
   await requireOperator();
   const admin = createAdminClient();
+  // Terminals parked until now and claimed in this save: their sales were skipped while parked.
+  const claimed: string[] = [];
 
   for (const choice of choices.slice(0, 200)) {
     const serial = String(choice.serial ?? "").trim();
@@ -30,12 +32,13 @@ export async function saveTerminalChoices(choices: TerminalChoice[]): Promise<{ 
 
     const { data: existing } = await admin
       .from("machines")
-      .select("id")
+      .select("id, excluded")
       .eq("org_id", orgId)
       .eq("payter_serial_number", serial)
       .maybeSingle();
 
     if (existing) {
+      if (existing.excluded && choice.mine) claimed.push(existing.id as string);
       await admin
         .from("machines")
         .update({ name, excluded: !choice.mine })
@@ -49,9 +52,44 @@ export async function saveTerminalChoices(choices: TerminalChoice[]): Promise<{ 
     }
   }
 
+  if (claimed.length) await fetchSkippedSales(orgId, claimed);
   const plan = await followPackage(orgId);
   revalidatePath("/", "layout");
   return { plan };
+}
+
+/**
+ * A parked terminal's sales are skipped by the sync, and it never goes back for
+ * them: it only reads on from where it was. When such a terminal is claimed,
+ * wind the sync back to that terminal's last imported sale (or to the start, if
+ * it has none), so what it sold while parked comes in on the next runs. Sales
+ * are upserted on their Payter id, so nothing arrives twice.
+ */
+async function fetchSkippedSales(orgId: string, machineIds: string[]) {
+  const admin = createAdminClient();
+  const { data: credentials } = await admin
+    .from("payter_credentials")
+    .select("last_watermark")
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (!credentials) return;
+
+  let from = Number(credentials.last_watermark ?? 0);
+  for (const machineId of machineIds) {
+    const { data: last } = await admin
+      .from("transactions")
+      .select("occurred_at")
+      .eq("org_id", orgId)
+      .eq("machine_id", machineId)
+      .order("occurred_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    // A sale is taken in after it happened, so anything after this moment is read again.
+    from = Math.min(from, last ? new Date(last.occurred_at as string).getTime() : 0);
+  }
+  if (from < Number(credentials.last_watermark ?? 0)) {
+    await admin.from("payter_credentials").update({ last_watermark: from }).eq("org_id", orgId);
+  }
 }
 
 /**
