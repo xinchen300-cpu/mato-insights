@@ -304,3 +304,109 @@ export function itemReport(
   }
   return [...rows.values()].sort((a, b) => b.filled - a.filled || a.name.localeCompare(b.name));
 }
+
+/** A finished step-by-step round, as far as its clock goes. */
+export type TimedRound = {
+  filledBy: string | null;
+  readyAt: string;
+  completedAt: string;
+  stops: Record<string, StopRecord>;
+};
+
+/** An average and how many times it was measured: one round is no habit. */
+export type Average = { minutes: number; count: number };
+export type FillerTimes = {
+  /** As they gave it when they started; null when the round has no name. */
+  name: string | null;
+  rounds: number;
+  lastAt: string;
+  /** "Start ronde" to "Afronden". */
+  round: Average;
+  /** Machines visited per round, so a long round is not read as a slow filler. */
+  machinesPerRound: number;
+  /** Opening a machine to done, over all their visits. */
+  atMachine: Average;
+};
+export type RoundTimings = {
+  fillers: FillerTimes[];
+  /** Per machine id: the work there, opened to done. */
+  machines: Record<string, Average>;
+  /** Per "from→to": the drive, done to opened. "start" is "Start ronde", "end" is "Afronden". */
+  legs: Record<string, Average>;
+};
+
+// Longer than this is a clock left running, or a phone with the wrong time.
+const MAX_STEP = 8 * 60;
+const MAX_ROUND = 12 * 60;
+
+type Tally = { sum: number; count: number };
+const tally = (): Tally => ({ sum: 0, count: 0 });
+function count(into: Tally, minutes: number, max: number): boolean {
+  if (!(minutes > 0 && minutes < max)) return false;
+  into.sum += minutes;
+  into.count += 1;
+  return true;
+}
+const average = (from: Tally): Average => ({ minutes: from.count ? from.sum / from.count : 0, count: from.count });
+const minutesBetween = (from: string, to: string) => (new Date(to).getTime() - new Date(from).getTime()) / 60000;
+
+/**
+ * What finished rounds say about time: the whole round, the work at each
+ * machine, and each drive in between, in the order the filler really went (by
+ * the moment they opened each machine). A skipped machine is no visit, and a
+ * drive with a skip in it is not measured: nobody knows where it went.
+ */
+export function roundTimings(rounds: TimedRound[]): RoundTimings {
+  const machines: Record<string, Tally> = {};
+  const legs: Record<string, Tally> = {};
+  const people = new Map<string, { name: string | null; rounds: number; lastAt: string; round: Tally; visits: number; atMachine: Tally }>();
+
+  for (const round of rounds) {
+    const entries = Object.entries(round.stops ?? {});
+    const visits = entries
+      .filter(([, stop]) => !stop.skipped && stop.checkedAt && stop.completedAt)
+      .map(([machineId, stop]) => ({ machineId, arrived: stop.checkedAt!, done: stop.completedAt! }))
+      .sort((a, b) => a.arrived.localeCompare(b.arrived));
+    const skips = entries.filter(([, stop]) => stop.skipped && stop.completedAt).map(([, stop]) => stop.completedAt!);
+
+    const name = round.filledBy?.trim() || null;
+    const key = name?.toLocaleLowerCase() ?? "";
+    const person = people.get(key) ?? { name, rounds: 0, lastAt: round.completedAt, round: tally(), visits: 0, atMachine: tally() };
+    person.rounds += 1;
+    person.visits += visits.length;
+    if (round.completedAt > person.lastAt) person.lastAt = round.completedAt;
+    count(person.round, minutesBetween(round.readyAt, round.completedAt), MAX_ROUND);
+    people.set(key, person);
+
+    const drive = (from: string, left: string, to: string, arrived: string) => {
+      if (skips.some((at) => at >= left && at <= arrived)) return;
+      count((legs[`${from}→${to}`] ??= tally()), minutesBetween(left, arrived), MAX_STEP);
+    };
+    let previous = { machineId: "start", done: round.readyAt };
+    for (const visit of visits) {
+      const here = minutesBetween(visit.arrived, visit.done);
+      count((machines[visit.machineId] ??= tally()), here, MAX_STEP);
+      count(person.atMachine, here, MAX_STEP);
+      drive(previous.machineId, previous.done, visit.machineId, visit.arrived);
+      previous = visit;
+    }
+    if (visits.length > 0) drive(previous.machineId, previous.done, "end", round.completedAt);
+  }
+
+  const averages = (from: Record<string, Tally>) =>
+    Object.fromEntries(Object.entries(from).filter(([, v]) => v.count > 0).map(([key, v]) => [key, average(v)]));
+  return {
+    fillers: [...people.values()]
+      .map((v) => ({
+        name: v.name,
+        rounds: v.rounds,
+        lastAt: v.lastAt,
+        round: average(v.round),
+        machinesPerRound: v.rounds ? v.visits / v.rounds : 0,
+        atMachine: average(v.atMachine),
+      }))
+      .sort((a, b) => b.lastAt.localeCompare(a.lastAt)),
+    machines: averages(machines),
+    legs: averages(legs),
+  };
+}

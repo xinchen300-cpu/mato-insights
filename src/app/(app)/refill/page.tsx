@@ -7,6 +7,7 @@ import { duration, fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getMachines, getMachineStock, getOpenRounds, getRefillSheets, getShortages, getStatsReport, type OpenRound } from "@/lib/data";
 import { LiveRounds } from "@/components/refill/live-rounds";
+import { RefillTabs } from "@/components/refill/refill-tabs";
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fillLevel, needsAttention } from "@/lib/stock";
@@ -188,13 +189,14 @@ export default async function RefillPage() {
 
   const machineName = new Map(machines.map((mc) => [mc.id, mc.name]));
 
+  const operator = await isOperator();
   return (
     <>
-      <PageHeader title={m.refill.title} />
+      <PageHeader title={m.refill.title} actions={operator ? <RefillTabs active="rounds" m={m} /> : undefined} />
 
       <div className="flex flex-col gap-10">
         <LiveRounds rounds={openRounds} />
-        {!(await isOperator()) ? (
+        {!operator ? (
           <p className="max-w-[60ch] px-1 text-[15px] text-muted-foreground">{m.refill.operatorOnly}</p>
         ) : pickable.length === 0 ? (
           <EmptyState

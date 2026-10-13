@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { denyFillerAccess, getScope, requireOperator, requireRefillAccess, type Role } from "@/lib/org";
-import { onlyMine, slotKey, type FlowLine, type ShopView, type StopRecord } from "@/lib/refill-flow";
+import { displayName } from "@/lib/people";
+import { onlyMine, roundTimings, slotKey, type Average, type FlowLine, type RoundTimings, type ShopView, type StopRecord } from "@/lib/refill-flow";
 import { terminalStatus, type TerminalStatus } from "@/lib/terminal-status";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
 import { reportDay } from "@/lib/stats";
@@ -295,6 +297,75 @@ export async function getOpenRounds(orgId: string): Promise<OpenRound[]> {
         })),
     };
   });
+}
+
+/** Finished step-by-step rounds of this organisation, as far as their clocks go. */
+async function timedRounds(orgId: string) {
+  const { data } = await createAdminClient()
+    .from("refill_sheets")
+    .select("filled_by, ready_at, completed_at, stops")
+    .eq("org_id", orgId)
+    .eq("flow_version", 2)
+    .not("ready_at", "is", null)
+    .not("completed_at", "is", null)
+    .order("completed_at", { ascending: false })
+    .limit(500);
+  return roundTimings(
+    (data ?? []).map((row) => ({
+      filledBy: (row.filled_by as string | null) ?? null,
+      readyAt: row.ready_at as string,
+      completedAt: row.completed_at as string,
+      stops: (row.stops ?? {}) as Record<string, StopRecord>,
+    })),
+  );
+}
+
+export type RouteTimes = { machines: Record<string, Average>; legs: Record<string, Average> };
+
+/**
+ * How long a machine and each drive usually take, for the plan on a round:
+ * the operator or a filler. No names: who was quick is the operator's to see.
+ */
+export async function getRouteTimes(orgId: string): Promise<RouteTimes> {
+  if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
+  const { machines, legs } = await timedRounds(orgId);
+  return { machines, legs };
+}
+
+export type FillerOverview = RoundTimings & {
+  machineNames: Record<string, string>;
+  /** The team's fillers, also before their first round, under the name a round gets. */
+  team: { name: string; email: string | null }[];
+  /** The person looking, under that same name, to mark them. */
+  me: string | null;
+};
+
+/**
+ * Who fills and how long it takes, for the operator only: per filler, per
+ * machine and per drive, from finished step-by-step rounds.
+ */
+export async function getFillerOverview(orgId: string): Promise<FillerOverview> {
+  await requireOperator();
+  if ((await getScope()).orgId !== orgId) throw new Error("Not found");
+  const admin = createAdminClient();
+  const [timings, { data: machines }, { data: fillers }, me] = await Promise.all([
+    timedRounds(orgId),
+    admin.from("machines").select("id, name").eq("org_id", orgId),
+    admin.from("memberships").select("user_id").eq("org_id", orgId).eq("role", "filler"),
+    createClient().then((client) => client.auth.getUser()),
+  ]);
+  const team = await Promise.all(
+    (fillers ?? []).map(async (row) => {
+      const { data } = await admin.auth.admin.getUserById(row.user_id as string);
+      return { name: displayName(data.user) ?? "—", email: data.user?.email ?? null };
+    }),
+  );
+  return {
+    ...timings,
+    machineNames: Object.fromEntries((machines ?? []).map((row) => [row.id as string, row.name as string])),
+    team,
+    me: displayName(me.data.user),
+  };
 }
 
 export type TeamMember = { userId: string; email: string | null; role: Role; businessName: string | null };

@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { getI18n } from "@/i18n/server";
-import { getRefillRound } from "@/lib/data";
+import { getRefillRound, getRouteTimes } from "@/lib/data";
+import { displayName } from "@/lib/people";
+import { createClient } from "@/lib/supabase/server";
 import { requireRefillAccess } from "@/lib/org";
 import { RoundFlow } from "./round-flow";
 
@@ -20,7 +22,11 @@ export default async function RoundPage({ params }: { params: Promise<{ id: stri
   if (!orgId) notFound();
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
-  const round = await getRefillRound(orgId, id);
+  const [round, times, me] = await Promise.all([
+    getRefillRound(orgId, id),
+    getRouteTimes(orgId),
+    createClient().then((client) => client.auth.getUser()),
+  ]);
   if (!round) notFound();
-  return <RoundFlow round={round} />;
+  return <RoundFlow round={round} who={displayName(me.data.user)} times={times} />;
 }

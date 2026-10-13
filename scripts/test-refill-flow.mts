@@ -1,5 +1,5 @@
 // Checks the refill round logic (src/lib/refill-flow.ts). Run: npm run test:flow
-import { allocate, itemReport, levelAfter, onlyMine, pickList, returnsFor, slotKey, pickKey, type FlowLine } from "../src/lib/refill-flow.ts";
+import { allocate, itemReport, levelAfter, onlyMine, pickList, returnsFor, roundTimings, slotKey, pickKey, type FlowLine } from "../src/lib/refill-flow.ts";
 import type { RefillLine, RefillSheet } from "../src/lib/types.ts";
 const L = (sel: string, product: string, cap: number, stock: number | null, take: number, row = 1): FlowLine =>
   ({ machineId: "m1", selection: sel, row, slot: Number(sel), productId: product, productName: product.toUpperCase(), photoPath: null, capacity: cap, stock, take, expired: 0 });
@@ -75,3 +75,25 @@ const bb = report.find((r) => r.productId === "theirs-b")!;
 ok("report: taken, filled, back and short per product", a.taken === 3 && a.filled === 2 && a.back === 1 && a.short === 1);
 ok("report: taken out by reason, and where it went", bb.out.expired === 1 && bb.back === 2 && bb.went.waste === 1 && bb.went.stock === 2);
 ok("report: most filled first", report[0].productId === "mine-a");
+
+// Time: whole rounds, the work at each machine, and the drives between them.
+const at = (hhmm: string) => `2026-10-13T${hhmm}:00.000Z`;
+const visit = (arrived: string | null, done: string, skipped = false) => ({
+  checkedAt: arrived ? at(arrived) : null, completedAt: at(done), skipped, technical: false, note: null, lines: [] });
+const timings = roundTimings([
+  { filledBy: "Jonas", readyAt: at("08:00"), completedAt: at("09:00"),
+    stops: { kortemark: visit("08:10", "08:20"), diksmuide: visit("08:40", "08:50"), gits: visit(null, "08:55", true) } },
+  { filledBy: "jonas ", readyAt: at("10:00"), completedAt: at("11:30"),
+    stops: { diksmuide: visit("10:20", "10:40"), kortemark: visit("11:00", "11:10") } },
+  { filledBy: null, readyAt: at("12:00"), completedAt: at("13:00"),
+    stops: { kortemark: visit("12:10", "12:20"), gits: visit(null, "12:25", true), diksmuide: visit("12:40", "12:50") } },
+]);
+const jonas = timings.fillers.find((p) => p.name?.toLowerCase() === "jonas");
+ok("timings: a whole round, per filler, whatever the case of the name", jonas?.rounds === 2 && jonas.round.minutes === 75 && jonas.round.count === 2);
+ok("timings: machines per round, so a long round is not a slow filler", jonas?.machinesPerRound === 2);
+ok("timings: a round without a name is still counted, as nobody's", timings.fillers.some((p) => p.name === null && p.rounds === 1));
+ok("timings: work at a machine, averaged with its count", timings.machines.kortemark.minutes === 10 && timings.machines.kortemark.count === 3 && timings.machines.diksmuide.minutes === 40 / 3);
+ok("timings: drives in the order really driven", timings.legs["start→kortemark"].minutes === 10 && timings.legs["diksmuide→kortemark"].minutes === 20);
+ok("timings: a drive with a skip in it is not measured", timings.legs["kortemark→diksmuide"].count === 1 && timings.legs["kortemark→diksmuide"].minutes === 20);
+ok("timings: the way back is its own leg", timings.legs["diksmuide→end"].minutes === 10 && timings.legs["kortemark→end"].minutes === 20);
+ok("timings: a skipped machine is no visit", !("gits" in timings.machines));

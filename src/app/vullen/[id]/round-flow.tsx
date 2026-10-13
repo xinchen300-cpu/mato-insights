@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronLeft, ChevronRight, Timer, TriangleAlert } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Timer, TriangleAlert, Truck } from "lucide-react";
 import { VendlyWordmark } from "@/components/brand/vendly-mark";
 import { FrontView, type FrontSlot } from "@/components/machine/front-view";
 import { useI18n } from "@/i18n/client";
 import { duration, fmt } from "@/i18n/format";
-import type { RefillRound } from "@/lib/data";
+import type { RefillRound, RouteTimes } from "@/lib/data";
 import {
   allocate,
   pickList,
@@ -67,7 +67,17 @@ const stepper =
   "grid size-12 shrink-0 place-items-center rounded-full bg-surface text-2xl font-medium text-foreground active:scale-95 disabled:opacity-40";
 const chip = "inline-flex h-10 items-center gap-1.5 rounded-full bg-card px-3.5 text-[14px] font-semibold ring-1 ring-border";
 
-export function RoundFlow({ round: initial }: { round: RefillRound }) {
+export function RoundFlow({
+  round: initial,
+  who,
+  times,
+}: {
+  round: RefillRound;
+  /** The person holding the phone, under the name a round gets. */
+  who: string | null;
+  /** Earlier rounds' drives, for the plan. */
+  times: RouteTimes;
+}) {
   const { m, f } = useI18n();
   const t = m.round;
   const router = useRouter();
@@ -722,7 +732,7 @@ export function RoundFlow({ round: initial }: { round: RefillRound }) {
       return {
         key: machine.id,
         title: machine.name,
-        sub: fmt(t.stopSub, { slots: slotsHere, n: pieces(machine.id) }),
+        sub: fmt(slotsHere === 1 ? t.stopSubOne : t.stopSub, { slots: slotsHere, n: pieces(machine.id) }),
         state: (record?.skipped
           ? "skipped"
           : done
@@ -747,57 +757,101 @@ export function RoundFlow({ round: initial }: { round: RefillRound }) {
     },
   ];
 
+  // The drive after each step, as earlier rounds measured it: from the start
+  // to the first machine, between machines (either way round), and back.
+  const route = ["start", ...initial.machines.map((machine) => machine.id), "end"];
+  const driveAfter = (index: number) => {
+    const from = route[index];
+    const to = route[index + 1];
+    if (!to) return null;
+    const measured = times.legs[`${from}→${to}`] ?? (from !== "start" && to !== "end" ? times.legs[`${to}→${from}`] : undefined);
+    if (!measured) return null;
+    const time = duration(Math.max(1, measured.minutes), m.refill.runTime, m.refill.runTimeHours);
+    return fmt(to === "end" ? t.driveBack : t.drive, { time });
+  };
+
   return (
     <Screen padded={false}>
       <div className="flex flex-col gap-1 px-4 pt-4">
         {header()}
-        <p className="mt-3 text-[13.5px] text-muted-foreground">
-          {fmt(t.roundOf, { date: f.dayMonth(initial.createdAt), count: initial.machines.length })}
-        </p>
-        <h1 className="text-[30px] font-bold tracking-[-0.03em]">{t.myRound}</h1>
+        <div className="mt-4 flex items-center gap-3.5">
+          {who && (
+            <span
+              className="grid size-12 shrink-0 place-items-center rounded-full bg-primary/15 text-[19px] font-bold text-[#8a6117]"
+              aria-hidden="true"
+            >
+              {who.trim().charAt(0).toUpperCase()}
+            </span>
+          )}
+          <div className="min-w-0">
+            <h1 className="truncate text-[28px] font-bold leading-tight tracking-[-0.03em]">
+              {who ? fmt(t.hello, { name: who }) : t.myRound}
+            </h1>
+            <p className="truncate text-[13.5px] text-muted-foreground">
+              {fmt(t.roundOf, { date: f.dayMonth(initial.createdAt), count: initial.machines.length })}
+            </p>
+          </div>
+        </div>
         {readyAt && <BigClock since={readyAt} startedLabel={fmt(t.running, { time: f.time(readyAt) })} />}
       </div>
 
-      <ol className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 pb-44 pt-4">
-        {steps.map((step, index) => (
-          <li key={step.key}>
-            <button
-              type="button"
-              disabled={!step.onOpen}
-              onClick={step.onOpen}
-              className={cn(
-                "flex min-h-[76px] w-full items-center gap-3.5 rounded-2xl px-4 py-3 text-left transition-colors",
-                step.state === "now" ? "bg-card shadow-[0_0_0_2px_var(--foreground)]" : "bg-card/70",
-                step.state === "later" && "opacity-60",
-              )}
-            >
-              <span
-                className={cn(
-                  "grid size-9 shrink-0 place-items-center rounded-full text-[15px] font-bold",
-                  step.state === "done" && "bg-positive text-background",
-                  step.state === "skipped" && "bg-warning/20 text-foreground",
-                  step.state === "now" && "bg-foreground text-background",
-                  step.state === "later" && "bg-surface text-muted-foreground",
-                )}
-              >
-                {step.state === "done" ? <Check className="size-5" strokeWidth={3} /> : index + 1}
-              </span>
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className={cn("truncate text-[16.5px] font-semibold", step.state === "done" && "text-muted-foreground")}>
-                  {step.title}
+      {/* The route as a line with a stop for every step: done in green, the
+          one to do now in black, the rest still ahead, the drive in between. */}
+      <h2 className="px-5 pt-6 text-[13px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{t.routeTitle}</h2>
+      <ol className="flex flex-1 flex-col overflow-y-auto px-3 pb-44 pt-3">
+        {steps.map((step, index) => {
+          const last = index === steps.length - 1;
+          const passed = step.state === "done" || step.state === "skipped";
+          const drive = !last && !(steps[index + 1].state === "done" || steps[index + 1].state === "skipped") ? driveAfter(index) : null;
+          return (
+            <li key={step.key} className="flex gap-3">
+              <div className="flex w-10 shrink-0 flex-col items-center pt-[18px]" aria-hidden="true">
+                <span
+                  className={cn(
+                    "relative grid size-10 shrink-0 place-items-center rounded-full text-[15px] font-bold",
+                    step.state === "done" && "bg-positive text-background",
+                    step.state === "skipped" && "bg-warning/25 text-foreground",
+                    step.state === "now" && "bg-foreground text-background ring-4 ring-foreground/12",
+                    step.state === "later" && "border-2 border-border bg-card text-muted-foreground",
+                  )}
+                >
+                  {step.state === "done" ? <Check className="size-5" strokeWidth={3} /> : index + 1}
                 </span>
-                <span className="truncate text-[13.5px] text-muted-foreground">{step.sub}</span>
-              </span>
-              {step.aside ? (
-                <span className="shrink-0 text-[13px] font-semibold text-muted-foreground">{step.aside}</span>
-              ) : step.state === "now" ? (
-                <span className="shrink-0 rounded-full bg-foreground px-2.5 py-1 text-[12px] font-bold text-background">{t.now}</span>
-              ) : step.onOpen ? (
-                <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
-              ) : null}
-            </button>
-          </li>
-        ))}
+                {!last && <span className={cn("-mb-[18px] w-[3px] flex-1 rounded-full", passed ? "bg-positive" : "bg-border")} />}
+              </div>
+              <div className="flex min-w-0 flex-1 flex-col pb-2">
+                <button
+                  type="button"
+                  disabled={!step.onOpen}
+                  onClick={step.onOpen}
+                  className={cn(
+                    "flex min-h-[76px] w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-[transform,background-color] active:scale-[0.99]",
+                    step.state === "now" ? "bg-card shadow-[0_0_0_2px_var(--foreground)]" : "bg-card/70",
+                    step.state === "later" && "opacity-70",
+                  )}
+                >
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className={cn("truncate text-[16.5px] font-semibold", passed && "text-muted-foreground")}>{step.title}</span>
+                    <span className="truncate text-[13.5px] text-muted-foreground">{step.sub}</span>
+                  </span>
+                  {step.aside ? (
+                    <span className="shrink-0 text-[13px] font-semibold text-muted-foreground">{step.aside}</span>
+                  ) : step.state === "now" ? (
+                    <span className="shrink-0 rounded-full bg-foreground px-2.5 py-1 text-[12px] font-bold text-background">{t.now}</span>
+                  ) : step.onOpen ? (
+                    <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+                  ) : null}
+                </button>
+                {drive && (
+                  <p className="flex items-center gap-2 px-1 pb-1 pt-2.5 text-[13px] font-medium text-muted-foreground">
+                    <Truck className="size-4" aria-hidden="true" />
+                    {drive}
+                  </p>
+                )}
+              </div>
+            </li>
+          );
+        })}
       </ol>
 
       <BottomBar>

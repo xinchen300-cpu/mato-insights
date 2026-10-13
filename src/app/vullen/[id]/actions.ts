@@ -19,6 +19,7 @@ import {
 } from "@/lib/refill-flow";
 import { fmt } from "@/i18n/format";
 import { messages } from "@/i18n/messages";
+import { displayName } from "@/lib/people";
 import { notifyOperators } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -68,8 +69,7 @@ async function fillerName(): Promise<string | null> {
   const {
     data: { user },
   } = await (await createClient()).auth.getUser();
-  const name = typeof user?.user_metadata?.name === "string" ? user.user_metadata.name.trim() : "";
-  return name || user?.email?.split("@")[0] || null;
+  return displayName(user);
 }
 
 /** What is in the box so far, kept on the round so another phone can carry on. */
