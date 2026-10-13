@@ -138,6 +138,7 @@ export const en = {
     correct: "Correct stock",
     noLayout: "No layout yet",
     noLayoutHint: "Build the layout once, so Vendly can follow the stock of every slot.",
+    noLayoutShared: "Your operator builds the layout of a shared machine. After that, you follow the stock of your own slots here.",
     buildLayout: "Build layout",
     countStock: "Count stock",
     otherTypeHint: "This machine doesn't track stock, but its sales still count in the statistics.",

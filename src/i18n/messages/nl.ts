@@ -138,6 +138,7 @@ export const nl: Messages = {
     correct: "Voorraad corrigeren",
     noLayout: "Nog geen indeling",
     noLayoutHint: "Stel de indeling één keer in, dan volgt Vendly de voorraad van elk vak.",
+    noLayoutShared: "De indeling van een gedeelde automaat stelt je uitbater in. Daarna volg je hier de voorraad van je eigen vakken.",
     buildLayout: "Indeling maken",
     countStock: "Voorraad tellen",
     otherTypeHint: "Deze automaat houdt geen voorraad bij, maar de verkopen tellen wel mee in de statistieken.",

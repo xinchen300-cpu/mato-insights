@@ -1,8 +1,9 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import {
+  canEditLayout,
   getBusinesses,
   getCurrentAssignments,
   getLayoutTemplates,
@@ -27,6 +28,9 @@ export default async function LayoutPage({ params }: { params: Promise<{ id: str
 
   const machine = await getMachine(orgId, id);
   if (!machine) notFound();
+  // A shop on a shared machine puts products in its own slots on the machine's
+  // page; drawing the whole machine is the operator's (canEditLayout).
+  if (!(await canEditLayout(machine))) redirect(`/machines/${id}`);
 
   const [allSlots, machines, templates, products, assignments, businesses] = await Promise.all([
     getMachineStock(orgId),

@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { denyFillerAccess, getScope, requireOperator, requireRefillAccess, type Role } from "@/lib/org";
+import { denyFillerAccess, getScope, isFiller, isOperator, requireOperator, requireRefillAccess, type Role } from "@/lib/org";
 import { displayName } from "@/lib/people";
 import { onlyMine, roundTimings, slotKey, type Average, type FlowLine, type RoundTimings, type ShopView, type StopRecord } from "@/lib/refill-flow";
 import { terminalStatus, type TerminalStatus } from "@/lib/terminal-status";
@@ -926,14 +926,21 @@ export async function getUnassigned(orgId: string): Promise<UnassignedGroup[]> {
 }
 
 export async function getCurrentAssignments(orgId: string, machineId: string): Promise<Map<string, string>> {
-  await denyFillerAccess();
-  const { data } = await createAdminClient()
-    .from("selection_assignments")
-    .select("selection_number, product_id")
-    .eq("org_id", orgId)
-    .eq("machine_id", machineId)
-    .is("valid_to", null);
-  return new Map((data ?? []).map((a) => [a.selection_number, a.product_id]));
+  await requireMachineAccess(orgId, machineId);
+  const [{ data }, shared] = await Promise.all([
+    createAdminClient()
+      .from("selection_assignments")
+      .select("selection_number, product_id")
+      .eq("org_id", orgId)
+      .eq("machine_id", machineId)
+      .is("valid_to", null),
+    sharedSelections(orgId),
+  ]);
+  // On a shared machine a shop sees what is in its own slots, never its neighbour's.
+  const own = shared?.get(machineId);
+  return new Map(
+    (data ?? []).filter((a) => !own || own.has(a.selection_number)).map((a) => [a.selection_number, a.product_id]),
+  );
 }
 
 export async function getRefillHistory(orgId: string, machineId: string): Promise<RefillEvent[]> {
@@ -1229,13 +1236,36 @@ async function sharedSelections(orgId: string): Promise<Map<string, Set<string>>
 }
 
 /**
- * Refuses unless the caller may change this slot: the machine must be theirs,
- * and on a shared machine a shop owns only its own slots.
+ * Refuses unless the caller may change these slots: the machine must be
+ * theirs, and on a shared machine a shop owns only its own slots. One
+ * selection or many; a list that names a single neighbour's slot is refused
+ * whole.
  */
-export async function requireSelectionAccess(orgId: string, machineId: string, selection: string): Promise<void> {
+export async function requireSelectionAccess(
+  orgId: string,
+  machineId: string,
+  selections: string | string[],
+): Promise<void> {
   await requireMachineAccess(orgId, machineId);
-  const shared = await sharedSelections(orgId);
-  if (shared?.has(machineId) && !shared.get(machineId)!.has(selection)) throw new Error("Not found");
+  const own = (await sharedSelections(orgId))?.get(machineId);
+  if (own && [selections].flat().some((selection) => !own.has(selection))) throw new Error("Not found");
+}
+
+/**
+ * Whether the caller may save this machine's layout. A save rewrites every
+ * slot and who rents it, so on a shared machine that is the operator's call,
+ * like who the machine belongs to; a shop there changes the products in its
+ * own slots instead, one at a time (requireSelectionAccess).
+ */
+export async function canEditLayout(machine: Pick<Machine, "shared_business_id">): Promise<boolean> {
+  if (await isFiller()) return false;
+  return !machine.shared_business_id || (await isOperator());
+}
+
+/** Refuses unless the caller may save this machine's layout (see canEditLayout). */
+export async function requireLayoutAccess(orgId: string, machineId: string): Promise<void> {
+  const machine = await getMachine(orgId, machineId);
+  if (!machine || !(await canEditLayout(machine))) throw new Error("Not found");
 }
 
 /** Refuses unless the caller's scope contains this product. */

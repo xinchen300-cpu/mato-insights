@@ -7,7 +7,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getBusinesses, getLastSales, getMachines, getMachineStock } from "@/lib/data";
+import { canEditLayout, getBusinesses, getLastSales, getMachines, getMachineStock } from "@/lib/data";
 import { mediaUrl } from "@/lib/media";
 import { denyFiller, requireOrgId } from "@/lib/org";
 import { fillLevel, levelColor, needsAttention } from "@/lib/stock";
@@ -29,6 +29,8 @@ export default async function MachinesPage() {
     getLastSales(orgId),
     getBusinesses(orgId),
   ]);
+  // Whether each machine's layout is the caller's to draw: not a shared one, for a shop.
+  const drawable = await Promise.all(machines.map(canEditLayout));
 
   const statusLabel = (mc: (typeof machines)[number]) => {
     const status = terminalStatus(mc.last_connected_at, mc.last_disconnected_at);
@@ -80,7 +82,7 @@ export default async function MachinesPage() {
           name on the left, how full it is on the right. */}
       {machines.length > 0 && (
         <RowList>
-          {machines.map((mc) => {
+          {machines.map((mc, i) => {
             const s = summary.get(mc.id);
             const lastSale = lastSales.get(mc.id);
             const overall = s && s.counted ? fillLevel(s.stock, s.capacity) : "unknown";
@@ -91,7 +93,9 @@ export default async function MachinesPage() {
               mc.type === "other"
                 ? null
                 : !s || s.slots === 0
-                  ? { label: m.machines.buildLayout, href: `/machines/${mc.id}/layout` }
+                  ? drawable[i]
+                    ? { label: m.machines.buildLayout, href: `/machines/${mc.id}/layout` }
+                    : null
                   : !s.counted
                     ? { label: m.machines.countStock, href: `/machines/${mc.id}/refill` }
                     : null;

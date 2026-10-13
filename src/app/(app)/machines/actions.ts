@@ -2,7 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { isOperator, requireOperator, requireOrgId } from "@/lib/org";
-import { getMachine, requireMachineAccess, requireProductAccess, requireSelectionAccess } from "@/lib/data";
+import {
+  getMachine,
+  requireLayoutAccess,
+  requireMachineAccess,
+  requireProductAccess,
+  requireSelectionAccess,
+} from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MACHINE_TYPES, SLOT_SIZES, type LayoutRowSpec, type MachineType, type Product, type SlotSize } from "@/lib/types";
 import { createProduct } from "../products/actions";
@@ -107,7 +113,14 @@ export async function saveLayout(
   assignments: Record<string, string | null>,
 ) {
   const orgId = await requireOrgId();
-  await requireMachineAccess(orgId, machineId);
+  // A save rewrites every slot and who rents it, so on a shared machine only
+  // the operator may make one. Everything is checked before anything is
+  // written: a refusal halfway would leave the new layout with the old links.
+  await requireLayoutAccess(orgId, machineId);
+  await requireSelectionAccess(orgId, machineId, Object.keys(assignments));
+  for (const productId of new Set(Object.values(assignments))) {
+    if (productId) await requireProductAccess(orgId, productId);
+  }
 
   const seen = new Set<string>();
   for (const row of rows) {
@@ -143,7 +156,6 @@ export async function saveLayout(
 
   // Product links are kept per selection number, so only changed ones are written.
   for (const [selection, productId] of Object.entries(assignments)) {
-    if (productId) await requireProductAccess(orgId, productId);
     if (!seen.has(selection)) continue;
     const { error: assignError } = await admin.rpc("assign_product", {
       target_org: orgId,
@@ -179,7 +191,8 @@ export async function recordStock(
   checks: Record<string, boolean> = {},
 ) {
   const orgId = await requireOrgId();
-  await requireMachineAccess(orgId, machineId);
+  // On a shared machine a shop counts its own slots, never its neighbour's.
+  await requireSelectionAccess(orgId, machineId, entries.map((e) => e.selection));
   const clean = entries
     .filter((e) => /^[0-9]+$/.test(e.selection) && Number.isInteger(e.level_after) && e.level_after >= 0)
     .map((e) => ({

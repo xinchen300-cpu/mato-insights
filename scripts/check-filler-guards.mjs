@@ -28,6 +28,7 @@ const GUARDS = [
   "requireMachineAccess",
   "requireProductAccess",
   "requireSelectionAccess",
+  "requireLayoutAccess",
 ];
 const ALLOWED_BEFORE_GUARD = /^await (params|searchParams|isFiller\(\)|getI18n\(\))/;
 

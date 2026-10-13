@@ -138,6 +138,7 @@ export const fr: Messages = {
     correct: "Corriger le stock",
     noLayout: "Pas encore de plan",
     noLayoutHint: "Faites le plan une seule fois, et Vendly suit le stock de chaque case.",
+    noLayoutShared: "C'est votre exploitant qui fait le plan d'un distributeur partagé. Ensuite, vous suivez ici le stock de vos propres cases.",
     buildLayout: "Faire le plan",
     countStock: "Compter le stock",
     otherTypeHint: "Ce distributeur ne suit pas de stock, mais ses ventes comptent dans les statistiques.",

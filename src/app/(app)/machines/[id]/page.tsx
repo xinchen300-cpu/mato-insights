@@ -9,6 +9,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { DISPLAY_TIME_ZONE, fmt, weekdayIndex } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import {
+  canEditLayout,
   getBusinesses,
   getMachine,
   getMachineStock,
@@ -48,7 +49,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   if (!machine) notFound();
 
   const since = new Date(Date.now() - PAYMENT_WINDOW_DAYS * 86_400_000);
-  const [slots, businesses, history, health, payments, split, products, shelfLife] = await Promise.all([
+  const [slots, businesses, history, health, payments, split, products, shelfLife, editLayout] = await Promise.all([
     getMachineStock(orgId, [id]),
     getBusinesses(orgId),
     getRefillHistory(orgId, id),
@@ -57,6 +58,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
     getMachineSalesSplit(orgId, id, since),
     getProducts(orgId),
     getSlotShelfLife(orgId, id),
+    canEditLayout(machine),
   ]);
 
   // How long what is in each slot still keeps, counted in Belgian days.
@@ -154,7 +156,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
                 </Link>
               </>
             )}
-            {tracksStock && (
+            {tracksStock && editLayout && (
               <Link href={`/machines/${id}/layout`} className={buttonVariants({ variant: "outline" })}>
                 <LayoutGrid />
                 {m.machines.layout}
@@ -173,12 +175,14 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
           <EmptyState
             icon={<LayoutGrid className="size-5" />}
             title={m.machines.noLayout}
-            hint={m.machines.noLayoutHint}
+            hint={editLayout ? m.machines.noLayoutHint : m.machines.noLayoutShared}
             action={
-              <Link href={`/machines/${id}/layout`} className={buttonVariants()}>
-                <LayoutGrid />
-                {m.machines.buildLayout}
-              </Link>
+              editLayout && (
+                <Link href={`/machines/${id}/layout`} className={buttonVariants()}>
+                  <LayoutGrid />
+                  {m.machines.buildLayout}
+                </Link>
+              )
             }
           />
         ) : (
