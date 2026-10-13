@@ -77,7 +77,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
   const since = (row: { units: number; prev_units: number; first_sale: string | null }) =>
     compareSince(row.units, row.prev_units, row.first_sale, report.prev_start);
   const unitsVerdict = since({ ...totals, first_sale: report.first_sale });
-  const verdictNotes = { tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise, new: newSince(report.first_sale) };
+  const verdictNotes = { tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise, same: m.stats.aboutSame, new: newSince(report.first_sale) };
 
   const exportParams = new URLSearchParams(
     Object.entries({ period, from, to, business, machine, product }).filter(([, v]) => v) as [string, string][],
@@ -272,6 +272,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                           f={f}
                           verdict={since(row)}
                           noiseLabel={m.stats.withinNoise}
+                          sameLabel={m.stats.aboutSame}
                           newLabel={newSince(row.first_sale)}
                           className="text-[13px]"
                         />
@@ -310,6 +311,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                             f={f}
                             verdict={since(row)}
                             noiseLabel={m.stats.withinNoise}
+                            sameLabel={m.stats.aboutSame}
                             newLabel={newSince(row.first_sale)}
                             className="text-[13px]"
                           />
@@ -420,6 +422,7 @@ function ProductRanking({
                 f={f}
                 verdict={compareSince(row.units, row.prev_units, row.first_sale, prevStart)}
                 noiseLabel={m.stats.withinNoise}
+                sameLabel={m.stats.aboutSame}
                 newLabel={row.first_sale ? fmt(m.stats.newSince, { date: f.dayMonth(row.first_sale) }) : undefined}
                 className="text-[13px]"
               />

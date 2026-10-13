@@ -1,5 +1,5 @@
 // Checks the refill round logic (src/lib/refill-flow.ts). Run: npm run test:flow
-import { allocate, levelAfter, onlyMine, pickList, returnsFor, slotKey, pickKey, type FlowLine } from "../src/lib/refill-flow.ts";
+import { allocate, itemReport, levelAfter, onlyMine, pickList, returnsFor, slotKey, pickKey, type FlowLine } from "../src/lib/refill-flow.ts";
 import type { RefillLine, RefillSheet } from "../src/lib/types.ts";
 const L = (sel: string, product: string, cap: number, stock: number | null, take: number, row = 1): FlowLine =>
   ({ machineId: "m1", selection: sel, row, slot: Number(sel), productId: product, productName: product.toUpperCase(), photoPath: null, capacity: cap, stock, take, expired: 0 });
@@ -41,7 +41,11 @@ const shared = { id: "s", share_token: "secret", machine_ids: ["fridge", "other"
   filled_by: null, km: null, flow_version: 2,
   lines: [RL("fridge", "11", "mine-a"), RL("fridge", "12", "theirs-b"), RL("other", "11", "mine-a")],
   box: { "fridge:mine-a": 2, "fridge:theirs-b": 2, "other:mine-a": 2 },
-  stops: { fridge: stop(["11", "12", "13", "14"]), other: stop(["11"]) } } as unknown as RefillSheet;
+  stops: { fridge: stop(["11", "12", "13", "14"]), other: stop(["11"]) },
+  returns: [
+    { productId: "mine-a", productName: "A", source: "leftover", reason: null, disposition: "stock", qty: 1 },
+    { productId: "theirs-b", productName: "B", source: "removed", reason: "expired", disposition: "waste", qty: 2 },
+  ] } as unknown as RefillSheet;
 const view = { machines: ["fridge"], products: new Set(["mine-a"]), slots: new Set([slotKey("fridge", "13")]) };
 const seenByShop = onlyMine(shared, view);
 ok("shop: only its own machine", seenByShop.machine_ids.join() === "fridge" && !("other" in seenByShop.stops));
@@ -51,3 +55,23 @@ ok("shop: box only its own product on its machine", Object.keys(seenByShop.box).
 ok("shop: no share link", seenByShop.share_token === "");
 const nothing = onlyMine(shared, { machines: [], products: new Set(), slots: new Set() });
 ok("shop with nothing sees nothing", !nothing.machine_ids.length && !nothing.lines.length && !Object.keys(nothing.stops).length && !Object.keys(nothing.box).length);
+ok("shop: only its own products come back", seenByShop.returns?.map((r) => r.productId).join() === "mine-a");
+
+// The report of a finished round, per product.
+const report = itemReport(
+  [RL("fridge", "11", "mine-a"), RL("fridge", "12", "theirs-b")],
+  { "fridge:mine-a": 3, "fridge:theirs-b": 2 },
+  { fridge: { checkedAt: null, completedAt: "x", skipped: false, technical: false, note: null, lines: [
+    { ...base, selection: "11", filled: 2, removed: [] }, { ...base, selection: "12", filled: 0, removed: [] } ] } },
+  [
+    { productId: "mine-a", productName: "mine-a", source: "leftover", reason: null, disposition: "stock", qty: 1 },
+    { productId: "theirs-b", productName: "theirs-b", source: "removed", reason: "expired", disposition: "waste", qty: 1 },
+    { productId: "theirs-b", productName: "theirs-b", source: "leftover", reason: null, disposition: "stock", qty: 2 },
+  ],
+  [{ productId: "mine-a", qty: 1 }],
+);
+const a = report.find((r) => r.productId === "mine-a")!;
+const bb = report.find((r) => r.productId === "theirs-b")!;
+ok("report: taken, filled, back and short per product", a.taken === 3 && a.filled === 2 && a.back === 1 && a.short === 1);
+ok("report: taken out by reason, and where it went", bb.out.expired === 1 && bb.back === 2 && bb.went.waste === 1 && bb.went.stock === 2);
+ok("report: most filled first", report[0].productId === "mine-a");

@@ -22,7 +22,7 @@ export function StatTile({
   detail?: string;
   /** Whether the change is real, judged on the number of sales. */
   verdict?: Verdict;
-  verdictNotes?: { tooFew: string; noise: string };
+  verdictNotes?: { tooFew: string; noise: string; same?: string };
   f: Formatters;
   /** Inside a shared band: no border of its own. */
   bare?: boolean;
@@ -38,7 +38,14 @@ export function StatTile({
       </p>
       <div className="mt-3 flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] text-muted-foreground">
         {canCompare && !tooFew && (
-          <Delta current={current} previous={previous} f={f} verdict={verdict} noiseLabel={verdictNotes?.noise} />
+          <Delta
+            current={current}
+            previous={previous}
+            f={f}
+            verdict={verdict}
+            noiseLabel={verdictNotes?.noise}
+            sameLabel={verdictNotes?.same}
+          />
         )}
         {canCompare && !tooFew && compareLabel && <span>{compareLabel}</span>}
         {tooFew && verdictNotes && <span>{verdictNotes.tooFew}</span>}

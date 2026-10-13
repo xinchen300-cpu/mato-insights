@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ChevronLeft, ChevronRight, Timer, TriangleAlert } from "lucide-react";
 import { VendlyWordmark } from "@/components/brand/vendly-mark";
+import { FrontView, type FrontSlot } from "@/components/machine/front-view";
 import { useI18n } from "@/i18n/client";
 import { duration, fmt } from "@/i18n/format";
 import type { RefillRound } from "@/lib/data";
@@ -147,13 +148,14 @@ export function RoundFlow({ round: initial }: { round: RefillRound }) {
     }));
   }
 
-  function run(action: () => Promise<void>, after?: () => void) {
+  function run(action: () => Promise<void>, after?: () => void, failed?: () => void) {
     setError(null);
     startTransition(async () => {
       try {
         await action();
         after?.();
       } catch {
+        failed?.();
         setError(t.failed);
       }
     });
@@ -233,6 +235,8 @@ export function RoundFlow({ round: initial }: { round: RefillRound }) {
           setPendingId(null);
           router.refresh();
         },
+        // Not sent: the machine is open again, so it cannot pass for done.
+        () => setPendingId(null),
       );
       return;
     }
@@ -835,6 +839,26 @@ export function RoundFlow({ round: initial }: { round: RefillRound }) {
   );
 }
 
+/** The round's slots of one machine as rows, left to right, for the drawing. */
+function slotRows(slots: RefillRound["slots"]): FrontSlot[][] {
+  const rows = new Map<number, FrontSlot[]>();
+  for (const slot of [...slots].sort((a, b) => a.row - b.row || a.slot - b.slot)) {
+    rows.set(slot.row, [
+      ...(rows.get(slot.row) ?? []),
+      {
+        key: slot.selection,
+        selection: slot.selection,
+        size: "small",
+        capacity: slot.capacity,
+        stock: slot.stock,
+        productName: slot.productName,
+        photoUrl: null,
+      },
+    ]);
+  }
+  return [...rows.values()];
+}
+
 /** A round checkbox, big enough for a thumb in a cold van. */
 function Tick({ done }: { done: boolean }) {
   return (
@@ -1197,32 +1221,21 @@ function ReportSheet({
       ) : (
         <>
           <p className="text-[14px] font-semibold text-muted-foreground">{t.whichSlot}</p>
-          <ul className="flex max-h-64 flex-col overflow-y-auto rounded-2xl border border-border">
-            {slots.map((s) => (
-              <li key={s.selection}>
-                <button
-                  type="button"
-                  aria-pressed={selection === s.selection}
-                  onClick={() => setSelection(s.selection)}
-                  className={cn(
-                    "flex min-h-16 w-full items-center gap-3 border-b border-border/60 px-3.5 text-left last:border-0",
-                    selection === s.selection ? "bg-surface" : "bg-card",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "rounded-lg px-1.5 py-1 font-mono text-[12.5px] font-semibold",
-                      selection === s.selection ? "bg-foreground text-background" : "bg-surface",
-                    )}
-                  >
-                    {s.selection}
-                  </span>
-                  <span className="flex-1 text-[15px] font-semibold">{s.productName ?? "—"}</span>
-                  {selection === s.selection && <Check className="size-5" />}
-                </button>
-              </li>
-            ))}
-          </ul>
+          {/* The machine as the filler sees it, each slot with what Vendly thinks is in it. */}
+          <FrontView
+            rows={slotRows(slots)}
+            selectedKey={selection}
+            onSlotClick={(picked) => setSelection(picked.selection)}
+          />
+          {slot && (
+            <p className="text-[15px] font-semibold">
+              {fmt(t.slotPicked, { slot: slot.selection, product: slot.productName ?? "—" })}
+              <span className="font-normal text-muted-foreground">
+                {" · "}
+                {slot.stock === null ? t.notCountedShort : fmt(t.nowOfShort, { n: slot.stock, cap: slot.capacity })}
+              </span>
+            </p>
+          )}
           {slot && (
             <div className="flex items-center justify-between rounded-2xl bg-surface px-4 py-3">
               <span className="text-[15px] font-semibold">{kind === "count" ? t.howManyNow : t.takenOut}</span>

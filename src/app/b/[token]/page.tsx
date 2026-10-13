@@ -54,6 +54,7 @@ export default async function BusinessSharePage({
   const notes = {
     tooFew: m.stats.tooFewToCompare,
     noise: m.stats.withinNoise,
+    same: m.stats.aboutSame,
     new: report?.first_sale ? fmt(m.stats.newSince, { date: f.dayMonth(report.first_sale) }) : undefined,
   };
 

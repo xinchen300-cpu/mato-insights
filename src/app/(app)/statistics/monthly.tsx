@@ -120,6 +120,7 @@ export async function MonthlyOverview({
                         f={f}
                         verdict={compareRates(row.units, row.days, prev.units, prev.days)}
                         noiseLabel={m.stats.withinNoise}
+                        sameLabel={m.stats.aboutSame}
                         className="text-[13px]"
                       />
                     ) : null

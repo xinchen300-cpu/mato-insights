@@ -235,7 +235,7 @@ export default async function OverviewPage() {
     previous: report.totals.prev_revenue,
     label,
     verdict: compareSince(report.totals.units, report.totals.prev_units, report.first_sale, report.prev_start),
-    notes: { tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise, new: newSince(report.first_sale) },
+    notes: { tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise, same: m.stats.aboutSame, new: newSince(report.first_sale) },
   });
 
   return (
@@ -321,6 +321,7 @@ export default async function OverviewPage() {
                       f={f}
                       verdict={compareSince(row.units, row.prev_units, row.first_sale, month.prev_start)}
                       noiseLabel={m.stats.withinNoise}
+                      sameLabel={m.stats.aboutSame}
                       newLabel={newSince(row.first_sale)}
                       className="text-[13px]"
                     />

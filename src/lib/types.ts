@@ -1,4 +1,4 @@
-import type { StopRecord } from "@/lib/refill-flow";
+import type { ReturnRow, StopRecord } from "@/lib/refill-flow";
 
 export type Period = "today" | "week" | "month" | "last30" | "custom";
 export const PERIODS: Period[] = ["today", "week", "month", "last30", "custom"];
@@ -155,6 +155,8 @@ export type RefillSheet = {
   flow_version: number;
   /** Flow 2: per machine id, when it was finished or skipped. */
   stops: Record<string, StopRecord>;
+  /** Flow 2, once closed: what came back from the round and where it went. */
+  returns: ReturnRow[] | null;
 };
 
 export type Producer = {

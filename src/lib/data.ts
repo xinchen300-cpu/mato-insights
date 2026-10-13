@@ -534,15 +534,75 @@ export async function getPaymentHealth(orgId: string, since: Date): Promise<Map<
 }
 
 /** The machine's latest payments: the ones that worked and the ones that did not. */
+/** The last few payments of a machine, for its page. */
 export async function getPaymentFeed(orgId: string, machineId: string, limit = 12): Promise<PaymentEntry[]> {
-  await denyFillerAccess();
-  const { data, error } = await createAdminClient().rpc("payment_feed", {
-    target_org: orgId,
-    target_machine: machineId,
-    max_rows: limit,
-  });
+  return (await getPayments(orgId, machineId, { limit })).rows;
+}
+
+/**
+ * A machine's payments, newest first, a page at a time: approved, declined and
+ * broken off alike, each at what the customer tried to pay. A shop on a shared
+ * fridge sees the sales of its own slots only, by the same rule as every
+ * figure (sale_business): what a slot of the co-tenant sold is not hers.
+ */
+export async function getPayments(
+  orgId: string,
+  machineId: string,
+  { limit = 50, offset = 0 }: { limit?: number; offset?: number } = {},
+): Promise<{ rows: PaymentEntry[]; more: boolean }> {
+  await requireMachineAccess(orgId, machineId);
+  const { businessId } = await getScope();
+  const admin = createAdminClient();
+  const [{ data: machine }, { data: assignments }, { data: slots }] = await Promise.all([
+    admin.from("machines").select("business_id, shared_business_id").eq("id", machineId).eq("org_id", orgId).maybeSingle(),
+    admin
+      .from("selection_assignments")
+      .select("selection_number, valid_from, valid_to, products(name)")
+      .eq("org_id", orgId)
+      .eq("machine_id", machineId),
+    admin.from("slots").select("selection_number, business_id").eq("org_id", orgId).eq("machine_id", machineId),
+  ]);
+
+  let query = admin
+    .from("transactions")
+    .select("occurred_at, amount, disposition, item_ref, requested:raw_json->>requestedAmount, ref:raw_json->>itemRef")
+    .eq("org_id", orgId)
+    .eq("machine_id", machineId)
+    .not("disposition", "is", null);
+  if (businessId && machine?.shared_business_id) {
+    const owners = [machine.business_id, machine.shared_business_id];
+    const own = (slots ?? [])
+      .filter((slot) =>
+        owners.includes(slot.business_id) ? slot.business_id === businessId : machine.business_id === businessId,
+      )
+      .map((slot) => slot.selection_number as string);
+    query = query.in("item_ref", own.length ? own : [NOTHING]);
+  }
+  const { data, error } = await query.order("occurred_at", { ascending: false }).range(offset, offset + limit);
   if (error) throw new Error(error.message);
-  return ((data ?? []) as PaymentEntry[]).map((p) => ({ ...p, amount: Number(p.amount) }));
+
+  const named = (assignments ?? []).map((a) => ({
+    selection: a.selection_number as string,
+    from: a.valid_from as string,
+    to: (a.valid_to as string | null) ?? null,
+    name: ((Array.isArray(a.products) ? a.products[0] : a.products) as { name: string } | null)?.name ?? null,
+  }));
+  const rows = (data ?? []).slice(0, limit).map((t) => {
+    const selection = (t.item_ref as string | null) ?? (t.ref as string | null) ?? null;
+    const at = t.occurred_at as string;
+    const product = named.find((a) => a.selection === selection && a.from <= at && (a.to === null || at < a.to));
+    const amount = Number(t.amount);
+    const requested = typeof t.requested === "string" && /^[0-9]+$/.test(t.requested) ? Number(t.requested) / 100 : null;
+    return {
+      occurred_at: at,
+      // What the customer tried to pay: a refused payment commits nothing.
+      amount: amount > 0 ? amount : (requested ?? amount),
+      disposition: t.disposition as string,
+      product_name: product?.name ?? null,
+      selection_number: selection,
+    };
+  });
+  return { rows, more: (data ?? []).length > limit };
 }
 
 export async function getMachineSalesSplit(
@@ -680,6 +740,37 @@ export async function getBusinesses(orgId: string): Promise<Business[]> {
 }
 
 /** Slots with stock over date or going over within the day, worst first. */
+/** One slot's shelf life: the first date something in it runs out, and what already has. */
+export type SlotShelfLife = { nextExpiresAt: string | null; expired: number };
+
+/**
+ * Per slot of one machine, when the oldest piece in it runs out (from the
+ * batches each refill starts) and how many are past their date. A shop on a
+ * shared fridge gets its own slots only, like the stock itself.
+ */
+export async function getSlotShelfLife(orgId: string, machineId: string): Promise<Map<string, SlotShelfLife>> {
+  await requireMachineAccess(orgId, machineId);
+  const { businessId } = await getScope();
+  const { data, error } = await createAdminClient().rpc("slot_freshness", {
+    target_org: orgId,
+    machine_filter: [machineId],
+  });
+  if (error) throw new Error(error.message);
+  const slots = new Map<string, SlotShelfLife>();
+  // One row per batch; the per-slot figures repeat on each, so the first one says it.
+  for (const row of (data ?? []) as {
+    selection_number: string;
+    business_id: string | null;
+    next_expires_at: string | null;
+    qty_expired: number;
+  }[]) {
+    if (businessId && row.business_id !== businessId) continue;
+    if (slots.has(row.selection_number)) continue;
+    slots.set(row.selection_number, { nextExpiresAt: row.next_expires_at, expired: Number(row.qty_expired) });
+  }
+  return slots;
+}
+
 export async function getExpiryAlerts(orgId: string): Promise<ExpiryAlert[]> {
   await denyFillerAccess();
   const { businessId } = await getScope();
@@ -829,7 +920,7 @@ export async function getRefillSheets(orgId: string): Promise<RefillSheet[]> {
   const mine = await ownMachineIds(orgId);
   const { data } = await createAdminClient()
     .from("refill_sheets")
-    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box, flow_version, stops")
+    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box, flow_version, stops, returns")
     .eq("org_id", orgId)
     .order("created_at", { ascending: false })
     .limit(mine ? 60 : 10);
@@ -849,7 +940,7 @@ export async function getRefillSheet(orgId: string, id: string): Promise<RefillS
   const mine = await ownMachineIds(orgId);
   const { data } = await createAdminClient()
     .from("refill_sheets")
-    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box, flow_version, stops")
+    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box, flow_version, stops, returns")
     .eq("org_id", orgId)
     .eq("id", id)
     .maybeSingle();
@@ -866,7 +957,7 @@ export async function getRefillSheetByToken(token: string): Promise<RefillSheet 
   if (!/^[A-Za-z0-9_-]{20,}$/.test(token)) return null;
   const { data } = await createAdminClient()
     .from("refill_sheets")
-    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box, flow_version, stops")
+    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box, flow_version, stops, returns")
     .eq("share_token", token)
     // A step-by-step round (flow 2) is filled in Vendly itself, never through a link.
     .eq("flow_version", 1)

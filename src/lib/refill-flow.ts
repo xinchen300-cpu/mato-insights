@@ -217,6 +217,8 @@ export function onlyMine(sheet: RefillSheet, view: ShopView): RefillSheet {
         .filter(([id]) => view.machines.includes(id))
         .map(([id, stop]) => [id, { ...stop, lines: stop.lines.filter((line) => own.has(slotKey(id, line.selection))) }]),
     ),
+    // What came back is per product: the co-tenant's leftovers are not the shop's.
+    returns: (sheet.returns ?? []).filter((row) => view.products.has(row.productId)),
     box:
       sheet.flow_version === 2
         ? Object.fromEntries(
@@ -227,4 +229,78 @@ export function onlyMine(sheet: RefillSheet, view: ShopView): RefillSheet {
           )
         : sheet.box,
   };
+}
+
+/** One product's line in the report of a finished round. */
+export type ItemReport = {
+  productId: string;
+  name: string;
+  /** Out of the fridge into the van. */
+  taken: number;
+  /** Into the machines. */
+  filled: number;
+  /** Taken along, not used, brought back. */
+  back: number;
+  /** Taken out of the machines, per reason. */
+  out: Record<RemovalReason, number>;
+  /** Asked for, but not in the fridge. */
+  short: number;
+  /** Where what came back (unused or taken out) went. */
+  went: Partial<Record<Disposition, number>>;
+};
+
+/**
+ * What happened to each product on a finished round, from what the filler
+ * entered: taken from the fridge, filled, brought back, taken out and why,
+ * and short. Only products with something to say about them.
+ */
+export function itemReport(
+  lines: { machine_id: string; selection_number: string; product_id: string; product_name: string }[],
+  box: Record<string, number>,
+  stops: Record<string, StopRecord>,
+  returns: ReturnRow[],
+  shortages: { productId: string; qty: number }[],
+): ItemReport[] {
+  const rows = new Map<string, ItemReport>();
+  const row = (productId: string, name: string) => {
+    const existing = rows.get(productId);
+    if (existing) return existing;
+    const fresh: ItemReport = {
+      productId,
+      name,
+      taken: 0,
+      filled: 0,
+      back: 0,
+      out: { expired: 0, damaged: 0, nearExpiry: 0, other: 0 },
+      short: 0,
+      went: {},
+    };
+    rows.set(productId, fresh);
+    return fresh;
+  };
+  const names = new Map(lines.map((line) => [line.product_id, line.product_name]));
+  const productOf = new Map(lines.map((line) => [slotKey(line.machine_id, line.selection_number), line.product_id]));
+  const nameOf = (productId: string) => names.get(productId) ?? "—";
+
+  for (const [key, qty] of Object.entries(box)) {
+    const productId = key.slice(key.indexOf(":") + 1);
+    if (qty > 0) row(productId, nameOf(productId)).taken += qty;
+  }
+  for (const [machineId, stop] of Object.entries(stops)) {
+    for (const line of stop.lines) {
+      const productId = productOf.get(slotKey(machineId, line.selection));
+      if (productId && line.filled > 0) row(productId, nameOf(productId)).filled += line.filled;
+    }
+  }
+  for (const item of returns) {
+    if (item.qty <= 0) continue;
+    const entry = row(item.productId, names.get(item.productId) ?? item.productName);
+    if (item.source === "leftover") entry.back += item.qty;
+    else if (item.reason) entry.out[item.reason] += item.qty;
+    entry.went[item.disposition] = (entry.went[item.disposition] ?? 0) + item.qty;
+  }
+  for (const item of shortages) {
+    if (item.qty > 0) row(item.productId, nameOf(item.productId)).short += item.qty;
+  }
+  return [...rows.values()].sort((a, b) => b.filled - a.filled || a.name.localeCompare(b.name));
 }

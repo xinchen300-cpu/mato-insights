@@ -8,9 +8,10 @@ const FLAT = 0.02;
 
 /**
  * A percentage change. With a verdict, only a real change gets colour and an
- * arrow; normal swing shows grey with a "≈", and too few sales shows nothing.
- * Something that only started selling during the earlier period gets no
- * percentage at all, only its grey "new since" label.
+ * arrow; normal swing says so in grey words ("about the same", explained in
+ * the tooltip) without a number that would read as a change; too few sales
+ * shows nothing. Something that only started selling during the earlier
+ * period gets no percentage at all, only its grey "new since" label.
  */
 export function Delta({
   current,
@@ -18,6 +19,7 @@ export function Delta({
   f,
   verdict,
   noiseLabel,
+  sameLabel,
   newLabel,
   className,
 }: {
@@ -27,6 +29,8 @@ export function Delta({
   verdict?: Verdict;
   /** Tooltip for a change that is within normal swing. */
   noiseLabel?: string;
+  /** The words shown for normal swing ("about the same"). */
+  sameLabel?: string;
   /** Shown instead of a percentage when the verdict is "new". */
   newLabel?: string;
   className?: string;
@@ -40,15 +44,11 @@ export function Delta({
   if (ratio === null || verdict === "tooFew") return null;
 
   if (verdict === "noise") {
-    return (
-      <span
-        title={noiseLabel}
-        className={cn("tabular inline-flex items-center gap-1 text-sm font-semibold text-muted-foreground", className)}
-      >
-        <span aria-hidden="true" className="font-normal opacity-70">≈</span>
-        {f.change(ratio).replace("-", "−")}
+    return sameLabel ? (
+      <span title={noiseLabel} className={cn("text-sm font-medium text-muted-foreground", className)}>
+        {sameLabel}
       </span>
-    );
+    ) : null;
   }
 
   const flat = Math.abs(ratio) < FLAT;

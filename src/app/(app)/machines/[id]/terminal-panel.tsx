@@ -1,12 +1,15 @@
+import Link from "next/link";
 import { Link2 } from "lucide-react";
 import { MiniStat } from "@/components/kpi";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { StatusBadge } from "@/components/machine/status-badge";
 import { Section } from "@/components/page-header";
+import { buttonVariants } from "@/components/ui/button";
 import { fmt, plural, type Formatters } from "@/i18n/format";
 import type { Messages } from "@/i18n/messages";
 import { shareIsReal } from "@/lib/stats";
 import { terminalStatus } from "@/lib/terminal-status";
+import { cn } from "@/lib/utils";
 import type { Machine, MachineSalesSplit, PaymentEntry, PaymentHealth } from "@/lib/types";
 
 // Above this share of payments breaking off, the machine or its connection
@@ -185,6 +188,9 @@ export function TerminalPanel({
               );
             })}
           </RowList>
+          <Link href={`/machines/${machine.id}/payments`} className={cn(buttonVariants({ variant: "outline" }), "w-fit")}>
+            {m.status.allPayments}
+          </Link>
         </Section>
       )}
     </>

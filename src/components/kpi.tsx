@@ -9,12 +9,12 @@ type Compare = {
   label?: string;
   verdict?: Verdict;
   /** `new`: "New since 9 Sep", for a selection that started after the earlier period began. */
-  notes?: { tooFew: string; noise: string; new?: string };
+  notes?: { tooFew: string; noise: string; same?: string; new?: string };
 };
 
 /**
  * The change line under a figure. A real change gets an arrow and a colour;
- * normal swing stays grey with "≈" (its explanation is the tooltip); with too
+ * normal swing says "about the same" in grey (explained in the tooltip); with too
  * few sales there is no comparison at all, only a note, and the same for a
  * selection that had not started yet. Same rules as Delta.
  */
@@ -32,6 +32,7 @@ function ChangeLine({ compare, detail, f }: { compare?: Compare; detail?: string
           f={f}
           verdict={compare.verdict}
           noiseLabel={compare.notes?.noise}
+          sameLabel={compare.notes?.same}
         />
       )}
       {canCompare && !tooFew && compare.label && <span>{compare.label}</span>}

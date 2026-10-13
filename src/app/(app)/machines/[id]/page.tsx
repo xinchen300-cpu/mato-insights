@@ -2,11 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ClipboardList, LayoutGrid, Pencil } from "lucide-react";
 import { Avatar, RowList } from "@/components/list-row";
-import { OWNER_TONES, OwnerLegend, StockLegend } from "@/components/machine/front-view";
+import { OWNER_TONES, OwnerLegend, StockLegend, type FrontSlot } from "@/components/machine/front-view";
 import { SlotProducts } from "@/components/machine/slot-products";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
-import { fmt, weekdayIndex } from "@/i18n/format";
+import { DISPLAY_TIME_ZONE, fmt, weekdayIndex } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import {
   getBusinesses,
@@ -17,6 +17,7 @@ import {
   getPaymentHealth,
   getProducts,
   getRefillHistory,
+  getSlotShelfLife,
 } from "@/lib/data";
 import { toFrontRows } from "@/lib/layout";
 import { mediaUrl } from "@/lib/media";
@@ -47,7 +48,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   if (!machine) notFound();
 
   const since = new Date(Date.now() - PAYMENT_WINDOW_DAYS * 86_400_000);
-  const [slots, businesses, history, health, payments, split, products] = await Promise.all([
+  const [slots, businesses, history, health, payments, split, products, shelfLife] = await Promise.all([
     getMachineStock(orgId, [id]),
     getBusinesses(orgId),
     getRefillHistory(orgId, id),
@@ -55,7 +56,38 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
     getPaymentFeed(orgId, id),
     getMachineSalesSplit(orgId, id, since),
     getProducts(orgId),
+    getSlotShelfLife(orgId, id),
   ]);
+
+  // How long what is in each slot still keeps, counted in Belgian days.
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: DISPLAY_TIME_ZONE }).format(new Date());
+  const daysUntil = (date: string) => Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
+  const decorate = (slot: FrontSlot): FrontSlot => {
+    const life = shelfLife.get(slot.selection);
+    const days = life?.nextExpiresAt ? daysUntil(life.nextExpiresAt) : null;
+    const badge: FrontSlot["badge"] =
+      life && life.expired > 0
+        ? { text: fmt(m.machines.shelfExpired, { n: life.expired }), tone: "negative" }
+        : days === null
+          ? null
+          : days <= 0
+            ? { text: m.machines.shelfToday, tone: "warning" }
+            : days === 1
+              ? { text: m.machines.shelfTomorrow, tone: "warning" }
+              : { text: fmt(m.machines.shelfDays, { n: days }), tone: "muted" };
+    const keeps =
+      life && life.expired > 0
+        ? fmt(m.machines.shelfExpired, { n: life.expired })
+        : days === null
+          ? null
+          : days <= 0
+            ? m.machines.shelfLongToday
+            : days === 1
+              ? m.machines.shelfLongTomorrow
+              : fmt(m.machines.shelfLongDays, { n: days });
+    const stock = slot.stock === null ? m.machines.stockUnknownShort : fmt(m.machines.stockNow, { n: slot.stock, cap: slot.capacity });
+    return { ...slot, badge, info: [keeps, slot.productName ? stock : null].filter(Boolean).join(" · ") || null };
+  };
 
   // A shared machine: every slot belongs to one of its two businesses.
   const shared = Boolean(machine.shared_business_id);
@@ -180,7 +212,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
 
             <div className="mt-7 sm:mt-8">
               <SlotProducts
-                rows={toFrontRows(slots, shared ? toneOf : undefined)}
+                rows={toFrontRows(slots, shared ? toneOf : undefined).map((row) => row.map(decorate))}
                 products={products}
                 onAssign={assignProduct.bind(null, id)}
                 onCreate={createProductForMachine.bind(null, id)}

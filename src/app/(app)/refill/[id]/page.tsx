@@ -4,16 +4,18 @@ import { CircleCheck, FileSpreadsheet, Printer } from "lucide-react";
 import { KpiHero } from "@/components/kpi";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { PageHeader, Section } from "@/components/page-header";
-import { SheetTables } from "@/components/refill/sheet-tables";
+import { SheetTables, type SheetActual } from "@/components/refill/sheet-tables";
 import { buttonVariants } from "@/components/ui/button";
 import { duration, fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { LiveRounds } from "@/components/refill/live-rounds";
 import { getMachines, getOpenRounds, getRefillSheet, getRunSummary } from "@/lib/data";
 import { linesToFill } from "@/lib/refill";
+import { itemReport } from "@/lib/refill-flow";
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
 import { cn } from "@/lib/utils";
 import { NotesForm } from "./notes-form";
+import { RoundReport } from "./round-report";
 import { RunReport } from "./run-report";
 import { ShareBox } from "./share-box";
 
@@ -46,6 +48,33 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
   const machineName = new Map(step ? (await getMachines(orgId)).map((machine) => [machine.id, machine.name]) : []);
 
   const total = sheet.lines.reduce((sum, l) => sum + l.to_add, 0);
+
+  // A finished step-by-step round reports what really happened, per product
+  // and per slot, instead of what was planned.
+  const finished = step && Boolean(sheet.completed_at);
+  const items = finished
+    ? itemReport(
+        sheet.lines,
+        sheet.box ?? {},
+        sheet.stops ?? {},
+        sheet.returns ?? [],
+        summary.map((row) => ({ productId: row.product_id, qty: row.short })),
+      )
+    : [];
+  const actual: SheetActual | undefined = finished
+    ? {
+        taken: Object.fromEntries(items.map((item) => [item.productId, item.taken])),
+        filled: Object.fromEntries(
+          Object.entries(sheet.stops ?? {}).flatMap(([machineId, stop]) =>
+            stop.lines.map((line) => [`${machineId}:${line.selection}`, line.filled]),
+          ),
+        ),
+        skipped: Object.entries(sheet.stops ?? {})
+          .filter(([, stop]) => stop.skipped)
+          .map(([machineId]) => machineId),
+      }
+    : undefined;
+  const filledTotal = items.reduce((sum, item) => sum + item.filled, 0);
 
   // The cool box is keyed by product id; the lines know the names.
   const nameOf = new Map(sheet.lines.map((l) => [l.product_id, l.product_name]));
@@ -86,7 +115,11 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
 
       {/* The one figure of a sheet: how much goes into the machines. */}
       <div className="-mt-2 mb-10 flex flex-col px-1 sm:-mt-4">
-        <KpiHero label={m.refill.total} value={fmt(m.refill.items, { count: total })} f={f} />
+        <KpiHero
+          label={finished ? m.refill.filledCol : m.refill.total}
+          value={fmt(m.refill.items, { count: finished ? filledTotal : total })}
+          f={f}
+        />
         {sheet.completed_at && (
           <p className="flex items-center gap-2 text-[15px] font-medium text-positive">
             <CircleCheck className="size-[18px]" />
@@ -101,16 +134,27 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
         </div>
       )}
 
-      {sheet.completed_at && (
-        <Section title={m.refill.reportTitle} hint={m.refill.reportHint} className="mb-10">
+      {finished && sheet.completed_at ? (
+        <Section title={m.refill.itemReportTitle} hint={m.refill.itemReportHint} className="mb-10">
           <div className="surface-card px-5 py-4 sm:px-6 sm:py-5">
-            <RunReport rows={summary} when={f.dateTime(sheet.completed_at)} />
+            <RoundReport
+              items={items}
+              heading={[m.refill.reportTitle, sheet.filled_by, f.dateTime(sheet.completed_at)].filter(Boolean).join(" · ")}
+            />
           </div>
         </Section>
+      ) : (
+        sheet.completed_at && (
+          <Section title={m.refill.reportTitle} hint={m.refill.reportHint} className="mb-10">
+            <div className="surface-card px-5 py-4 sm:px-6 sm:py-5">
+              <RunReport rows={summary} when={f.dateTime(sheet.completed_at)} />
+            </div>
+          </Section>
+        )
       )}
 
       <div className="grid gap-10 lg:grid-cols-[1.5fr_1fr] lg:gap-8">
-        <SheetTables lines={linesToFill(sheet.lines)} m={m} />
+        <SheetTables lines={linesToFill(sheet.lines)} m={m} actual={actual} />
         {/* On a phone an open sheet leads with what the operator does next:
             share it, leave a note. A closed one leads with the list. */}
         <div

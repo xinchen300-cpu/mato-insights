@@ -62,6 +62,8 @@ export function ProductGrid({
   const [business, setBusiness] = useState(initialBusiness);
 
   const businessName = new Map(businesses.map((b) => [b.id, b.name]));
+  // An operator without shops that rent slots has no use for "business" at all.
+  const hasBusinesses = businesses.length > 0;
   const presetDays = new Map(presets.map((p) => [p.id, p.days]));
   const shelfLifeOf = (p: Product) =>
     p.shelf_life_days ?? (p.shelf_life_preset_id ? (presetDays.get(p.shelf_life_preset_id) ?? null) : null);
@@ -101,33 +103,35 @@ export function ProductGrid({
       {notice}
 
       <div className="mb-8 flex flex-wrap items-center gap-2">
-        <div className="relative min-w-0 max-w-full">
-          <select
-            aria-label={m.products.business}
-            value={business}
-            onChange={(e) => setBusiness(e.target.value)}
-            className={cn(
-              pillClass,
-              "max-w-full appearance-none truncate pl-4 pr-9 focus-visible:ring-3 focus-visible:ring-ring/40 [&>option]:bg-card [&>option]:text-foreground",
-              business === "" ? pillIdle : pillActive,
-            )}
-          >
-            <option value="">{m.stats.allBusinesses}</option>
-            {businesses.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-            <option value={NO_BUSINESS}>{m.products.noBusiness}</option>
-          </select>
-          <ChevronDown
-            aria-hidden="true"
-            className={cn(
-              "pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2",
-              business === "" ? "text-muted-foreground" : "text-background/70",
-            )}
-          />
-        </div>
+        {hasBusinesses && (
+          <div className="relative min-w-0 max-w-full">
+            <select
+              aria-label={m.products.business}
+              value={business}
+              onChange={(e) => setBusiness(e.target.value)}
+              className={cn(
+                pillClass,
+                "max-w-full appearance-none truncate pl-4 pr-9 focus-visible:ring-3 focus-visible:ring-ring/40 [&>option]:bg-card [&>option]:text-foreground",
+                business === "" ? pillIdle : pillActive,
+              )}
+            >
+              <option value="">{m.stats.allBusinesses}</option>
+              {businesses.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+              <option value={NO_BUSINESS}>{m.products.noBusiness}</option>
+            </select>
+            <ChevronDown
+              aria-hidden="true"
+              className={cn(
+                "pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2",
+                business === "" ? "text-muted-foreground" : "text-background/70",
+              )}
+            />
+          </div>
+        )}
         {hasArchived && (
           <label
             className={cn(
@@ -161,10 +165,12 @@ export function ProductGrid({
             <Section
               key={group.key}
               title={
-                <span className="flex items-baseline gap-2">
-                  <span className="min-w-0 truncate">{group.name}</span>
-                  <span className="tabular text-[15px] font-medium text-muted-foreground">{group.items.length}</span>
-                </span>
+                hasBusinesses ? (
+                  <span className="flex items-baseline gap-2">
+                    <span className="min-w-0 truncate">{group.name}</span>
+                    <span className="tabular text-[15px] font-medium text-muted-foreground">{group.items.length}</span>
+                  </span>
+                ) : undefined
               }
             >
               {/* Rows like a bank's payments; two columns once there is room for them. */}
@@ -186,12 +192,17 @@ export function ProductGrid({
                         </span>
                         {p.archived ? (
                           <span className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted-foreground">
-                            <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground/50" aria-hidden="true" />
+                            <span
+                              className="size-1.5 shrink-0 rounded-full bg-muted-foreground/50"
+                              aria-hidden="true"
+                            />
                             {m.products.archived}
                           </span>
                         ) : slotCounts[p.id] ? (
                           <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">
-                            {slotCounts[p.id] === 1 ? m.products.inSlotsOne : fmt(m.products.inSlots, { count: slotCounts[p.id] })}
+                            {slotCounts[p.id] === 1
+                              ? m.products.inSlotsOne
+                              : fmt(m.products.inSlots, { count: slotCounts[p.id] })}
                           </span>
                         ) : null}
                       </span>
@@ -358,22 +369,24 @@ function ProductDialog({
             )}
             <p className={hint}>{m.products.shelfLifeHint}</p>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="businessId">{m.products.business}</Label>
-            <FieldSelect
-              id="businessId"
-              name="businessId"
-              defaultValue={product ? (product.business_id ?? "") : defaultBusiness}
-            >
-              <option value="">{m.products.noBusiness}</option>
-              {businesses.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </FieldSelect>
-            <p className={hint}>{m.products.businessHint}</p>
-          </div>
+          {businesses.length > 0 && (
+            <div className="grid gap-2">
+              <Label htmlFor="businessId">{m.products.business}</Label>
+              <FieldSelect
+                id="businessId"
+                name="businessId"
+                defaultValue={product ? (product.business_id ?? "") : defaultBusiness}
+              >
+                <option value="">{m.products.noBusiness}</option>
+                {businesses.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </FieldSelect>
+              <p className={hint}>{m.products.businessHint}</p>
+            </div>
+          )}
           <div className="grid gap-2.5">
             <Label>{m.products.photo}</Label>
             <ImagePicker

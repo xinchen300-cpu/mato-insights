@@ -153,6 +153,7 @@ export function SlotProducts({
                   <p className="truncate text-[20px] font-semibold tracking-[-0.02em]">
                     {open.productName ?? m.layout.noProduct}
                   </p>
+                  {open.info && <p className="mt-0.5 text-[14px] text-muted-foreground">{open.info}</p>}
                 </div>
                 <button
                   type="button"

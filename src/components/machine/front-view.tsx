@@ -14,6 +14,10 @@ export type FrontSlot = {
   photoUrl: string | null;
   /** Colour of the business the slot belongs to, only on a shared machine. */
   ownerTone?: string | null;
+  /** A small line in the tile, e.g. how long what is in it still keeps. */
+  badge?: { text: string; tone: "muted" | "warning" | "negative" } | null;
+  /** The same, said in full, for a screen about this one slot. */
+  info?: string | null;
 };
 
 // Distinct from the green/red stock levels, so ownership never reads as stock.
@@ -73,6 +77,20 @@ export function FrontView({
                         </span>
                       )}
                     </div>
+                    {slot.badge && (
+                      <span
+                        className={cn(
+                          "mx-1 mb-1 truncate rounded-md px-1 text-center text-[10px] font-semibold leading-[15px]",
+                          slot.badge.tone === "negative"
+                            ? "bg-negative/12 text-negative"
+                            : slot.badge.tone === "warning"
+                              ? "bg-warning/18 text-foreground"
+                              : "text-muted-foreground",
+                        )}
+                      >
+                        {slot.badge.text}
+                      </span>
+                    )}
                     {showStock && (
                       <div className="mx-1.5 mb-1.5 h-1 overflow-hidden rounded-full bg-level-empty">
                         <div
