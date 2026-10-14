@@ -9,6 +9,7 @@ import { getI18n } from "@/i18n/server";
 import { getMachine, getPayments } from "@/lib/data";
 import { denyFiller, requireOrgId } from "@/lib/org";
 import type { PaymentEntry } from "@/lib/types";
+import { AutoRefresh } from "@/components/auto-refresh";
 
 const PER_PAGE = 100;
 
@@ -56,6 +57,7 @@ export default async function PaymentsPage({
 
   return (
     <>
+      <AutoRefresh />
       <PageHeader backHref={`/machines/${id}`} backLabel={machine.name} title={m.status.allPayments} />
       {rows.length === 0 ? (
         <EmptyState title={m.status.noPayments} />

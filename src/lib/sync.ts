@@ -2,8 +2,8 @@ import { SUPABASE_URL } from "@/lib/supabase/config";
 
 export type SyncResult = { status: "success" | "error"; transactionsSynced: number; error?: string };
 
-// The sync engine lives in the payter-sync Edge Function (also run every 5
-// minutes by pg_cron); this just asks it to run now for one organization.
+// The sync engine lives in the payter-sync Edge Function (also run every 15
+// seconds by pg_cron); this just asks it to run now for one organization.
 export async function triggerPayterSync(orgId: string): Promise<SyncResult> {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/payter-sync`, {
     method: "POST",

@@ -33,6 +33,7 @@ import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
 import { fillLevel, needsAttention } from "@/lib/stock";
 import { cn } from "@/lib/utils";
 import { MachineIcon } from "@/components/machine/machine-icon";
+import { AutoRefresh } from "@/components/auto-refresh";
 
 const RECENT_MS = 90 * 24 * 60 * 60 * 1000;
 
@@ -105,6 +106,7 @@ export default async function OverviewPage() {
   if (month.totals.units === 0 && weeks.totals.units === 0) {
     return (
       <>
+        <AutoRefresh />
         <PageHeader title={m.overview.title} />
         {/* A shop has no setup of its own to finish, and /terminals is not hers. */}
         {setup.done || !operator ? (
@@ -241,6 +243,8 @@ export default async function OverviewPage() {
 
   return (
     <>
+      {/* New sales arrive within a minute; the page shows them without a reload. */}
+      <AutoRefresh />
       <PageHeader
         title={m.overview.title}
         subtitle={syncedAt ? fmt(m.overview.updated, { time: f.relative(syncedAt) }) : undefined}

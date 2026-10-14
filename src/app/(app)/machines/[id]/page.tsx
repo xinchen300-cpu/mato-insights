@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { assignProduct, createProductForMachine } from "../actions";
 import { MachineDetailsForm } from "./machine-details-form";
 import { MachineStatus, TerminalPanel } from "./terminal-panel";
+import { AutoRefresh } from "@/components/auto-refresh";
 
 const PAYMENT_WINDOW_DAYS = 30;
 
@@ -110,6 +111,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
 
   return (
     <>
+      <AutoRefresh />
       <PageHeader
         backHref="/machines"
         backLabel={m.nav.machines}

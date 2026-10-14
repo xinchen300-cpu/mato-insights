@@ -1,5 +1,7 @@
-// Pulls new Payter transactions into Vendly. Runs every 5 minutes via pg_cron
-// (see migration `payter_sync_cron`) and on demand from the "Sync now" button.
+// Pulls new Payter transactions into Vendly. Runs every 15 seconds via pg_cron
+// (job `payter-sync-every-15-sec`) and on demand from the "Sync now" button.
+// Payter itself takes about half a minute to make a sale available, so a sale
+// shows in Vendly well within a minute.
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 const PAYTER_API_BASE = "https://api.mypayter.com/API";
@@ -8,9 +10,13 @@ const PAGE_SIZE = 1000;
 // Payter rejects offset + maxResults beyond ~10,000 (Elasticsearch window), so
 // restart the query from an advanced watermark before reaching it.
 const MAX_OFFSET_BEFORE_RESTART = 8000;
-// Keeps a single run well inside the Edge Function CPU/wall-clock limits. A
-// large backlog simply continues on the next run from the saved watermark.
-const MAX_PAGES_PER_RUN = 10;
+// Keeps a single run short enough to end before the next one starts, 15 seconds
+// later. A large backlog simply continues on the next run from the saved watermark.
+const MAX_PAGES_PER_RUN = 3;
+// Terminal status (connection, firmware, settings) changes slowly: once every 5
+// minutes is plenty, and it spares Payter a request every 15 seconds.
+const TERMINALS_EVERY_MS = 5 * 60 * 1000;
+const RUN_EVERY_MS = 15 * 1000;
 
 type PayterCredentials = { username: string; password: string; domain: string };
 
@@ -73,9 +79,12 @@ Deno.serve(async (req) => {
     orgIds = (data ?? []).map((r) => r.org_id as string);
   }
 
+  // On demand ("Sync now") always; from the schedule, in one run per 5 minutes.
+  const withTerminals = typeof body?.orgId === "string" || Date.now() % TERMINALS_EVERY_MS < RUN_EVERY_MS;
+
   const results = [];
   for (const orgId of orgIds) {
-    results.push({ orgId, ...(await syncOrganization(supabase, orgId)) });
+    results.push({ orgId, ...(await syncOrganization(supabase, orgId, withTerminals)) });
   }
   return Response.json({ results });
 });
@@ -116,7 +125,7 @@ async function listTerminals(supabase: SupabaseClient, orgId: string) {
     }));
 }
 
-async function syncOrganization(supabase: SupabaseClient, orgId: string): Promise<SyncResult> {
+async function syncOrganization(supabase: SupabaseClient, orgId: string, withTerminals: boolean): Promise<SyncResult> {
   let transactionsSynced = 0;
 
   try {
@@ -192,9 +201,9 @@ async function syncOrganization(supabase: SupabaseClient, orgId: string): Promis
       .eq("org_id", orgId);
 
     // Status is a nice-to-have: a failure here never fails the sales sync.
-    await syncTerminals(supabase, orgId, tokenId).catch(() => {});
+    if (withTerminals) await syncTerminals(supabase, orgId, tokenId).catch(() => {});
 
-    // A run every 5 minutes would otherwise flood the log with empty entries.
+    // A run every 15 seconds would otherwise flood the log with empty entries.
     if (transactionsSynced > 0) {
       await supabase.from("sync_logs").insert({
         org_id: orgId,
