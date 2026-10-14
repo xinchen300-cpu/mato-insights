@@ -56,7 +56,7 @@ export async function saveSheetNotes(sheetId: string, notes: string) {
   await requireOperator();
   await createAdminClient()
     .from("refill_sheets")
-    .update({ notes: notes.trim() || null })
+    .update({ notes: notes.trim().slice(0, 1000) || null })
     .eq("id", sheetId)
     .eq("org_id", orgId);
   revalidatePath(`/refill/${sheetId}`);
@@ -75,6 +75,39 @@ export async function saveRunKm(sheetId: string, km: number | null) {
     .eq("org_id", orgId);
   if (error) throw new Error(error.message);
   revalidatePath(`/refill/${sheetId}`);
+}
+
+/**
+ * A round that will not happen, gone as if it was never made: only while no
+ * machine of it is done, so nothing of it reached a machine or the stock. A
+ * round with a machine done is finished on the phone instead.
+ */
+export async function cancelRound(sheetId: string): Promise<"cancelled" | "started"> {
+  const orgId = await requireOrgId();
+  await requireOperator();
+  const admin = createAdminClient();
+  const { data: sheet, error } = await admin
+    .from("refill_sheets")
+    .select("id, stops, completed_at")
+    .eq("id", sheetId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!sheet || sheet.completed_at) throw new Error("Not found");
+  const stops = (sheet.stops ?? {}) as Record<string, { completedAt?: string | null } | null>;
+  if (Object.values(stops).some((stop) => stop?.completedAt)) return "started";
+  // Its shortages go with it. Should a machine finish in this very moment, its
+  // stock stays written: those events only lose their link to the round.
+  const { error: deleteError } = await admin
+    .from("refill_sheets")
+    .delete()
+    .eq("id", sheetId)
+    .eq("org_id", orgId)
+    .is("completed_at", null);
+  if (deleteError) throw new Error(deleteError.message);
+  revalidatePath("/refill");
+  revalidatePath("/");
+  return "cancelled";
 }
 
 /** How rounds go for this organisation's fillers, from the Werkwijze page. */

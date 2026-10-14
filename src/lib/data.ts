@@ -157,6 +157,8 @@ export type RefillRound = {
   stops: Record<string, StopRecord>;
   /** How the operator wants the round to go (Werkwijze). */
   settings: RoundSettings;
+  /** What the operator wrote for this one round, for whoever fills it. */
+  notes: string | null;
 };
 
 /** What Vendly knows is in a slot, or null when it cannot know (never counted, or oversold since). */
@@ -176,7 +178,7 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
   const admin = createAdminClient();
   const { data: sheet } = await admin
     .from("refill_sheets")
-    .select("id, flow_version, created_at, started_at, ready_at, completed_at, machine_ids, lines, box, stops")
+    .select("id, flow_version, created_at, started_at, ready_at, completed_at, machine_ids, lines, box, stops, notes")
     .eq("id", sheetId)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -250,6 +252,7 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
     picked: (sheet.box ?? {}) as Record<string, number>,
     stops: (sheet.stops ?? {}) as Record<string, StopRecord>,
     settings: cleanRoundSettings(org?.refill_settings),
+    notes: (sheet.notes as string | null)?.trim() || null,
   };
 }
 

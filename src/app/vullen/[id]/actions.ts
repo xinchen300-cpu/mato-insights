@@ -50,6 +50,17 @@ const whole = (value: unknown, max: number) => {
   return Number.isInteger(n) && n >= 0 && n <= max ? n : null;
 };
 
+/**
+ * A moment on the phone, sent as how long ago it was and turned into a time
+ * here, never before the round started. Null when the phone sent nothing usable.
+ */
+function phoneMoment(ago: unknown, notBefore: string | null, now = Date.now()): string | null {
+  const ms = typeof ago === "number" ? ago : NaN;
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  const floor = notBefore ? Date.parse(notBefore) : -Infinity;
+  return new Date(Math.max(now - Math.min(ms, 24 * 3_600_000), floor)).toISOString();
+}
+
 /** Only the products this round asks for, each at most what it asks for. */
 function cleanPicked(round: RefillRound, picked: Record<string, number>): Record<string, number> {
   const asked = new Map(pickList(round.lines).map((row) => [row.key, row.take]));
@@ -98,13 +109,16 @@ export async function startRound(sheetId: string, picked: Record<string, number>
   const admin = createAdminClient();
   const who = await fillerName();
 
-  const { data: updated } = await admin
+  const { data: updated, error } = await admin
     .from("refill_sheets")
     .update({ box, ready_at: now, started_at: round.startedAt ?? now, filled_by: who })
     .eq("id", sheetId)
     .eq("org_id", orgId)
     .is("ready_at", null)
     .select("id");
+  // A start that did not reach the database must not pass for one: the phone
+  // would run its clock on a round that is still waiting.
+  if (error) throw new Error(error.message);
   // Only the call that actually started the round writes the shortages, and says so.
   if (!updated?.length) return;
   if (round.settings.notify.start) {
@@ -135,7 +149,13 @@ export async function startRound(sheetId: string, picked: Record<string, number>
 }
 
 export type StopInput = {
-  checkedAt: string | null;
+  /**
+   * When the filler started on this machine and when they tapped it done, as
+   * milliseconds before the call: a phone whose clock runs wrong cannot move
+   * them, and a phone that was locked or offline still gives the real moment.
+   */
+  checkedAgo: number | null;
+  doneAgo: number | null;
   technical: boolean;
   note: string | null;
   lines: { selection: string; filled: number; removed: { reason: string; qty: number }[]; countAfter: number | null; full: boolean }[];
@@ -212,15 +232,15 @@ export async function completeStop(sheetId: string, machineId: string, input: St
     }
   }
 
+  const now = Date.now();
+  const completedAt = phoneMoment(input.doneAgo, round.readyAt, now) ?? new Date(now).toISOString();
+  const checkedAt = phoneMoment(input.checkedAgo, round.readyAt, now);
   const status = await finishStop(orgId, sheetId, machineId, {
     refills,
     corrections: [...corrections].map(([note, entries]) => ({ note, entries })),
     record: {
-      checkedAt:
-        typeof input.checkedAt === "string" && !Number.isNaN(Date.parse(input.checkedAt))
-          ? new Date(input.checkedAt).toISOString()
-          : null,
-      completedAt: new Date().toISOString(),
+      checkedAt: checkedAt && checkedAt > completedAt ? completedAt : checkedAt,
+      completedAt,
       skipped: false,
       technical: input.technical === true,
       note: typeof input.note === "string" ? input.note.slice(0, 200) : null,
@@ -247,7 +267,7 @@ export async function completeStop(sheetId: string, machineId: string, input: St
 }
 
 /** A stop that is not done this round: nothing is written to the machine. */
-export async function skipStop(sheetId: string, machineId: string): Promise<void> {
+export async function skipStop(sheetId: string, machineId: string, doneAgo: number | null = null): Promise<void> {
   const { orgId, round } = await openRound(sheetId);
   if (!round.machines.some((machine) => machine.id === machineId)) throw new Error("Not found");
   if (!round.readyAt) throw new Error("Round not started");
@@ -259,7 +279,7 @@ export async function skipStop(sheetId: string, machineId: string): Promise<void
     corrections: [],
     record: {
       checkedAt: null,
-      completedAt: new Date().toISOString(),
+      completedAt: phoneMoment(doneAgo, round.readyAt) ?? new Date().toISOString(),
       skipped: true,
       technical: false,
       note: null,
@@ -335,13 +355,15 @@ export async function completeRound(
     }
   }
   const admin = createAdminClient();
-  const { data: sheet } = await admin
+  // A failed read must stop here: an empty plan written back would wipe the round's lines.
+  const { data: sheet, error: readError } = await admin
     .from("refill_sheets")
     .select("lines, filled_by")
     .eq("id", sheetId)
     .eq("org_id", orgId)
     .single();
-  const planned = (sheet?.lines ?? []) as RefillLine[];
+  if (readError || !sheet) throw new Error(readError?.message ?? "Not found");
+  const planned = (sheet.lines ?? []) as RefillLine[];
   const lines: RefillLine[] = planned.map((line) => ({
     ...line,
     qty_expired: expiredBySlot.get(slotKey(line.machine_id, line.selection_number)) ?? 0,
@@ -370,7 +392,7 @@ export async function completeRound(
     });
   }
 
-  await admin
+  const { error: closeError } = await admin
     .from("refill_sheets")
     .update({
       returns: rows,
@@ -379,20 +401,22 @@ export async function completeRound(
       // Kilometres are optional; a number that is no distance is left out, not refused.
       ...(round.settings.askKm && typeof km === "number" && km > 0 && km <= 2000 ? { km: Math.round(km * 10) / 10 } : {}),
       // Whoever started the round filled it; the name was kept at the start.
-      filled_by: (sheet?.filled_by as string | null) ?? (await fillerName()),
+      filled_by: (sheet.filled_by as string | null) ?? (await fillerName()),
     })
     .eq("id", sheetId)
     .eq("org_id", orgId)
     .is("completed_at", null);
+  // The phone forgets the round once this answers, so only a real close may answer.
+  if (closeError) throw new Error(closeError.message);
 
-  const who = (sheet?.filled_by as string | null) ?? PUSH.pushSomeone;
+  const who = (sheet.filled_by as string | null) ?? PUSH.pushSomeone;
   const minutes = round.readyAt ? Math.max(1, Math.round((Date.now() - new Date(round.readyAt).getTime()) / 60000)) : 0;
   const visited = Object.values(round.stops).filter((stop) => !stop.skipped).length;
   if (round.settings.notify.finish) {
     after(() =>
       notifyOperators(orgId, {
         title: "Vendly",
-        body: fmt(PUSH.pushDone, { name: who, count: visited, minutes }),
+        body: fmt(visited === 1 ? PUSH.pushDoneOne : PUSH.pushDone, { name: who, count: visited, minutes }),
         url: `/refill/${sheetId}`,
         tag: `round-${sheetId}`,
       }),

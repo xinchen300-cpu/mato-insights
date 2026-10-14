@@ -29,7 +29,7 @@ export function RunReport({ rows, when }: { rows: RunSummaryRow[]; when: string 
   }
 
   async function copy(key: string, group: { name: string; rows: RunSummaryRow[] }) {
-    const text = [`${group.name} — ${when}`, ...group.rows.map((r) => `${r.product_name}: ${lineOf(r)}`)].join("\n");
+    const text = [`${group.name} · ${when}`, ...group.rows.map((r) => `${r.product_name}: ${lineOf(r)}`)].join("\n");
     try {
       await navigator.clipboard.writeText(text);
       setCopied(key);

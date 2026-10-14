@@ -211,6 +211,9 @@ export function onlyMine(sheet: RefillSheet, view: ShopView): RefillSheet {
     share_token: "",
     // Who filled is the operator's staff; their e-mail address is not the shop's.
     filled_by: null,
+    // The operator's note is for their filler, and on a shared run it can be
+    // about the co-tenant's machine.
+    notes: null,
     machine_ids: sheet.machine_ids.filter((id) => view.machines.includes(id)),
     lines,
     // Flow 2 keeps progress per machine and the box per machine and product.
@@ -229,7 +232,7 @@ export function onlyMine(sheet: RefillSheet, view: ShopView): RefillSheet {
               return view.machines.includes(machineId) && view.products.has(productId);
             }),
           )
-        : sheet.box,
+        : Object.fromEntries(Object.entries(sheet.box ?? {}).filter(([productId]) => view.products.has(productId))),
   };
 }
 
@@ -446,3 +449,27 @@ export function roundCost(input: {
   return { minutes: input.minutes, km, kmFrom, time, drive, total: time + (drive ?? 0) };
 }
 
+/**
+ * What really happened on a finished step-by-step round, for every screen and
+ * paper that would otherwise show the plan: per product out of the fridge, per
+ * slot into the machine, and the machines that were skipped. Null for a round
+ * that is still open, or one filled the old way.
+ */
+export function roundActual(
+  sheet: RefillSheet,
+  shortages: { productId: string; qty: number }[],
+): { items: ItemReport[]; actual: { taken: Record<string, number>; filled: Record<string, number>; skipped: string[] } } | null {
+  if (sheet.flow_version !== 2 || !sheet.completed_at) return null;
+  const stops = Object.entries(sheet.stops ?? {});
+  const items = itemReport(sheet.lines, sheet.box ?? {}, sheet.stops ?? {}, sheet.returns ?? [], shortages);
+  return {
+    items,
+    actual: {
+      taken: Object.fromEntries(items.map((item) => [item.productId, item.taken])),
+      filled: Object.fromEntries(
+        stops.flatMap(([machineId, stop]) => stop.lines.map((line) => [slotKey(machineId, line.selection), line.filled])),
+      ),
+      skipped: stops.filter(([, stop]) => stop.skipped).map(([machineId]) => machineId),
+    },
+  };
+}

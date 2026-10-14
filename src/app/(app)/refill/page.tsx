@@ -41,6 +41,7 @@ export default async function RefillPage() {
       }
       pieces.set(slot.machine_id, entry);
     }
+    const busy = onOpenRound(rounds);
     const choices = fleet
       .filter((mc) => pieces.has(mc.id))
       .map((mc) => {
@@ -48,8 +49,9 @@ export default async function RefillPage() {
         return {
           id: mc.id,
           name: mc.name,
-          low: p.low > 0,
+          low: p.low > 0 && !busy.has(mc.id),
           hint: p.counted === 0 ? m.overview.stockUnknown : fmt(m.refill.items, { count: p.toAdd }),
+          note: busy.has(mc.id) ? m.refill.onOpenRound : undefined,
         };
       });
     return (
@@ -68,30 +70,43 @@ export default async function RefillPage() {
   }
   const orgId = await requireOrgId();
   const openRounds = (await isOperator()) ? await getOpenRounds(orgId) : [];
+  const window = lastFullWeeks(4, DISPLAY_TIME_ZONE);
   const [machines, stock, sheets, shortages, { data: org }, weeks] = await Promise.all([
     getMachines(orgId),
     getMachineStock(orgId),
     getRefillSheets(orgId),
     getShortages(orgId),
     createAdminClient().from("organizations").select("cost_per_hour, cost_per_km").eq("id", orgId).maybeSingle(),
-    getStatsReport(orgId, { period: "custom", ...lastFullWeeks(4, DISPLAY_TIME_ZONE) }),
+    getStatsReport(orgId, { period: "custom", ...window }),
   ]);
 
-  // Whole weeks only, so a half week does not drag the average down.
-  const perDay = new Map(weeks.by_machine.map((row) => [row.machine_id, row.units / 28]));
+  // Whole weeks only, so a half week does not drag the average down, and per
+  // day the machine was selling: one that started two weeks ago is not half as
+  // busy. At least a week, so a few first days do not make a pace.
+  const dayMs = 86_400_000;
+  const windowStart = Date.parse(`${window.from}T00:00:00Z`);
+  const windowEnd = Date.parse(`${window.to}T00:00:00Z`) + dayMs;
+  const perDay = new Map(
+    weeks.by_machine.map((row) => {
+      const since = row.first_sale ? Math.max(windowStart, Date.parse(row.first_sale)) : windowStart;
+      return [row.machine_id, row.units / Math.max(7, (windowEnd - since) / dayMs)];
+    }),
+  );
 
   const perHour = Number(org?.cost_per_hour ?? 25);
   const perKm = Number(org?.cost_per_km ?? 0.42);
 
   // Measured, not guessed: how long a visit to this machine took on earlier
-  // runs. A run over several machines is split evenly across them.
+  // runs. A run over several machines is split evenly across the ones that
+  // were visited; a skipped machine took no time.
   const measured = new Map<string, { minutes: number; runs: number }>();
   for (const sheet of sheets) {
-    if (!sheet.started_at || !sheet.completed_at || sheet.machine_ids.length === 0) continue;
+    const visited = sheet.machine_ids.filter((id) => !sheet.stops?.[id]?.skipped);
+    if (!sheet.started_at || !sheet.completed_at || visited.length === 0) continue;
     const total = (new Date(sheet.completed_at).getTime() - new Date(sheet.started_at).getTime()) / 60000;
     if (total <= 0 || total > 480) continue;
-    const share = total / sheet.machine_ids.length;
-    for (const id of sheet.machine_ids) {
+    const share = total / visited.length;
+    for (const id of visited) {
       const entry = measured.get(id) ?? { minutes: 0, runs: 0 };
       entry.minutes += share;
       entry.runs += 1;
@@ -142,6 +157,7 @@ export default async function RefillPage() {
     { minutes: 0, runs: 0 },
   );
   const typicalMinutes = fleetMinutes.runs > 0 ? fleetMinutes.minutes / fleetMinutes.runs : null;
+  const busy = onOpenRound(openRounds);
 
   const pickable = machines
     .filter((mc) => perMachine.has(mc.id))
@@ -152,8 +168,9 @@ export default async function RefillPage() {
       // cost — somebody stands at that machine — so a run without any measured
       // time falls back to what a visit takes elsewhere in the fleet, and
       // without even that, no amount is shown at all.
+      // Without a distance the drive is unknown, not free: then no amount either.
       const minutes = time ? time.minutes / time.runs : typicalMinutes;
-      const cost = minutes !== null ? (mc.km_round_trip ?? 0) * perKm + (minutes / 60) * perHour : null;
+      const cost = minutes !== null && mc.km_round_trip !== null ? mc.km_round_trip * perKm + (minutes / 60) * perHour : null;
       // What the machine will be short of in a week, at the pace it has been
       // selling: the answer to "go now, or Thursday?".
       const rate = perDay.get(mc.id) ?? 0;
@@ -165,7 +182,7 @@ export default async function RefillPage() {
       return {
         id: mc.id,
         name: mc.name,
-        low: p.low > 0,
+        low: p.low > 0 && !busy.has(mc.id),
         hint:
           cost !== null && p.value > 0
             ? fmt(m.refill.worthHint, {
@@ -178,8 +195,9 @@ export default async function RefillPage() {
               : p.low > 0
                 ? fmt(m.overview.slotsLow, { count: p.low })
                 : fmt(m.refill.items, { count: p.toAdd }),
-        note:
-          cost !== null && p.value > 0 && p.value < cost
+        note: busy.has(mc.id)
+          ? m.refill.onOpenRound
+          : cost !== null && p.value > 0 && p.value < cost
             ? m.refill.notWorthIt
             : rate > 0 && weekAhead > p.toAdd
               ? fmt(m.refill.forecastWeek, { items: weekAhead, value: f.euro(weekAhead * perPiece) })
@@ -219,7 +237,11 @@ export default async function RefillPage() {
           ) : (
             <RowList>
               {sheets.map((sheet) => {
-                const total = sheet.lines.reduce((sum, l) => sum + l.to_add, 0);
+                // A finished step-by-step round counts what went in, not what was planned.
+                const total =
+                  sheet.flow_version === 2 && sheet.completed_at
+                    ? Object.values(sheet.stops ?? {}).reduce((sum, stop) => sum + stop.lines.reduce((s, l) => s + l.filled, 0), 0)
+                    : sheet.lines.reduce((sum, l) => sum + l.to_add, 0);
                 // The clock runs from the moment the filler opened the sheet.
                 const minutes =
                   sheet.started_at && sheet.completed_at
@@ -260,7 +282,7 @@ export default async function RefillPage() {
                             {minutes !== null && (
                               <span className="tabular">{duration(minutes, m.refill.runTime, m.refill.runTimeHours)}</span>
                             )}
-                            {sheet.km !== null && <span className="tabular">{fmt(m.refill.runKm, { km: sheet.km })}</span>}
+                            {sheet.km !== null && <span className="tabular">{fmt(m.refill.runKm, { km: f.number(Number(sheet.km)) })}</span>}
                             {open && (
                               <span className="inline-flex items-center gap-1.5 font-medium text-warning">
                                 <span className="size-1.5 rounded-full bg-warning" aria-hidden="true" />
@@ -340,4 +362,9 @@ function OpenRounds({
       </RowList>
     </Section>
   );
+}
+
+/** Machines that a round still open will fill: a second round for them would fill them twice. */
+function onOpenRound(rounds: OpenRound[]): Set<string> {
+  return new Set(rounds.flatMap((round) => round.machines.filter((machine) => !machine.done).map((machine) => machine.id)));
 }

@@ -3,9 +3,10 @@ import { VendlyWordmark } from "@/components/brand/vendly-mark";
 import { SheetTables } from "@/components/refill/sheet-tables";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getRefillSheet } from "@/lib/data";
+import { getRefillSheet, getRunSummary } from "@/lib/data";
 import { denyFiller, requireOrgId } from "@/lib/org";
 import { linesToFill } from "@/lib/refill";
+import { roundActual } from "@/lib/refill-flow";
 import { AutoPrint } from "./auto-print";
 
 export async function generateMetadata() {
@@ -23,7 +24,15 @@ export default async function PrintRefillSheetPage({ params }: { params: Promise
   const sheet = await getRefillSheet(orgId, id);
   if (!sheet) notFound();
 
-  const total = sheet.lines.reduce((sum, l) => sum + l.to_add, 0);
+  // A finished step-by-step round prints what went in, as its page shows it.
+  const summary = sheet.flow_version === 2 && sheet.completed_at ? await getRunSummary(orgId, sheet.id) : [];
+  const real = roundActual(
+    sheet,
+    summary.map((row) => ({ productId: row.product_id, qty: row.short })),
+  );
+  const total = real
+    ? Object.values(real.actual.filled).reduce((sum, n) => sum + n, 0)
+    : sheet.lines.reduce((sum, l) => sum + l.to_add, 0);
 
   return (
     <div className="mx-auto max-w-[210mm] bg-white p-8 text-foreground shadow-none print:p-0 [&_table]:bg-white">
@@ -44,7 +53,7 @@ export default async function PrintRefillSheetPage({ params }: { params: Promise
           <p className="whitespace-pre-wrap">{sheet.notes}</p>
         </div>
       )}
-      <SheetTables lines={linesToFill(sheet.lines)} m={m} printable />
+      <SheetTables lines={linesToFill(sheet.lines)} m={m} printable actual={real?.actual} />
     </div>
   );
 }

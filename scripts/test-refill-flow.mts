@@ -1,7 +1,7 @@
 // Checks the refill round logic (src/lib/refill-flow.ts). Run: npm run test:flow
 import { uncovered } from "../src/lib/assignments.ts";
 import { cleanRoundSettings, DEFAULT_ROUND_SETTINGS } from "../src/lib/round-settings.ts";
-import { allocate, itemReport, roundCost, levelAfter, onlyMine, pickList, returnsFor, roundTimings, slotKey, pickKey, type FlowLine } from "../src/lib/refill-flow.ts";
+import { allocate, itemReport, roundActual, roundCost, levelAfter, onlyMine, pickList, returnsFor, roundTimings, slotKey, pickKey, type FlowLine } from "../src/lib/refill-flow.ts";
 import type { RefillLine, RefillSheet } from "../src/lib/types.ts";
 const L = (sel: string, product: string, cap: number, stock: number | null, take: number, row = 1): FlowLine =>
   ({ machineId: "m1", selection: sel, row, slot: Number(sel), productId: product, productName: product.toUpperCase(), photoPath: null, capacity: cap, stock, take, expired: 0 });
@@ -58,6 +58,15 @@ ok("shop: no share link", seenByShop.share_token === "");
 const nothing = onlyMine(shared, { machines: [], products: new Set(), slots: new Set() });
 ok("shop with nothing sees nothing", !nothing.machine_ids.length && !nothing.lines.length && !Object.keys(nothing.stops).length && !Object.keys(nothing.box).length);
 ok("shop: only its own products come back", seenByShop.returns?.map((r) => r.productId).join() === "mine-a");
+ok("shop: not the operator's note for the filler", onlyMine({ ...shared, notes: "about the neighbour" } as RefillSheet, view).notes === null);
+// What really went in, for the list, the paper and the spreadsheet of a finished round.
+ok("actual: an open round has none", roundActual(shared, []) === null);
+const closed = roundActual({ ...shared, completed_at: "2026-10-14T12:00:00Z", stops: { ...shared.stops, other: { ...stop([]), skipped: true } } } as RefillSheet, []);
+ok("actual: per slot what went in", closed !== null && closed.actual.filled[slotKey("fridge", "12")] === shared.stops.fridge.lines[1].filled);
+ok("actual: the skipped machine is named", closed?.actual.skipped.join() === "other");
+ok("actual: an old round has none", roundActual({ ...shared, flow_version: 1, completed_at: "x" } as unknown as RefillSheet, []) === null);
+const oldRun = onlyMine({ ...shared, flow_version: 1, box: { "mine-a": 3, "theirs-b": 5 } } as unknown as RefillSheet, view);
+ok("shop: an old run's box only its own product", Object.keys(oldRun.box ?? {}).join() === "mine-a");
 
 // The report of a finished round, per product.
 const report = itemReport(

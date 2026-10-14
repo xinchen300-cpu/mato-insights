@@ -57,7 +57,7 @@ export function LiveRounds({
                 <span className="min-w-0 truncate text-[17px] font-semibold">
                   {round.readyAt
                     ? fmt(t.liveFilling, { name: round.filledBy ?? t.liveSomeone })
-                    : fmt(t.livePacking, { count: round.machines.length })}
+                    : fmt(round.machines.length === 1 ? t.livePackingOne : t.livePacking, { count: round.machines.length })}
                 </span>
               </div>
               <ChevronRight className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
@@ -121,7 +121,7 @@ function LiveClock({ since }: { since: string }) {
   return (
     <span className="tabular flex items-center gap-2 text-[36px] font-semibold leading-none tracking-[-0.035em]">
       <Timer className="size-6 text-muted-foreground" strokeWidth={2.2} aria-hidden="true" />
-      {now === null ? "–:––:––" : `${h}:${mm}:${ss}`}
+      {now === null ? "0:00:00" : `${h}:${mm}:${ss}`}
     </span>
   );
 }

@@ -14,6 +14,7 @@ import {
   returnsFor,
   slotKey,
   type Disposition,
+  type FlowLine,
   type RemovalReason,
   type ReturnRow,
   type StopRecord,
@@ -29,13 +30,19 @@ import { completeRound, completeStop, savePicked, skipStop, startRound, type Sto
 type LineDraft = {
   /** Set once the slot is ticked off (or a number was typed); unset is "not yet". */
   filled?: number;
+  /**
+   * What came out, one entry per reason. An entry of 0 is the filler saying
+   * "none": then the plan's own count of past-date units is not added.
+   */
   removed: { reason: RemovalReason; qty: number }[];
   countAfter: number | null;
   full: boolean;
 };
 type StopDraft = {
-  /** When the filler opened this machine: their arrival, for the operator's timings. */
+  /** When the filler first did something at this machine: their arrival, for the operator's timings. */
   checkedAt: string | null;
+  /** When the machine was opened: the arrival when nothing was ticked there. */
+  openedAt?: string | null;
   technical: boolean;
   note: string | null;
   allFull: boolean | null;
@@ -46,10 +53,16 @@ type StopDraft = {
 type Saved = { picked: Record<string, number>; touched: boolean; drafts: Record<string, StopDraft> };
 type ReportKind = RemovalReason | "count" | "technical";
 type View = "home" | "pick" | "stop" | "returns";
+/** A stop as it is sent; when it happened is added at the moment of sending. */
+type StopWork = Omit<StopInput, "checkedAgo" | "doneAgo">;
+/** A machine just finished or skipped, waiting out its moment to be taken back. */
+type Pending = { machineId: string; work: StopWork | null; checkedAt: string | null; tappedAt: number };
 
 const emptyDraft = (): StopDraft => ({ checkedAt: null, technical: false, note: null, allFull: null, lines: {} });
 const emptyLine = (): LineDraft => ({ removed: [], countAfter: null, full: false });
 const storageKey = (id: string) => `vendly-round-${id}`;
+/** The moment of a tap. Only ever read in a handler, never while drawing. */
+const tapTime = () => Date.now();
 
 function load(id: string): Saved | null {
   try {
@@ -103,9 +116,16 @@ export function RoundFlow({
   const [showShort, setShowShort] = useState(false);
   const [unchecked, setUnchecked] = useState<number | null>(null);
   const [skipArmed, setSkipArmed] = useState(false);
+  const [skipAsk, setSkipAsk] = useState(false);
+  const [fullAsk, setFullAsk] = useState<{ open: "empty" | "planned"; selections: string[] } | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
-  const pendingStop = useRef<{ machineId: string; input: StopInput } | null>(null);
+  const [pendingSkip, setPendingSkip] = useState(false);
+  const [failedId, setFailedId] = useState<string | null>(null);
+  // Right after a machine is done the big button changes meaning; a second
+  // tap of the same thumb must not open the next machine.
+  const [settling, setSettling] = useState(false);
+  const pendingStop = useRef<Pending | null>(null);
 
   // Bring back what this phone had before a reload; the server wins on what it
   // already has. Read after mounting: the server render has no localStorage.
@@ -150,14 +170,18 @@ export function RoundFlow({
   function draftFor(machineId: string) {
     return drafts[machineId] ?? emptyDraft();
   }
+  /** The first thing done at a machine marks the arrival there. */
+  const touch = (draft: StopDraft): StopDraft => (draft.checkedAt ? draft : { ...draft, checkedAt: new Date().toISOString() });
   function updateDraft(machineId: string, change: (draft: StopDraft) => StopDraft) {
     setDrafts((all) => ({ ...all, [machineId]: change(all[machineId] ?? emptyDraft()) }));
   }
   function updateLine(machineId: string, selection: string, change: (line: LineDraft) => LineDraft) {
-    updateDraft(machineId, (draft) => ({
-      ...draft,
-      lines: { ...draft.lines, [selection]: change(draft.lines[selection] ?? emptyLine()) },
-    }));
+    updateDraft(machineId, (draft) =>
+      touch({
+        ...draft,
+        lines: { ...draft.lines, [selection]: change(draft.lines[selection] ?? emptyLine()) },
+      }),
+    );
   }
 
   function run(action: () => Promise<void>, after?: () => void, failed?: () => void) {
@@ -175,7 +199,7 @@ export function RoundFlow({
 
   function applyReport(machineId: string, kind: ReportKind, selection: string | null, value: number, note: string | null) {
     if (kind === "technical") {
-      updateDraft(machineId, (d) => ({ ...d, technical: true, note: note || d.note }));
+      updateDraft(machineId, (d) => touch({ ...d, technical: true, note: note || d.note }));
       return;
     }
     if (!selection) return;
@@ -183,10 +207,44 @@ export function RoundFlow({
       updateLine(machineId, selection, (line) => ({ ...line, countAfter: value }));
       return;
     }
+    // One number per reason, the one last saved; 0 is kept, as "none".
     updateLine(machineId, selection, (line) => ({
       ...line,
-      removed: [...line.removed.filter((r) => r.reason !== kind), ...(value > 0 ? [{ reason: kind, qty: value }] : [])],
+      removed: [...line.removed.filter((r) => r.reason !== kind), { reason: kind, qty: value }],
     }));
+  }
+
+  /**
+   * What came out of a slot as it will be written: what the filler entered,
+   * and for a slot they filled, the units the plan says are past their date,
+   * unless they said how many there really were.
+   */
+  function removalsOf(line: FlowLine | undefined, edit: LineDraft, filled: boolean) {
+    const entered = edit.removed.filter((r) => r.qty > 0);
+    if (!line || !filled || line.expired <= 0 || edit.removed.some((r) => r.reason === "expired")) return entered;
+    return [...entered, { reason: "expired" as const, qty: line.expired }];
+  }
+
+  /** Where the steppers of "something is wrong here" start: what is already noted, or what Vendly expects. */
+  function startFor(machineId: string, kind: ReportKind, selection: string | null): number {
+    if (kind === "technical") return 0;
+    if (!selection) return kind === "count" ? 0 : 1;
+    const edit = draftFor(machineId).lines[selection] ?? emptyLine();
+    const line = initial.lines.find((l) => l.machineId === machineId && l.selection === selection);
+    const slot = initial.slots.find((l) => l.machineId === machineId && l.selection === selection);
+    const capacity = line?.capacity ?? slot?.capacity ?? 0;
+    if (kind === "count") {
+      if (edit.countAfter !== null) return edit.countAfter;
+      if (edit.full) return capacity;
+      const filled = edit.filled ?? 0;
+      const out = removalsOf(line, edit, edit.filled !== undefined).reduce((sum, r) => sum + r.qty, 0);
+      const stock = line ? line.stock : (slot?.stock ?? null);
+      return Math.min(capacity, stock === null ? filled : Math.max(0, stock - out) + filled);
+    }
+    const entered = edit.removed.find((r) => r.reason === kind);
+    if (entered) return entered.qty;
+    if (kind === "expired" && line && line.expired > 0) return line.expired;
+    return 1;
   }
 
   /**
@@ -194,12 +252,11 @@ export function RoundFlow({
    * set aside for it, or the number typed; one left open took nothing, unless
    * the filler says it was filled after all.
    */
-  function stopInput(machineId: string, open: "empty" | "planned"): StopInput {
+  function stopInput(machineId: string, open: "empty" | "planned", full?: Set<string>): StopWork {
     const draft = draftFor(machineId);
     const planned = initial.lines.filter((line) => line.machineId === machineId);
     const selections = new Set([...planned.map((line) => line.selection), ...Object.keys(draft.lines)]);
     return {
-      checkedAt: draft.checkedAt,
       technical: draft.technical,
       note: draft.note,
       checks: draft.checks ?? {},
@@ -207,18 +264,32 @@ export function RoundFlow({
         const line = planned.find((l) => l.selection === selection);
         const edit = draft.lines[selection] ?? emptyLine();
         const prep = prepared[slotKey(machineId, selection)] ?? 0;
+        const filledIt = edit.filled !== undefined || (line !== undefined && open === "planned");
         return {
           selection,
           filled: edit.filled ?? (line && open === "planned" ? prep : 0),
-          removed: edit.removed,
+          removed: removalsOf(line, edit, filledIt),
           countAfter: edit.countAfter,
-          full: edit.full,
+          full: edit.full || Boolean(full?.has(selection)),
         };
       }),
     };
   }
 
-  // The three-second window to take a finished machine back.
+  /**
+   * Slots Vendly could not see into that got some, but not a whole slot's
+   * worth: full now or not, only the filler knows. Asked, never guessed.
+   */
+  function unsureOf(machineId: string, open: "empty" | "planned"): string[] {
+    return stopInput(machineId, open)
+      .lines.filter((sent) => {
+        const line = initial.lines.find((l) => l.machineId === machineId && l.selection === sent.selection);
+        return line !== undefined && line.stock === null && sent.filled > 0 && sent.filled < line.capacity && sent.countAfter === null && !sent.full;
+      })
+      .map((sent) => sent.selection);
+  }
+
+  // The three-second window to take a finished or skipped machine back.
   useEffect(() => {
     if (countdown === null) return;
     if (countdown <= 0) {
@@ -227,36 +298,64 @@ export function RoundFlow({
       setCountdown(null);
       if (!job) return;
       pendingStop.current = null;
+      // Only this machine's mark comes off: another one may be waiting by now.
+      const settle = () => setPendingId((id) => (id === job.machineId ? null : id));
+      // Not sent: the machine is open again, so it cannot pass for done, and the filler is told which.
+      const failed = () => {
+        settle();
+        setFailedId(job.machineId);
+      };
+      // Sent as "how long ago", so the moment of the tap counts, even from a locked phone.
+      const doneAgo = Math.max(0, Date.now() - job.tappedAt);
+      const doneAt = new Date(job.tappedAt).toISOString();
+      const work = job.work;
+      if (!work) {
+        run(
+          () => skipStop(initial.id, job.machineId, doneAgo),
+          () => {
+            setStops((all) => ({
+              ...all,
+              [job.machineId]: { checkedAt: null, completedAt: doneAt, skipped: true, technical: false, note: null, lines: [] },
+            }));
+            settle();
+            setFailedId((id) => (id === job.machineId ? null : id));
+            router.refresh();
+          },
+          failed,
+        );
+        return;
+      }
+      const checkedAgo = job.checkedAt ? Math.max(0, Date.now() - Date.parse(job.checkedAt)) : null;
       run(
-        () => completeStop(initial.id, job.machineId, job.input),
+        () => completeStop(initial.id, job.machineId, { ...work, checkedAgo, doneAgo }),
         () => {
           setStops((all) => ({
             ...all,
             [job.machineId]: {
-              checkedAt: job.input.checkedAt,
-              completedAt: new Date().toISOString(),
+              checkedAt: job.checkedAt,
+              completedAt: doneAt,
               skipped: false,
-              technical: job.input.technical,
-              note: job.input.note,
+              technical: work.technical,
+              note: work.note,
               ...(initial.settings.checks.length
                 ? {
                     checks: Object.fromEntries(
-                      initial.settings.checks.map((label) => [label, job.input.checks?.[label] === true]),
+                      initial.settings.checks.map((label) => [label, work.checks?.[label] === true]),
                     ),
                   }
                 : {}),
-              lines: job.input.lines.map((line) => ({
+              lines: work.lines.map((line) => ({
                 ...line,
                 prepared: prepared[slotKey(job.machineId, line.selection)] ?? 0,
                 removed: line.removed as { reason: RemovalReason; qty: number }[],
               })),
             },
           }));
-          setPendingId(null);
+          settle();
+          setFailedId((id) => (id === job.machineId ? null : id));
           router.refresh();
         },
-        // Not sent: the machine is open again, so it cannot pass for done.
-        () => setPendingId(null),
+        failed,
       );
       return;
     }
@@ -265,25 +364,64 @@ export function RoundFlow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [countdown]);
 
+  // "Overslaan" stays armed for a moment only; a stray tap later does not skip.
+  useEffect(() => {
+    if (!skipArmed) return;
+    const timer = setTimeout(() => setSkipArmed(false), 4000);
+    return () => clearTimeout(timer);
+  }, [skipArmed]);
+  useEffect(() => {
+    if (!settling) return;
+    const timer = setTimeout(() => setSettling(false), 900);
+    return () => clearTimeout(timer);
+  }, [settling]);
+
   const isDone = (machineId: string) => Boolean(stops[machineId]?.completedAt) || pendingId === machineId;
   const openStops = initial.machines.filter((mc) => !isDone(mc.id));
   const nextStop = openStops[0] ?? null;
 
   function openStop(machineId: string) {
-    // Opening a machine is arriving at it: that moment is kept for the timings.
-    updateDraft(machineId, (d) => ({ ...d, checkedAt: d.checkedAt ?? new Date().toISOString() }));
+    // A machine may be opened before the drive there: the first thing done at
+    // it is the arrival, and opening it only counts when nothing was.
+    updateDraft(machineId, (d) => ({ ...d, openedAt: d.openedAt ?? new Date().toISOString() }));
     if (countdown !== null) setCountdown(0);
+    setFailedId((id) => (id === machineId ? null : id));
     setStopId(machineId);
     setSkipArmed(false);
     setView("stop");
   }
 
-  function finishStop(machineId: string, open: "empty" | "planned") {
-    pendingStop.current = { machineId, input: stopInput(machineId, open) };
-    setPendingId(machineId);
+  function hold(job: Pending) {
+    pendingStop.current = job;
+    setPendingId(job.machineId);
+    setPendingSkip(job.work === null);
     setUnchecked(null);
+    setFullAsk(null);
+    setSkipAsk(false);
+    setSkipArmed(false);
     setView("home");
+    setSettling(true);
     setCountdown(3);
+  }
+
+  function finishStop(machineId: string, open: "empty" | "planned", full?: Set<string>) {
+    const draft = draftFor(machineId);
+    hold({ machineId, work: stopInput(machineId, open, full), checkedAt: draft.checkedAt ?? draft.openedAt ?? null, tappedAt: tapTime() });
+  }
+
+  /** "Klaar", or after the question about unticked slots: one more question when a slot may be full now. */
+  function requestFinish(machineId: string, open: "empty" | "planned") {
+    const unsure = unsureOf(machineId, open);
+    if (unsure.length > 0) {
+      setUnchecked(null);
+      setFullAsk({ open, selections: unsure });
+      return;
+    }
+    finishStop(machineId, open);
+  }
+
+  function skipMachine(machineId: string) {
+    hold({ machineId, work: null, checkedAt: null, tappedAt: tapTime() });
   }
 
   function undoFinish() {
@@ -341,7 +479,7 @@ export function RoundFlow({
           </span>
           <h1 className="text-[36px] font-bold tracking-[-0.035em]">{t.thanks}</h1>
           <p className="text-[16px] text-muted-foreground">
-            {fmt(t.thanksSummary, {
+            {fmt(Object.values(stops).filter((stop) => !stop.skipped).length === 1 ? t.thanksSummaryOne : t.thanksSummary, {
               machines: Object.values(stops).filter((stop) => !stop.skipped).length,
               filled,
               removed,
@@ -529,20 +667,24 @@ export function RoundFlow({
     const machineSlots = initial.slots.filter((slot) => slot.machineId === current.id);
     const stopIndex = initial.machines.findIndex((mc) => mc.id === current.id) + 1;
     const open = planned.filter((line) => draft.lines[line.selection]?.filled === undefined);
-    const removedHere = Object.values(draft.lines).reduce((sum, l) => sum + l.removed.reduce((s, r) => s + r.qty, 0), 0);
+    // What comes out here so far: entered, plus past-date units of the slots already filled.
+    const removedHere = stopInput(current.id, "empty").lines.reduce((sum, l) => sum + l.removed.reduce((s, r) => s + r.qty, 0), 0);
+    const ticked = Object.values(draft.lines).some((line) => line.filled !== undefined);
     const tickAll = () =>
-      updateDraft(current.id, (d) => ({
-        ...d,
-        lines: Object.fromEntries([
-          ...Object.entries(d.lines),
-          ...planned
-            .filter((line) => d.lines[line.selection]?.filled === undefined)
-            .map((line) => [
-              line.selection,
-              { ...(d.lines[line.selection] ?? emptyLine()), filled: prepared[slotKey(current.id, line.selection)] ?? 0 },
-            ]),
-        ]),
-      }));
+      updateDraft(current.id, (d) =>
+        touch({
+          ...d,
+          lines: Object.fromEntries([
+            ...Object.entries(d.lines),
+            ...planned
+              .filter((line) => d.lines[line.selection]?.filled === undefined)
+              .map((line) => [
+                line.selection,
+                { ...(d.lines[line.selection] ?? emptyLine()), filled: prepared[slotKey(current.id, line.selection)] ?? 0 },
+              ]),
+          ]),
+        }),
+      );
 
     return (
       <Screen padded={false}>
@@ -573,17 +715,10 @@ export function RoundFlow({
                 className={cn(chip, skipArmed && "bg-foreground text-background ring-foreground")}
                 disabled={pending}
                 onClick={() => {
+                  // Something is ticked here already: skipping would drop it, so ask in words.
+                  if (ticked) return setSkipAsk(true);
                   if (!skipArmed) return setSkipArmed(true);
-                  run(
-                    () => skipStop(initial.id, current.id),
-                    () => {
-                      setStops((all) => ({
-                        ...all,
-                        [current.id]: { checkedAt: null, completedAt: new Date().toISOString(), skipped: true, technical: false, note: null, lines: [] },
-                      }));
-                      setView("home");
-                    },
-                  );
+                  skipMachine(current.id);
                 }}
               >
                 {skipArmed ? t.skipConfirm : t.skipShort}
@@ -610,6 +745,14 @@ export function RoundFlow({
               const done = edit?.filled !== undefined;
               const filled = edit?.filled ?? prep;
               const shortHere = line.take - prep;
+              // Past-date units first, as the plan counted them, until the filler says how many there were.
+              const pullFirst = line.expired > 0 && !edit?.removed.some((r) => r.reason === "expired");
+              const out = (edit?.removed ?? []).reduce((sum, r) => sum + r.qty, 0);
+              const notes = [
+                ...(pullFirst ? [{ text: fmt(t.pullFirst, { n: line.expired }), warn: true }] : []),
+                ...(out > 0 ? [{ text: fmt(t.removedBadge, { n: out }), warn: false }] : []),
+                ...(shortHere > 0 ? [{ text: fmt(t.shortHere, { n: shortHere }), warn: true }] : []),
+              ];
               return (
                 <li key={key} className="flex items-center gap-1 border-b border-border/60 last:border-0">
                   <button
@@ -629,12 +772,17 @@ export function RoundFlow({
                       <span className={cn("truncate text-[15.5px] font-semibold", done && "text-muted-foreground")}>
                         {line.productName}
                       </span>
-                      <span className={cn("text-[13px]", shortHere > 0 ? "font-semibold text-warning" : "text-muted-foreground")}>
-                        {shortHere > 0
-                          ? fmt(t.shortHere, { n: shortHere })
-                          : line.stock === null
+                      <span className="text-[13px] text-muted-foreground">
+                        {notes.length === 0
+                          ? line.stock === null
                             ? t.notCounted
-                            : fmt(t.nowOf, { n: line.stock, cap: line.capacity })}
+                            : fmt(t.nowOf, { n: line.stock, cap: line.capacity })
+                          : notes.map((note, i) => (
+                              <span key={note.text} className={cn(note.warn && "font-semibold text-warning")}>
+                                {i > 0 && " · "}
+                                {note.text}
+                              </span>
+                            ))}
                       </span>
                     </span>
                   </button>
@@ -666,7 +814,7 @@ export function RoundFlow({
                         role="checkbox"
                         aria-checked={done}
                         onClick={() =>
-                          updateDraft(current.id, (d) => ({ ...d, checks: { ...(d.checks ?? {}), [label]: !done } }))
+                          updateDraft(current.id, (d) => touch({ ...d, checks: { ...(d.checks ?? {}), [label]: !done } }))
                         }
                         className="flex min-h-14 w-full items-center gap-3 px-1 py-2 text-left"
                       >
@@ -685,7 +833,7 @@ export function RoundFlow({
           <button
             type="button"
             className={primary}
-            onClick={() => (open.length > 0 ? setUnchecked(open.length) : finishStop(current.id, "planned"))}
+            onClick={() => (open.length > 0 ? setUnchecked(open.length) : requestFinish(current.id, "planned"))}
           >
             {fmt(t.doneWith, { machine: current.name })}
           </button>
@@ -693,15 +841,53 @@ export function RoundFlow({
 
         {unchecked !== null && (
           <Sheet onClose={() => setUnchecked(null)}>
-            <h2 className="text-[22px] font-bold tracking-[-0.02em]">{fmt(t.uncheckedTitle, { n: unchecked })}</h2>
+            <h2 className="text-[22px] font-bold tracking-[-0.02em]">
+              {fmt(unchecked === 1 ? t.uncheckedTitleOne : t.uncheckedTitle, { n: unchecked })}
+            </h2>
             <p className="text-[15.5px] text-muted-foreground">{t.uncheckedHint}</p>
-            <button type="button" className={primary} onClick={() => finishStop(current.id, "planned")}>
+            <button type="button" className={primary} onClick={() => requestFinish(current.id, "planned")}>
               {t.allFilledAnyway}
             </button>
-            <button type="button" className={outline} onClick={() => finishStop(current.id, "empty")}>
+            <button type="button" className={outline} onClick={() => requestFinish(current.id, "empty")}>
               {t.notFilled}
             </button>
             <button type="button" className={ghost} onClick={() => setUnchecked(null)}>
+              {t.back}
+            </button>
+          </Sheet>
+        )}
+        {fullAsk && (
+          <Sheet onClose={() => setFullAsk(null)}>
+            <h2 className="text-[22px] font-bold tracking-[-0.02em]">
+              {fmt(fullAsk.selections.length === 1 ? t.unknownQuestionOne : t.unknownQuestion, { n: fullAsk.selections.length })}
+            </h2>
+            <ul className="flex flex-col gap-1 text-[15.5px]">
+              {fullAsk.selections.map((selection) => (
+                <li key={selection} className="flex gap-2">
+                  <span className="min-w-8 rounded-lg bg-surface px-1.5 py-0.5 text-center font-mono text-[12.5px] font-semibold">
+                    {selection}
+                  </span>
+                  <span className="truncate font-semibold">{planned.find((line) => line.selection === selection)?.productName}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[15px] text-muted-foreground">{t.unknownHint}</p>
+            <button type="button" className={primary} onClick={() => finishStop(current.id, fullAsk.open, new Set(fullAsk.selections))}>
+              {t.yesFull}
+            </button>
+            <button type="button" className={outline} onClick={() => finishStop(current.id, fullAsk.open)}>
+              {t.notAll}
+            </button>
+          </Sheet>
+        )}
+        {skipAsk && (
+          <Sheet onClose={() => setSkipAsk(false)}>
+            <h2 className="text-[22px] font-bold tracking-[-0.02em]">{fmt(t.skipTickedTitle, { machine: current.name })}</h2>
+            <p className="text-[15.5px] text-muted-foreground">{t.skipTickedHint}</p>
+            <button type="button" className={primary} onClick={() => skipMachine(current.id)}>
+              {t.skipShort}
+            </button>
+            <button type="button" className={ghost} onClick={() => setSkipAsk(false)}>
               {t.back}
             </button>
           </Sheet>
@@ -732,6 +918,7 @@ export function RoundFlow({
           <ReportSheet
             slots={machineSlots}
             preset={report.selection}
+            startFor={(kind, selection) => startFor(current.id, kind, selection)}
             onClose={() => setReport(null)}
             onSave={(kind, selection, value, note) => {
               applyReport(current.id, kind, selection, value, note);
@@ -745,6 +932,7 @@ export function RoundFlow({
 
   // ——— The round as a checklist ———
   const pendingMachine = initial.machines.find((mc) => mc.id === pendingId) ?? null;
+  const failedMachine = initial.machines.find((mc) => mc.id === failedId && !stops[mc.id]?.completedAt) ?? null;
   const pieces = (machineId: string) =>
     initial.lines
       .filter((line) => line.machineId === machineId)
@@ -827,17 +1015,22 @@ export function RoundFlow({
               {who ? fmt(t.hello, { name: who }) : t.myRound}
             </h1>
             <p className="truncate text-[13.5px] text-muted-foreground">
-              {fmt(t.roundOf, { date: f.dayMonth(initial.createdAt), count: initial.machines.length })}
+              {fmt(initial.machines.length === 1 ? t.roundOfOne : t.roundOf, {
+                date: f.dayMonth(initial.createdAt),
+                count: initial.machines.length,
+              })}
             </p>
           </div>
         </div>
         {readyAt && <BigClock since={readyAt} startedLabel={fmt(t.running, { time: f.time(readyAt) })} />}
-        {initial.settings.message && (
+        {/* This round's own note first, then what the operator says before every round. */}
+        {(initial.notes || initial.settings.message) && (
           <div className="mt-3 flex gap-3 rounded-2xl bg-primary/10 px-4 py-3">
             <MessageSquareText className="mt-0.5 size-5 shrink-0 text-[#8a6117]" aria-hidden="true" />
-            <div className="min-w-0">
+            <div className="flex min-w-0 flex-col gap-1.5">
               <p className="text-[13px] font-semibold text-[#8a6117]">{t.messageTitle}</p>
-              <p className="whitespace-pre-wrap text-[15px] leading-snug">{initial.settings.message}</p>
+              {initial.notes && <p className="whitespace-pre-wrap text-[15px] leading-snug">{initial.notes}</p>}
+              {initial.settings.message && <p className="whitespace-pre-wrap text-[15px] leading-snug">{initial.settings.message}</p>}
             </div>
           </div>
         )}
@@ -903,13 +1096,28 @@ export function RoundFlow({
       </ol>
 
       <BottomBar>
+        {failedMachine && (
+          <p className="mb-1.5 flex items-start gap-2 rounded-2xl bg-negative/10 px-4 py-3 text-[15px] font-semibold text-negative">
+            <TriangleAlert className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+            {fmt(t.stopFailed, { machine: failedMachine.name })}
+          </p>
+        )}
         {pendingMachine && countdown !== null && (
-          <div className="mb-1.5 flex items-center justify-between gap-3 rounded-2xl bg-positive/12 px-4 py-2.5">
-            <span className="flex items-center gap-2 text-[15px] font-semibold">
-              <Check className="size-5 text-positive" strokeWidth={3} />
-              {fmt(t.stopDoneToast, { machine: pendingMachine.name })}
+          <div
+            className={cn(
+              "mb-1.5 flex items-center justify-between gap-3 rounded-2xl py-1.5 pl-4 pr-1.5",
+              pendingSkip ? "bg-warning/15" : "bg-positive/12",
+            )}
+          >
+            <span className="flex min-w-0 items-center gap-2 text-[15px] font-semibold">
+              {pendingSkip ? (
+                <TriangleAlert className="size-5 shrink-0 text-warning" />
+              ) : (
+                <Check className="size-5 shrink-0 text-positive" strokeWidth={3} />
+              )}
+              <span className="truncate">{fmt(pendingSkip ? t.stopSkippedToast : t.stopDoneToast, { machine: pendingMachine.name })}</span>
             </span>
-            <button type="button" className="h-9 rounded-full px-3 text-[14px] font-semibold underline" onClick={undoFinish}>
+            <button type="button" className="h-11 shrink-0 rounded-xl bg-card px-4 text-[15px] font-semibold ring-1 ring-border" onClick={undoFinish}>
               {t.undo}
             </button>
           </div>
@@ -919,7 +1127,7 @@ export function RoundFlow({
             {touched ? t.continuePicking : t.beginPicking}
           </button>
         ) : nextStop ? (
-          <button type="button" className={primary} disabled={pending} onClick={() => openStop(nextStop.id)}>
+          <button type="button" className={primary} disabled={pending || settling} onClick={() => openStop(nextStop.id)}>
             {fmt(t.goTo, { machine: nextStop.name })}
             <ChevronRight className="size-5" />
           </button>
@@ -927,7 +1135,7 @@ export function RoundFlow({
           <button
             type="button"
             className={primary}
-            disabled={pending}
+            disabled={pending || settling}
             onClick={() => {
               if (countdown !== null) setCountdown(0);
               setView("returns");
@@ -995,7 +1203,7 @@ function BigClock({ since, startedLabel }: { since: string; startedLabel: string
   return (
     <div className="mt-3 flex items-center gap-3 rounded-2xl bg-foreground px-4 py-3 text-background">
       <Timer className="size-6 shrink-0" strokeWidth={2.2} aria-hidden="true" />
-      <span className="tabular text-[34px] font-bold leading-none tracking-[-0.03em]">{now === null ? "–:––" : `${h}:${mm}:${ss}`}</span>
+      <span className="tabular text-[34px] font-bold leading-none tracking-[-0.03em]">{now === null ? "0:00:00" : `${h}:${mm}:${ss}`}</span>
       <span className="ml-auto text-right text-[13px] font-medium opacity-80">{startedLabel}</span>
     </div>
   );
@@ -1109,8 +1317,12 @@ function ReturnsScreen({
     <Screen padded={false}>
       <div className="flex flex-col gap-3 px-4 pt-4">
         {header}
-        <h1 className="mt-2 text-[32px] font-bold tracking-[-0.03em]">{t.roundDone}</h1>
-        <p className="text-[14px] text-muted-foreground">{skipped ? fmt(t.machinesDoneSkipped, { n: visited, skipped }) : fmt(t.machinesDone, { n: visited })}</p>
+        <h1 className="mt-2 text-[32px] font-bold tracking-[-0.03em]">{t.returnsTitle}</h1>
+        <p className="text-[14px] text-muted-foreground">
+          {skipped
+            ? fmt(t.machinesDoneSkipped, { n: visited, skipped })
+            : fmt(visited === 1 ? t.machinesDoneOne : t.machinesDone, { n: visited })}
+        </p>
       </div>
       <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-3 pb-36 pt-4">
         {rows.length === 0 && <p className="surface-card p-5 text-[15px]">{t.nothingBack}</p>}
@@ -1284,11 +1496,14 @@ function LineSheet({
 function ReportSheet({
   slots,
   preset,
+  startFor,
   onClose,
   onSave,
 }: {
   slots: RefillRound["slots"];
   preset: string | null;
+  /** Where the stepper starts for a kind of report on a slot: what is noted already, or what Vendly expects. */
+  startFor: (kind: ReportKind, selection: string | null) => number;
   onClose: () => void;
   onSave: (kind: ReportKind, selection: string | null, value: number, note: string | null) => void;
 }) {
@@ -1296,7 +1511,7 @@ function ReportSheet({
   const t = m.round;
   const [kind, setKind] = useState<ReportKind>("expired");
   const [selection, setSelection] = useState<string | null>(preset);
-  const [value, setValue] = useState(1);
+  const [value, setValue] = useState(() => startFor("expired", preset));
   const [note, setNote] = useState("");
   const slot = slots.find((s) => s.selection === selection) ?? null;
   const kinds: { id: ReportKind; label: string }[] = [
@@ -1320,7 +1535,7 @@ function ReportSheet({
             aria-pressed={kind === option.id}
             onClick={() => {
               setKind(option.id);
-              setValue(option.id === "count" ? 0 : 1);
+              setValue(startFor(option.id, selection));
             }}
             className={cn(
               "h-11 rounded-full px-4 text-[14.5px] font-semibold",
@@ -1349,7 +1564,10 @@ function ReportSheet({
           <FrontView
             rows={slotRows(slots)}
             selectedKey={selection}
-            onSlotClick={(picked) => setSelection(picked.selection)}
+            onSlotClick={(picked) => {
+              setSelection(picked.selection);
+              setValue(startFor(kind, picked.selection));
+            }}
           />
           {slot && (
             <p className="text-[15px] font-semibold">

@@ -11,9 +11,10 @@ import { getI18n } from "@/i18n/server";
 import { LiveRounds } from "@/components/refill/live-rounds";
 import { getMachines, getOpenRounds, getRefillSheet, getRunRates, getRunSummary } from "@/lib/data";
 import { linesToFill } from "@/lib/refill";
-import { itemReport, roundCost } from "@/lib/refill-flow";
+import { roundActual, roundCost } from "@/lib/refill-flow";
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
 import { cn } from "@/lib/utils";
+import { CancelRound } from "./cancel-round";
 import { NotesForm } from "./notes-form";
 import { RoundReport } from "./round-report";
 import { RunKm } from "./run-km";
@@ -56,29 +57,13 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
 
   // A finished step-by-step round reports what really happened, per product
   // and per slot, instead of what was planned.
-  const finished = step && Boolean(sheet.completed_at);
-  const items = finished
-    ? itemReport(
-        sheet.lines,
-        sheet.box ?? {},
-        sheet.stops ?? {},
-        sheet.returns ?? [],
-        summary.map((row) => ({ productId: row.product_id, qty: row.short })),
-      )
-    : [];
-  const actual: SheetActual | undefined = finished
-    ? {
-        taken: Object.fromEntries(items.map((item) => [item.productId, item.taken])),
-        filled: Object.fromEntries(
-          Object.entries(sheet.stops ?? {}).flatMap(([machineId, stop]) =>
-            stop.lines.map((line) => [`${machineId}:${line.selection}`, line.filled]),
-          ),
-        ),
-        skipped: Object.entries(sheet.stops ?? {})
-          .filter(([, stop]) => stop.skipped)
-          .map(([machineId]) => machineId),
-      }
-    : undefined;
+  const real = roundActual(
+    sheet,
+    summary.map((row) => ({ productId: row.product_id, qty: row.short })),
+  );
+  const finished = real !== null;
+  const items = real?.items ?? [];
+  const actual: SheetActual | undefined = real?.actual;
   const filledTotal = items.reduce((sum, item) => sum + item.filled, 0);
 
   // The cool box is keyed by product id; the lines know the names.
@@ -331,9 +316,13 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
             </Section>
           )}
 
-          <Section title={m.refill.notes}>
-            <NotesForm sheetId={sheet.id} initialNotes={sheet.notes ?? ""} />
-          </Section>
+          {/* The note goes to whoever fills the round; it is the operator's to write. */}
+          {operator && (
+            <Section title={m.refill.notes}>
+              <NotesForm sheetId={sheet.id} initialNotes={sheet.notes ?? ""} />
+            </Section>
+          )}
+          {operator && !sheet.completed_at && <CancelRound sheetId={sheet.id} />}
         </div>
       </div>
     </>

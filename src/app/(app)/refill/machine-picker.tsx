@@ -50,7 +50,7 @@ export function MachinePicker({
         <button
           type="button"
           onClick={() => setSelected(new Set(machines.map((mc) => mc.id)))}
-          className={buttonVariants({ variant: "ghost", size: "sm" })}
+          className={buttonVariants({ variant: "ghost" })}
         >
           {m.refill.selectAll}
         </button>
