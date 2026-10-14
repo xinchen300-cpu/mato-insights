@@ -695,11 +695,14 @@ export async function getPayments(
     const product = named.find((a) => a.selection === selection && a.from <= at && (a.to === null || at < a.to));
     const amount = Number(t.amount);
     const requested = typeof t.requested === "string" && /^[0-9]+$/.test(t.requested) ? Number(t.requested) / 100 : null;
+    // Approved at nothing: a card was tapped and no vend came. Not a sale, and
+    // nobody paid, so it is listed with the refusals, never as "Betaald".
+    const noSale = t.disposition === "APPROVED" && !(amount > 0);
     return {
       occurred_at: at,
       // What the customer tried to pay: a refused payment commits nothing.
       amount: amount > 0 ? amount : (requested ?? amount),
-      disposition: t.disposition as string,
+      disposition: noSale ? "NO_SALE" : (t.disposition as string),
       product_name: product?.name ?? null,
       selection_number: selection,
     };
@@ -1269,6 +1272,8 @@ export type SetupState = {
   payterConnected: boolean;
   machines: number;
   namedMachines: number;
+  /** Machines that take a layout: all but the "other" kind, which has no slots to draw. */
+  layoutable: number;
   withLayout: number;
   products: number;
   linkedSelections: number;
@@ -1285,7 +1290,7 @@ export async function getSetupState(orgId: string): Promise<SetupState> {
   const [credentials, org, machines, slots, products, assignments] = await Promise.all([
     admin.from("payter_credentials").select("org_id").eq("org_id", orgId).maybeSingle(),
     admin.from("organizations").select("is_demo").eq("id", orgId).maybeSingle(),
-    admin.from("machines").select("id, name, payter_serial_number").eq("org_id", orgId).eq("excluded", false),
+    admin.from("machines").select("id, name, payter_serial_number, type").eq("org_id", orgId).eq("excluded", false),
     admin.from("slots").select("machine_id").eq("org_id", orgId),
     admin.from("products").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("archived", false),
     admin.from("selection_assignments").select("id", { count: "exact", head: true }).eq("org_id", orgId).is("valid_to", null),
@@ -1294,13 +1299,17 @@ export async function getSetupState(orgId: string): Promise<SetupState> {
   const all = machines.data ?? [];
   // A machine keeps its serial as a name until somebody gives it a real one.
   const named = all.filter((m) => m.name && m.name !== m.payter_serial_number).length;
-  const withLayout = new Set((slots.data ?? []).map((s) => s.machine_id)).size;
+  // Only machines that are counted and can take a layout: an excluded terminal's
+  // old slots or an "other" machine would keep the step open for good.
+  const layoutIds = new Set(all.filter((m) => m.type !== "other").map((m) => m.id as string));
+  const withLayout = new Set((slots.data ?? []).map((s) => s.machine_id as string).filter((id) => layoutIds.has(id))).size;
 
   const state = {
     // A demo has invented sales and no Payter login, and is set up all the same.
     payterConnected: Boolean(credentials.data) || Boolean(org.data?.is_demo),
     machines: all.length,
     namedMachines: named,
+    layoutable: layoutIds.size,
     withLayout,
     products: products.count ?? 0,
     linkedSelections: assignments.count ?? 0,
@@ -1311,7 +1320,7 @@ export async function getSetupState(orgId: string): Promise<SetupState> {
       state.payterConnected &&
       state.machines > 0 &&
       state.namedMachines === state.machines &&
-      state.withLayout === state.machines &&
+      state.withLayout === state.layoutable &&
       state.products > 0 &&
       state.linkedSelections > 0,
   };

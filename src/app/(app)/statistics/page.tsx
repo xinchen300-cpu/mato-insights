@@ -15,7 +15,7 @@ import Link from "next/link";
 import { getBusinesses, getMachines, getPriceMismatches, getProducts, getStatsReport } from "@/lib/data";
 import { mediaUrl } from "@/lib/media";
 import { denyFiller, requireOrgId } from "@/lib/org";
-import { compareCounts, compareSince, fillDays, MIN_WEEKS, periodDays, weekdayStats } from "@/lib/stats";
+import { busiestWeekday, compareCounts, compareSince, fillDays, MIN_WEEKS, periodDays, weekdayStats } from "@/lib/stats";
 import { compareLabelKey, parseStatsParams, type StatsSearchParams } from "@/lib/stats-params";
 import type { StatsReport } from "@/lib/types";
 import { MonthlyOverview, MonthlySkeleton } from "./monthly";
@@ -71,6 +71,12 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
   const days = periodDays(report).length;
   const longEnough = days >= MIN_WEEKS * 7;
   const weekdays = weekdayStats(report);
+  // Coloured only when one weekday really sells more, by the same test the
+  // overview uses, and only when that day is also the longest bar here: the
+  // test counts pieces, the bars show money.
+  const busiest = busiestWeekday(report);
+  const longest = [...weekdays].sort((a, b) => b.avgRevenue - a.avgRevenue)[0];
+  const highlightDay = busiest && longest?.weekday === busiest.weekday ? String(busiest.weekday) : null;
   // Something that only began selling after the earlier period started gets
   // "new since …" instead of a percentage against a half-empty period.
   const newSince = (firstSale: string | null) =>
@@ -213,7 +219,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                     value: w.avgRevenue,
                     display: f.euroRound(w.avgRevenue),
                   }))}
-                  highlightTop={weekdays.every((w) => w.days >= MIN_WEEKS)}
+                  highlightKey={highlightDay}
                 />
               </Panel>
               <Panel title={m.stats.busiestHours}>

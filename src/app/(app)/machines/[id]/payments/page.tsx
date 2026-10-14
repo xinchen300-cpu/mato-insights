@@ -78,7 +78,7 @@ export default async function PaymentsPage({
                         }
                         title={
                           payment.product_name ??
-                          (payment.selection_number ? fmt(m.expiry.selection, { number: payment.selection_number }) : "—")
+                          (payment.selection_number ? fmt(m.expiry.selection, { number: payment.selection_number }) : m.common.unknown)
                         }
                         subtitle={`${f.time(payment.occurred_at)} · ${
                           paid ? m.status.paid : (reasonLabels[payment.disposition] ?? payment.disposition)

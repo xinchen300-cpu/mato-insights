@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Vendly — Vending Data Solutions",
+    name: "Vendly · Vending Data Solutions",
     short_name: "Vendly",
     description: "Statistics Won't Lie",
     start_url: "/",

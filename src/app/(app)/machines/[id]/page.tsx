@@ -97,7 +97,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   const ownerIds = [machine.business_id, machine.shared_business_id].filter((id): id is string => Boolean(id));
   const owners = ownerIds.map((ownerId, i) => ({
     id: ownerId,
-    name: businesses.find((b) => b.id === ownerId)?.name ?? "—",
+    name: businesses.find((b) => b.id === ownerId)?.name ?? m.common.unknown,
     tone: OWNER_TONES[i % OWNER_TONES.length],
   }));
   const toneOf = (businessId: string | null) => owners.find((o) => o.id === businessId)?.tone ?? null;

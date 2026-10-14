@@ -112,7 +112,7 @@ export default async function FillersPage() {
                           round is not a slow filler. */}
                       <MiniStat
                         label={t.wholeRound}
-                        value={person.round.count ? took(person.round.minutes) : "—"}
+                        value={person.round.count ? took(person.round.minutes) : m.fillers.notMeasured}
                         detail={
                           person.round.count
                             ? fmt(t.roundDetail, {
@@ -125,7 +125,7 @@ export default async function FillersPage() {
                       />
                       <MiniStat
                         label={t.perMachine}
-                        value={person.atMachine.count ? took(person.atMachine.minutes) : "—"}
+                        value={person.atMachine.count ? took(person.atMachine.minutes) : m.fillers.notMeasured}
                         detail={person.atMachine.count ? measured(person.atMachine) : undefined}
                         f={f}
                       />

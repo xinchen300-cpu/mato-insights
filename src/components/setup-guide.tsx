@@ -57,10 +57,10 @@ export function setupSteps(setup: SetupState, m: Messages): Step[] {
       title: m.setup.layout,
       why: m.setup.layoutWhy,
       state:
-        setup.machines > setup.withLayout
-          ? fmt(m.setup.layoutLeft, { count: setup.machines - setup.withLayout })
+        setup.layoutable > setup.withLayout
+          ? fmt(m.setup.layoutLeft, { count: setup.layoutable - setup.withLayout })
           : null,
-      done: setup.machines > 0 && setup.withLayout === setup.machines,
+      done: setup.machines > 0 && setup.withLayout === setup.layoutable,
       href: "/machines",
       action: m.nav.machines,
     },

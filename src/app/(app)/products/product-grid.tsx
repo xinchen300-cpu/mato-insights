@@ -212,7 +212,7 @@ export function ProductGrid({
                           p.price === null && "font-normal text-muted-foreground",
                         )}
                       >
-                        {p.price !== null ? f.euro(p.price) : "—"}
+                        {p.price !== null ? f.euro(p.price) : m.common.none}
                       </span>
                     </button>
                   </li>

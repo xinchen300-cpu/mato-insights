@@ -1,15 +1,16 @@
 import { cn } from "@/lib/utils";
 
 // A plain horizontal bar list: readable on a phone and needs no chart library.
+// Only the bar the caller names is coloured, so a bar that is merely the
+// longest never passes for a real difference: that verdict comes from lib/stats.
 export function BarList({
   items,
-  highlightTop = true,
+  highlightKey = null,
 }: {
   items: { key: string; label: string; value: number; display: string }[];
-  highlightTop?: boolean;
+  highlightKey?: string | null;
 }) {
   const max = Math.max(...items.map((i) => i.value), 0);
-  const topValue = highlightTop ? max : Infinity;
 
   return (
     <ul className="flex flex-col gap-3">
@@ -20,7 +21,7 @@ export function BarList({
             <span
               className={cn(
                 "block h-full rounded-full transition-[width] duration-500",
-                item.value === topValue && max > 0 ? "bg-primary" : "bg-chart-5",
+                item.key === highlightKey && max > 0 ? "bg-primary" : "bg-chart-5",
               )}
               style={{ width: max > 0 ? `${(item.value / max) * 100}%` : "0%" }}
             />

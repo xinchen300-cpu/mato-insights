@@ -118,7 +118,7 @@ export default async function RefillPage() {
   const shortByProduct = new Map<string, { name: string; times: number; units: number }>();
   for (const s of shortages) {
     const key = s.product_id ?? "?";
-    const entry = shortByProduct.get(key) ?? { name: s.product_name ?? "—", times: 0, units: 0 };
+    const entry = shortByProduct.get(key) ?? { name: s.product_name ?? m.common.unknown, times: 0, units: 0 };
     entry.times += 1;
     entry.units += s.qty;
     shortByProduct.set(key, entry);

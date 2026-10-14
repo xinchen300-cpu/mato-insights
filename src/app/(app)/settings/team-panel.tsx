@@ -84,7 +84,7 @@ export function TeamPanel({
                 leading={<Avatar>{initial(member.email ?? "?")}</Avatar>}
                 title={
                   <span className="whitespace-normal">
-                    {member.email ?? "—"}
+                    {member.email ?? m.common.unknown}
                     {you && <span className="font-normal text-muted-foreground"> · {t.you}</span>}
                   </span>
                 }

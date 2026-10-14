@@ -90,7 +90,7 @@ export function TerminalPanel({
                   {status === "offline" ? m.status.disconnectedAt : m.status.connectedSince}
                 </dt>
                 <dd className="text-[15px] font-semibold tracking-[-0.01em]">
-                  {since ? `${f.dateTime(since)} · ${f.relative(since)}` : "—"}
+                  {since ? `${f.dateTime(since)} · ${f.relative(since)}` : m.common.unknown}
                 </dd>
               </div>
               {machine.terminal_network && (
@@ -173,7 +173,7 @@ export function TerminalPanel({
                     }
                     title={
                       payment.product_name ??
-                      (payment.selection_number ? fmt(m.expiry.selection, { number: payment.selection_number }) : "—")
+                      (payment.selection_number ? fmt(m.expiry.selection, { number: payment.selection_number }) : m.common.unknown)
                     }
                     subtitle={`${f.dateTime(payment.occurred_at)} · ${
                       paid ? m.status.paid : (reasonLabels[payment.disposition] ?? payment.disposition)

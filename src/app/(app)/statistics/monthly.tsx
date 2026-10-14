@@ -104,8 +104,10 @@ export async function MonthlyOverview({
                   subtitle={
                     <span className="tabular">
                       {plural(row.units, m.common.salesOne, m.common.salesOther)}
+                      {/* Per day only over a whole month of selling: the first month started late. */}
                       {row.complete &&
                         row.units > 0 &&
+                        row.month !== firstMonth &&
                         ` · ${fmt(m.stats.perDay, { amount: f.euro(row.revenue / row.days) })}`}
                     </span>
                   }

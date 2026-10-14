@@ -183,7 +183,7 @@ export default async function OverviewPage() {
       key: `low-${id}`,
       icon: PackageOpen,
       tone: "warning" as const,
-      text: `${machineName.get(id) ?? ""} — ${fmt(m.overview.slotsLow, { count })}`,
+      text: `${machineName.get(id) ?? ""} · ${fmt(m.overview.slotsLow, { count })}`,
       href: `/machines/${id}`,
     })),
     ...(lowSorted.length > LOW_ROWS
@@ -203,7 +203,7 @@ export default async function OverviewPage() {
             key: "setup",
             icon: CircleDashed,
             tone: "muted" as const,
-            text: setupStep.state ? `${setupStep.title} — ${setupStep.state}` : setupStep.title,
+            text: setupStep.state ? `${setupStep.title} · ${setupStep.state}` : setupStep.title,
             href: setupStep.href,
           },
         ]
@@ -227,10 +227,13 @@ export default async function OverviewPage() {
     revenue: d.revenue,
   }));
 
-  const counted = machines.filter((mc) => mc.type !== "other");
+  // Every terminal counts, as in the offline to-do above. Red only for one
+  // that is really offline; one never seen yet is unknown, not broken.
+  const counted = machines;
   const onlineCount = counted.filter(
     (mc) => terminalStatus(mc.last_connected_at, mc.last_disconnected_at) === "online",
   ).length;
+  const fleetStatus = offline.length > 0 ? "offline" : onlineCount === counted.length ? "online" : "unknown";
   // Something that only began selling after the earlier period started gets
   // "new since …" instead of a percentage against a half-empty period.
   const newSince = (firstSale: string | null) =>
@@ -269,13 +272,13 @@ export default async function OverviewPage() {
             <MiniStat label={m.overview.week} value={f.euro(week.totals.revenue)} compare={compareOf(week)} f={f} />
             <MiniStat
               label={m.stats.avgSale}
-              value={month.totals.units > 0 ? f.euro(month.totals.revenue / month.totals.units) : "—"}
+              value={month.totals.units > 0 ? f.euro(month.totals.revenue / month.totals.units) : m.common.none}
               f={f}
             />
             <MiniStat
               label={m.overview.machinesOnline}
               value={`${onlineCount} / ${counted.length}`}
-              leading={<StatusDot status={onlineCount === counted.length ? "online" : "offline"} />}
+              leading={<StatusDot status={fleetStatus} />}
               f={f}
             />
           </div>

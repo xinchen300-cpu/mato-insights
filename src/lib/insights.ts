@@ -47,12 +47,15 @@ export function buildInsights(
   const busiest = busiestWeekday(weeks);
   if (busiest && busiest.pct > 0) insights.push({ kind: "bestDay", ...busiest, weeks: weekCount });
 
+  // A machine that stopped selling asks for a visit: it goes first, the
+  // longest silence on top, so the cut below never drops it for a pattern.
   const now = Date.now();
-  for (const m of lastSales) {
-    if (!m.lastSale) continue;
-    const days = Math.floor((now - new Date(m.lastSale).getTime()) / DAY_MS);
-    if (days >= 5) insights.push({ kind: "quietMachine", machine: m.name, days });
-  }
+  const quiet: Insight[] = lastSales
+    .filter((m) => m.lastSale)
+    .map((m) => ({ machine: m.name, days: Math.floor((now - new Date(m.lastSale!).getTime()) / DAY_MS) }))
+    .filter((m) => m.days >= 5)
+    .sort((a, b) => b.days - a.days)
+    .map((m) => ({ kind: "quietMachine" as const, ...m }));
 
   const total = month.by_machine.reduce((s, m) => s + m.revenue, 0);
   const top = month.by_machine[0];
@@ -60,5 +63,5 @@ export function buildInsights(
     insights.push({ kind: "topShare", machine: top.machine_name, pct: Math.round((top.revenue / total) * 100) });
   }
 
-  return insights.slice(0, 4);
+  return [...quiet, ...insights].slice(0, 4);
 }

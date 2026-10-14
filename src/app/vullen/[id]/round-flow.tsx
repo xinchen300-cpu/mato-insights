@@ -1571,7 +1571,7 @@ function ReportSheet({
           />
           {slot && (
             <p className="text-[15px] font-semibold">
-              {fmt(t.slotPicked, { slot: slot.selection, product: slot.productName ?? "—" })}
+              {fmt(t.slotPicked, { slot: slot.selection, product: slot.productName ?? m.common.unknown })}
               <span className="font-normal text-muted-foreground">
                 {" · "}
                 {slot.stock === null ? t.notCountedShort : fmt(t.nowOfShort, { n: slot.stock, cap: slot.capacity })}

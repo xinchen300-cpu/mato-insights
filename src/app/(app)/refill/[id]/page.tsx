@@ -69,12 +69,12 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
   // The cool box is keyed by product id; the lines know the names.
   const nameOf = new Map(sheet.lines.map((l) => [l.product_id, l.product_name]));
   // Keyed by product id, since two products may share a name, and a product
-  // that dropped out of the plan would otherwise render as a nameless "—".
+  // that dropped out of the plan would otherwise render without a name.
   // A product that dropped out of the plan is still in the van, so it stays on
   // the list with a dash for a name. Hiding it would claim an empty cool box.
   // Flow 2 keys the box per machine and product; flow 1 per product.
   const box = Object.entries(sheet.box ?? {})
-    .map(([key, qty]) => ({ id: key, name: nameOf.get(step ? key.split(":")[1] : key) ?? "—", qty }))
+    .map(([key, qty]) => ({ id: key, name: nameOf.get(step ? key.split(":")[1] : key) ?? m.common.unknown, qty }))
     .sort((a, b) => b.qty - a.qty);
 
   const minutes =
@@ -227,7 +227,7 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
                   const name =
                     machineName.get(machineId) ??
                     sheet.lines.find((line) => line.machine_id === machineId)?.machine_name ??
-                    "—";
+                    m.common.unknown;
                   return (
                     <li key={machineId}>
                       <ListRow
