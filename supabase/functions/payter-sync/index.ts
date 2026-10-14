@@ -149,6 +149,9 @@ async function syncOrganization(supabase: SupabaseClient, orgId: string, withTer
 
     const machineCache = new Map<string, string>();
     let watermark: number = credRow.last_watermark ?? 0;
+    // The query starts at the watermark itself, so the last sale already in comes
+    // back every run. It is upserted again, harmlessly, but it is not news.
+    const startedAt = watermark;
     let pages = 0;
 
     for await (const page of fetchTransactions(tokenId, watermark)) {
@@ -178,7 +181,7 @@ async function syncOrganization(supabase: SupabaseClient, orgId: string, withTer
           .from("transactions")
           .upsert(rows, { onConflict: "org_id,payter_transaction_id" });
         if (error) throw new Error(`Transaction upsert failed: ${error.message}`);
-        transactionsSynced += included.length;
+        transactionsSynced += included.filter((doc) => new Date(doc.ingestTime).getTime() > startedAt).length;
       }
 
       // Advance on every document, excluded or not, so excluded data is never re-scanned.
