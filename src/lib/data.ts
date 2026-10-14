@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { denyFillerAccess, getScope, isFiller, isOperator, requireOperator, requireRefillAccess, type Role } from "@/lib/org";
 import { displayName } from "@/lib/people";
+import { cleanRoundSettings, type RoundSettings } from "@/lib/round-settings";
 import { onlyMine, roundTimings, slotKey, type Average, type FlowLine, type RoundTimings, type ShopView, type StopRecord } from "@/lib/refill-flow";
 import { terminalStatus, type TerminalStatus } from "@/lib/terminal-status";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
@@ -154,6 +155,8 @@ export type RefillRound = {
   slots: RoundSlot[];
   picked: Record<string, number>;
   stops: Record<string, StopRecord>;
+  /** How the operator wants the round to go (Werkwijze). */
+  settings: RoundSettings;
 };
 
 /** What Vendly knows is in a slot, or null when it cannot know (never counted, or oversold since). */
@@ -180,7 +183,7 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
   if (!sheet) return null;
 
   const machineIds = (sheet.machine_ids ?? []) as string[];
-  const [{ data: machineRows }, stock, lastSales] = await Promise.all([
+  const [{ data: machineRows }, stock, lastSales, { data: org }] = await Promise.all([
     admin
       .from("machines")
       .select("id, name, last_connected_at, last_disconnected_at")
@@ -188,6 +191,7 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
       .in("id", machineIds.length ? machineIds : [NOTHING]),
     getMachineStock(orgId, machineIds.length ? machineIds : [NOTHING]),
     getLastSales(orgId),
+    admin.from("organizations").select("refill_settings").eq("id", orgId).maybeSingle(),
   ]);
   const byId = new Map((machineRows ?? []).map((row) => [row.id as string, row]));
   const live = new Map(stock.map((slot) => [slotKey(slot.machine_id, slot.selection_number), slot]));
@@ -245,7 +249,19 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
       })),
     picked: (sheet.box ?? {}) as Record<string, number>,
     stops: (sheet.stops ?? {}) as Record<string, StopRecord>,
+    settings: cleanRoundSettings(org?.refill_settings),
   };
+}
+
+/** How this organisation wants its rounds to go, for whoever runs them: the operator or a filler. */
+export async function getRoundSettings(orgId: string): Promise<RoundSettings> {
+  if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
+  const { data } = await createAdminClient()
+    .from("organizations")
+    .select("refill_settings")
+    .eq("id", orgId)
+    .maybeSingle();
+  return cleanRoundSettings(data?.refill_settings);
 }
 
 export type OpenRound = {
@@ -686,6 +702,97 @@ export async function getPayments(
     };
   });
   return { rows, more: (data ?? []).length > limit };
+}
+
+export type LiveSale = {
+  id: string;
+  occurredAt: string;
+  /** When Vendly took it in: a terminal that was offline can hand in a sale late. */
+  createdAt: string;
+  amount: number;
+  machineId: string;
+  machineName: string;
+  productName: string | null;
+  selection: string | null;
+};
+
+/**
+ * The newest sales across the caller's machines, for the live strip on the
+ * overview: approved and paid, since a €0 tap sold nothing. With `after`,
+ * only what came in since (by arrival, so a late sale from an offline
+ * terminal is not missed). A shop sees its own machines, and on a shared one
+ * only its own slots; a filler sees no money at all.
+ */
+export async function getLiveSales(
+  orgId: string,
+  { after = null, limit = 6 }: { after?: string | null; limit?: number } = {},
+): Promise<LiveSale[]> {
+  await denyFillerAccess();
+  if ((await getScope()).orgId !== orgId) throw new Error("Not found");
+  const [machines, shared] = await Promise.all([getMachines(orgId), sharedSelections(orgId)]);
+  if (machines.length === 0) return [];
+  // On a shared machine a shop's own slots are picked in the query itself, so
+  // a busy neighbour cannot crowd its sales out of the strip. A slot whose
+  // number does not fit the filter syntax is left out, never let through.
+  const ids = machines.map((machine) => machine.id);
+  const whole = ids.filter((id) => !shared?.has(id));
+  const parts = [
+    ...(whole.length ? [`machine_id.in.(${whole.join(",")})`] : []),
+    ...[...(shared ?? new Map<string, Set<string>>())].flatMap(([id, own]) => {
+      const mine = [...own].filter((selection) => /^[\w.-]+$/.test(selection));
+      return ids.includes(id) && mine.length > 0
+        ? [`and(machine_id.eq.${id},item_ref.in.(${mine.map((selection) => `"${selection}"`).join(",")}))`]
+        : [];
+    }),
+  ];
+  if (parts.length === 0) return [];
+  const admin = createAdminClient();
+  let query = admin
+    .from("transactions")
+    .select("id, occurred_at, created_at, amount, machine_id, item_ref")
+    .eq("org_id", orgId)
+    .or(parts.join(","))
+    .eq("disposition", "APPROVED")
+    .gt("amount", 0)
+    .order(after ? "created_at" : "occurred_at", { ascending: false })
+    .limit(limit);
+  if (after) query = query.gt("created_at", after);
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  const rows = (data ?? [])
+    .filter((t) => !shared?.has(t.machine_id as string) || shared.get(t.machine_id as string)!.has(t.item_ref as string))
+    .sort((a, b) => ((a.occurred_at as string) < (b.occurred_at as string) ? 1 : -1))
+    .slice(0, limit);
+  if (rows.length === 0) return [];
+
+  const { data: assignments } = await admin
+    .from("selection_assignments")
+    .select("machine_id, selection_number, valid_from, valid_to, products(name)")
+    .eq("org_id", orgId)
+    .in("machine_id", [...new Set(rows.map((row) => row.machine_id as string))]);
+  const names = new Map(machines.map((machine) => [machine.id, machine.name]));
+  return rows.map((t) => {
+    const at = t.occurred_at as string;
+    const selection = (t.item_ref as string | null) ?? null;
+    const product = (assignments ?? []).find(
+      (a) =>
+        a.machine_id === t.machine_id &&
+        a.selection_number === selection &&
+        (a.valid_from as string) <= at &&
+        (a.valid_to === null || at < (a.valid_to as string)),
+    );
+    const named = product ? (Array.isArray(product.products) ? product.products[0] : product.products) : null;
+    return {
+      id: t.id as string,
+      occurredAt: at,
+      createdAt: t.created_at as string,
+      amount: Number(t.amount),
+      machineId: t.machine_id as string,
+      machineName: names.get(t.machine_id as string) ?? "",
+      productName: (named as { name: string } | null)?.name ?? null,
+      selection,
+    };
+  });
 }
 
 export async function getMachineSalesSplit(

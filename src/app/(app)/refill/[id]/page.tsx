@@ -265,6 +265,13 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
                                 ` · ${fmt(first ? m.refill.stopGapStart : m.refill.stopGap, {
                                   time: duration(gap, m.refill.runTime, m.refill.runTimeHours),
                                 })}`}
+                              {/* The operator's own checks (Werkwijze): how many were ticked here. */}
+                              {stop?.checks &&
+                                Object.keys(stop.checks).length > 0 &&
+                                ` · ${fmt(m.refill.checksDone, {
+                                  done: Object.values(stop.checks).filter(Boolean).length,
+                                  total: Object.keys(stop.checks).length,
+                                })}`}
                             </span>
                           )
                         }

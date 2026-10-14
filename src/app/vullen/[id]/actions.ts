@@ -107,17 +107,19 @@ export async function startRound(sheetId: string, picked: Record<string, number>
     .select("id");
   // Only the call that actually started the round writes the shortages, and says so.
   if (!updated?.length) return;
-  after(() =>
-    notifyOperators(orgId, {
-      title: "Vendly",
-      body: fmt(round.machines.length === 1 ? PUSH.pushStartedOne : PUSH.pushStarted, {
-        name: who ?? PUSH.pushSomeone,
-        count: round.machines.length,
+  if (round.settings.notify.start) {
+    after(() =>
+      notifyOperators(orgId, {
+        title: "Vendly",
+        body: fmt(round.machines.length === 1 ? PUSH.pushStartedOne : PUSH.pushStarted, {
+          name: who ?? PUSH.pushSomeone,
+          count: round.machines.length,
+        }),
+        url: `/refill/${sheetId}`,
+        tag: `round-${sheetId}`,
       }),
-      url: `/refill/${sheetId}`,
-      tag: `round-${sheetId}`,
-    }),
-  );
+    );
+  }
 
   const short = pickList(round.lines)
     .map((row) => ({ productId: row.productId, qty: row.take - (box[row.key] ?? 0) }))
@@ -137,6 +139,8 @@ export type StopInput = {
   technical: boolean;
   note: string | null;
   lines: { selection: string; filled: number; removed: { reason: string; qty: number }[]; countAfter: number | null; full: boolean }[];
+  /** The operator's own checks at this machine, by label: ticked or not. */
+  checks?: Record<string, boolean>;
 };
 
 /**
@@ -208,7 +212,7 @@ export async function completeStop(sheetId: string, machineId: string, input: St
     }
   }
 
-  await finishStop(orgId, sheetId, machineId, {
+  const status = await finishStop(orgId, sheetId, machineId, {
     refills,
     corrections: [...corrections].map(([note, entries]) => ({ note, entries })),
     record: {
@@ -221,8 +225,25 @@ export async function completeStop(sheetId: string, machineId: string, input: St
       technical: input.technical === true,
       note: typeof input.note === "string" ? input.note.slice(0, 200) : null,
       lines,
+      // Only the operator's own checks, as they stand now; nothing else can be ticked.
+      ...(round.settings.checks.length
+        ? { checks: Object.fromEntries(round.settings.checks.map((label) => [label, input.checks?.[label] === true])) }
+        : {}),
     },
   });
+  // Once per machine, and only for the call that really finished it.
+  if (status === "ok" && round.settings.notify.eachMachine) {
+    const who = await fillerName();
+    const machine = round.machines.find((mc) => mc.id === machineId)?.name ?? "";
+    after(() =>
+      notifyOperators(orgId, {
+        title: "Vendly",
+        body: fmt(PUSH.pushStopDone, { name: who ?? PUSH.pushSomeone, machine }),
+        url: `/refill/${sheetId}`,
+        tag: `round-${sheetId}`,
+      }),
+    );
+  }
 }
 
 /** A stop that is not done this round: nothing is written to the machine. */
@@ -230,6 +251,8 @@ export async function skipStop(sheetId: string, machineId: string): Promise<void
   const { orgId, round } = await openRound(sheetId);
   if (!round.machines.some((machine) => machine.id === machineId)) throw new Error("Not found");
   if (!round.readyAt) throw new Error("Round not started");
+  // The operator can ask that every machine of a round is done.
+  if (!round.settings.allowSkip) throw new Error("Skipping is off");
   if (round.stops[machineId]?.completedAt) return;
   await finishStop(orgId, sheetId, machineId, {
     refills: [],
@@ -274,6 +297,7 @@ async function finishStop(
   if (data === "closed") throw new Error("Round is closed");
   if (data === "not_started") throw new Error("Round not started");
   revalidatePath(`/refill/${sheetId}`);
+  return data as "ok" | "done";
 }
 
 /**
@@ -353,7 +377,7 @@ export async function completeRound(
       lines,
       completed_at: new Date().toISOString(),
       // Kilometres are optional; a number that is no distance is left out, not refused.
-      ...(typeof km === "number" && km > 0 && km <= 2000 ? { km: Math.round(km * 10) / 10 } : {}),
+      ...(round.settings.askKm && typeof km === "number" && km > 0 && km <= 2000 ? { km: Math.round(km * 10) / 10 } : {}),
       // Whoever started the round filled it; the name was kept at the start.
       filled_by: (sheet?.filled_by as string | null) ?? (await fillerName()),
     })
@@ -364,14 +388,16 @@ export async function completeRound(
   const who = (sheet?.filled_by as string | null) ?? PUSH.pushSomeone;
   const minutes = round.readyAt ? Math.max(1, Math.round((Date.now() - new Date(round.readyAt).getTime()) / 60000)) : 0;
   const visited = Object.values(round.stops).filter((stop) => !stop.skipped).length;
-  after(() =>
-    notifyOperators(orgId, {
-      title: "Vendly",
-      body: fmt(PUSH.pushDone, { name: who, count: visited, minutes }),
-      url: `/refill/${sheetId}`,
-      tag: `round-${sheetId}`,
-    }),
-  );
+  if (round.settings.notify.finish) {
+    after(() =>
+      notifyOperators(orgId, {
+        title: "Vendly",
+        body: fmt(PUSH.pushDone, { name: who, count: visited, minutes }),
+        url: `/refill/${sheetId}`,
+        tag: `round-${sheetId}`,
+      }),
+    );
+  }
   revalidatePath("/refill");
   revalidatePath(`/refill/${sheetId}`);
 }

@@ -8,6 +8,7 @@ import { getMachines } from "@/lib/data";
 import { featureAllowed } from "@/lib/billing";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { RefillLine } from "@/lib/types";
+import { cleanRoundSettings, type RoundSettings } from "@/lib/round-settings";
 
 export async function createRefillSheet(
   machineIds: string[],
@@ -74,5 +75,19 @@ export async function saveRunKm(sheetId: string, km: number | null) {
     .eq("org_id", orgId);
   if (error) throw new Error(error.message);
   revalidatePath(`/refill/${sheetId}`);
+}
+
+/** How rounds go for this organisation's fillers, from the Werkwijze page. */
+export async function saveRoundSettings(input: RoundSettings): Promise<RoundSettings> {
+  const orgId = await requireOrgId();
+  await requireOperator();
+  const settings = cleanRoundSettings(input);
+  const { error } = await createAdminClient()
+    .from("organizations")
+    .update({ refill_settings: settings })
+    .eq("id", orgId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/refill/workflow");
+  return settings;
 }
 

@@ -1,5 +1,6 @@
 // Checks the refill round logic (src/lib/refill-flow.ts). Run: npm run test:flow
 import { uncovered } from "../src/lib/assignments.ts";
+import { cleanRoundSettings, DEFAULT_ROUND_SETTINGS } from "../src/lib/round-settings.ts";
 import { allocate, itemReport, roundCost, levelAfter, onlyMine, pickList, returnsFor, roundTimings, slotKey, pickKey, type FlowLine } from "../src/lib/refill-flow.ts";
 import type { RefillLine, RefillSheet } from "../src/lib/types.ts";
 const L = (sel: string, product: string, cap: number, stock: number | null, take: number, row = 1): FlowLine =>
@@ -115,4 +116,11 @@ const oneMachine = roundCost({ minutes: 30, km: null, machineKm: [24], perHour: 
 ok("cost: one machine falls back to its distance there and back", oneMachine.km === 24 && oneMachine.kmFrom === "machine" && oneMachine.total === 24.5);
 const unknown = roundCost({ minutes: 60, km: null, machineKm: [12, 20], perHour: 25, perKm: 0.42 });
 ok("cost: without kilometres the drive is unknown, not zero", unknown.drive === null && unknown.kmFrom === null && unknown.total === 25);
+
+// How the operator wants rounds to go: whatever is stored, made safe.
+ok("settings: nothing stored is the defaults", JSON.stringify(cleanRoundSettings(null)) === JSON.stringify(DEFAULT_ROUND_SETTINGS));
+const custom = cleanRoundSettings({ checks: ["  Ruit  gepoetst ", "ruit gepoetst", "", 3, "x".repeat(90)], message: "  Koelbox terug  ", askKm: false, notify: { eachMachine: true }, extra: 1 });
+ok("settings: checks trimmed, kept once, capped", custom.checks.length === 2 && custom.checks[0] === "Ruit gepoetst" && custom.checks[1].length === 60);
+ok("settings: message trimmed, flags kept, the rest default", custom.message === "Koelbox terug" && custom.askKm === false && custom.allowSkip === true && custom.notify.eachMachine && custom.notify.start && custom.notify.finish);
+ok("settings: at most eight checks", cleanRoundSettings({ checks: Array.from({ length: 12 }, (_, i) => `check ${i}`) }).checks.length === 8);
 

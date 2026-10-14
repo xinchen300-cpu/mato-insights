@@ -51,6 +51,8 @@ export type StopRecord = {
   technical: boolean;
   note: string | null;
   lines: StopLine[];
+  /** The operator's own checks at this machine (Werkwijze), and whether each was ticked. */
+  checks?: Record<string, boolean>;
 };
 
 export type Disposition = "stock" | "waste" | "promo" | "staff" | "other";

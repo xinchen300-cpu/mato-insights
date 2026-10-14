@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, CalendarClock, CircleDashed, Link2, PackageOpen, WifiOff, type LucideIcon } from "lucide-react";
+import { CalendarClock, CircleDashed, Link2, PackageOpen, WifiOff, type LucideIcon } from "lucide-react";
 import { RevenueChart } from "@/components/charts/revenue-chart";
 import { Delta } from "@/components/delta";
 import { KpiHero, MiniStat } from "@/components/kpi";
@@ -16,6 +16,7 @@ import { getI18n } from "@/i18n/server";
 import {
   getExpiryAlerts,
   getLastSales,
+  getLiveSales,
   getLastSyncedAt,
   getOpenRounds,
   getMachines,
@@ -31,9 +32,9 @@ import { compareSince, fillDays, lastFullWeeks } from "@/lib/stats";
 import { terminalStatus } from "@/lib/terminal-status";
 import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
 import { fillLevel, needsAttention } from "@/lib/stock";
-import { cn } from "@/lib/utils";
 import { MachineIcon } from "@/components/machine/machine-icon";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { LiveSales } from "@/components/live-sales";
 
 const RECENT_MS = 90 * 24 * 60 * 60 * 1000;
 
@@ -88,7 +89,7 @@ export default async function OverviewPage() {
 
   // Weekday patterns only from whole weeks, and enough of them (see lib/stats).
   const patternWeeks = 8;
-  const [today, week, month, weeks, machines, stock, unassigned, expiring, lastSales, syncedAt, setup] =
+  const [today, week, month, weeks, machines, stock, unassigned, expiring, lastSales, syncedAt, setup, recentSales] =
     await Promise.all([
     getStatsReport(orgId, { period: "today" }),
     getStatsReport(orgId, { period: "week" }),
@@ -101,6 +102,7 @@ export default async function OverviewPage() {
     getLastSales(orgId),
     getLastSyncedAt(orgId),
     getSetupState(orgId),
+    getLiveSales(orgId),
   ]);
 
   if (month.totals.units === 0 && weeks.totals.units === 0) {
@@ -281,6 +283,9 @@ export default async function OverviewPage() {
             <RevenueChart data={chartData} height={220} />
           </div>
         </section>
+
+        {/* What just sold, sliding in as it happens. */}
+        <LiveSales initial={recentSales} />
 
         {insights.length > 0 && (
           <div className="px-1">

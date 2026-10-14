@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronLeft, ChevronRight, Timer, TriangleAlert, Truck } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, MessageSquareText, Timer, TriangleAlert, Truck } from "lucide-react";
 import { VendlyWordmark } from "@/components/brand/vendly-mark";
 import { FrontView, type FrontSlot } from "@/components/machine/front-view";
 import { useI18n } from "@/i18n/client";
@@ -40,6 +40,8 @@ type StopDraft = {
   note: string | null;
   allFull: boolean | null;
   lines: Record<string, LineDraft>;
+  /** The operator's own checks ticked here; absent in drafts saved before they existed. */
+  checks?: Record<string, boolean>;
 };
 type Saved = { picked: Record<string, number>; touched: boolean; drafts: Record<string, StopDraft> };
 type ReportKind = RemovalReason | "count" | "technical";
@@ -200,6 +202,7 @@ export function RoundFlow({
       checkedAt: draft.checkedAt,
       technical: draft.technical,
       note: draft.note,
+      checks: draft.checks ?? {},
       lines: [...selections].map((selection) => {
         const line = planned.find((l) => l.selection === selection);
         const edit = draft.lines[selection] ?? emptyLine();
@@ -235,6 +238,13 @@ export function RoundFlow({
               skipped: false,
               technical: job.input.technical,
               note: job.input.note,
+              ...(initial.settings.checks.length
+                ? {
+                    checks: Object.fromEntries(
+                      initial.settings.checks.map((label) => [label, job.input.checks?.[label] === true]),
+                    ),
+                  }
+                : {}),
               lines: job.input.lines.map((line) => ({
                 ...line,
                 prepared: prepared[slotKey(job.machineId, line.selection)] ?? 0,
@@ -363,6 +373,7 @@ export function RoundFlow({
         header={header(() => setView("home"))}
         visited={Object.values(stops).filter((stop) => !stop.skipped).length}
         skipped={Object.values(stops).filter((stop) => stop.skipped).length}
+        askKm={initial.settings.askKm}
         onFinish={(choices, km) =>
           run(
             () => completeRound(initial.id, choices, km !== null && Number.isFinite(km) ? km : null),
@@ -556,26 +567,28 @@ export function RoundFlow({
               <TriangleAlert className="size-4 text-warning" />
               {t.reportShort}
             </button>
-            <button
-              type="button"
-              className={cn(chip, skipArmed && "bg-foreground text-background ring-foreground")}
-              disabled={pending}
-              onClick={() => {
-                if (!skipArmed) return setSkipArmed(true);
-                run(
-                  () => skipStop(initial.id, current.id),
-                  () => {
-                    setStops((all) => ({
-                      ...all,
-                      [current.id]: { checkedAt: null, completedAt: new Date().toISOString(), skipped: true, technical: false, note: null, lines: [] },
-                    }));
-                    setView("home");
-                  },
-                );
-              }}
-            >
-              {skipArmed ? t.skipConfirm : t.skipShort}
-            </button>
+            {initial.settings.allowSkip && (
+              <button
+                type="button"
+                className={cn(chip, skipArmed && "bg-foreground text-background ring-foreground")}
+                disabled={pending}
+                onClick={() => {
+                  if (!skipArmed) return setSkipArmed(true);
+                  run(
+                    () => skipStop(initial.id, current.id),
+                    () => {
+                      setStops((all) => ({
+                        ...all,
+                        [current.id]: { checkedAt: null, completedAt: new Date().toISOString(), skipped: true, technical: false, note: null, lines: [] },
+                      }));
+                      setView("home");
+                    },
+                  );
+                }}
+              >
+                {skipArmed ? t.skipConfirm : t.skipShort}
+              </button>
+            )}
             {removedHere > 0 && <span className={cn(chip, "ring-warning/40")}>{fmt(t.removedBadge, { n: removedHere })}</span>}
           </div>
           <div className="mt-2 flex items-center justify-between">
@@ -640,6 +653,32 @@ export function RoundFlow({
               );
             })}
           </ul>
+          {initial.settings.checks.length > 0 && (
+            <section className="flex flex-col gap-2">
+              <p className="px-2 pt-2 text-[15px] font-semibold">{t.checksTitle}</p>
+              <ul className="surface-card flex flex-col px-2 py-1">
+                {initial.settings.checks.map((label) => {
+                  const done = draft.checks?.[label] === true;
+                  return (
+                    <li key={label} className="border-b border-border/60 last:border-0">
+                      <button
+                        type="button"
+                        role="checkbox"
+                        aria-checked={done}
+                        onClick={() =>
+                          updateDraft(current.id, (d) => ({ ...d, checks: { ...(d.checks ?? {}), [label]: !done } }))
+                        }
+                        className="flex min-h-14 w-full items-center gap-3 px-1 py-2 text-left"
+                      >
+                        <Tick done={done} />
+                        <span className={cn("text-[15.5px] font-semibold", done && "text-muted-foreground")}>{label}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
         </div>
 
         <BottomBar>
@@ -793,6 +832,15 @@ export function RoundFlow({
           </div>
         </div>
         {readyAt && <BigClock since={readyAt} startedLabel={fmt(t.running, { time: f.time(readyAt) })} />}
+        {initial.settings.message && (
+          <div className="mt-3 flex gap-3 rounded-2xl bg-primary/10 px-4 py-3">
+            <MessageSquareText className="mt-0.5 size-5 shrink-0 text-[#8a6117]" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold text-[#8a6117]">{t.messageTitle}</p>
+              <p className="whitespace-pre-wrap text-[15px] leading-snug">{initial.settings.message}</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* The route as a line with a stop for every step: done in green, the
@@ -997,10 +1045,12 @@ function ReturnsScreen({
   onFinish,
   visited,
   skipped,
+  askKm,
 }: {
   rows: ReturnRow[];
   busy: boolean;
   header: React.ReactNode;
+  askKm: boolean;
   onFinish: (
     choices: { productId: string; source: "leftover" | "removed"; reason: string | null; disposition: string }[],
     km: number | null,
@@ -1076,19 +1126,21 @@ function ReturnsScreen({
             {list(removed)}
           </>
         )}
-        <label className="surface-card mt-2 flex items-center gap-3 px-4 py-3">
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span className="text-[15px] font-semibold">{m.refill.kmLabel}</span>
-            <span className="text-[13px] text-muted-foreground">{t.kmOptional}</span>
-          </span>
-          <input
-            inputMode="decimal"
-            value={km}
-            onChange={(event) => setKm(event.target.value)}
-            placeholder="km"
-            className="tabular h-12 w-24 rounded-xl bg-surface px-3 text-right text-[17px] font-semibold"
-          />
-        </label>
+        {askKm && (
+          <label className="surface-card mt-2 flex items-center gap-3 px-4 py-3">
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="text-[15px] font-semibold">{m.refill.kmLabel}</span>
+              <span className="text-[13px] text-muted-foreground">{t.kmOptional}</span>
+            </span>
+            <input
+              inputMode="decimal"
+              value={km}
+              onChange={(event) => setKm(event.target.value)}
+              placeholder="km"
+              className="tabular h-12 w-24 rounded-xl bg-surface px-3 text-right text-[17px] font-semibold"
+            />
+          </label>
+        )}
       </div>
       <BottomBar>
         <button
