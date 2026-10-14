@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono, Montserrat } from "next/font/google";
 import { I18nProvider } from "@/i18n/client";
-import { getLocale } from "@/i18n/server";
+import { getI18n, getLocale } from "@/i18n/server";
 import "./globals.css";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
@@ -13,13 +13,17 @@ const jetbrainsMono = JetBrains_Mono({
   weight: ["500", "700"],
 });
 
-export const metadata: Metadata = {
-  title: { default: "Vendly", template: "%s · Vendly" },
-  description: "Vending Data Solutions. Statistics Won't Lie.",
-  applicationName: "Vendly",
-  appleWebApp: { capable: true, title: "Vendly", statusBarStyle: "default" },
-  icons: { apple: "/pwa-icon/180" },
-};
+// In the reader's language: this is what a shared link (an invitation in WhatsApp) shows.
+export async function generateMetadata(): Promise<Metadata> {
+  const { m } = await getI18n();
+  return {
+    title: { default: "Vendly", template: "%s · Vendly" },
+    description: `${m.brand.subtitle}. ${m.brand.tagline}.`,
+    applicationName: "Vendly",
+    appleWebApp: { capable: true, title: "Vendly", statusBarStyle: "default" },
+    icons: { apple: "/pwa-icon/180" },
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: "#f6f6f7",

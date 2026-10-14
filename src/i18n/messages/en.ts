@@ -1232,6 +1232,14 @@ export const en = {
     notifyHint: "Turn on notifications in Settings to get them.",
     saved: "Saved. Applies from the next round.",
   },
+  errors: {
+    title: "Something went wrong",
+    hint: "Try again. If it still does not work, reload the page.",
+    retry: "Try again",
+    home: "Go to the overview",
+    notFoundTitle: "This page does not exist",
+    notFoundHint: "It may have moved, or the link is no longer valid.",
+  },
 };
 
 export type Messages = typeof en;

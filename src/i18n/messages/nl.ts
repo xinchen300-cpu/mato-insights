@@ -1232,4 +1232,12 @@ export const nl: Messages = {
     notifyHint: "Zet meldingen aan in Instellingen om ze te krijgen.",
     saved: "Opgeslagen. Geldt vanaf de volgende ronde.",
   },
+  errors: {
+    title: "Er liep iets mis",
+    hint: "Probeer het nog eens. Lukt het dan nog niet, laad de pagina opnieuw.",
+    retry: "Opnieuw proberen",
+    home: "Naar het overzicht",
+    notFoundTitle: "Deze pagina bestaat niet",
+    notFoundHint: "Misschien is ze verplaatst, of is de link niet meer geldig.",
+  },
 };

@@ -280,7 +280,8 @@ export function Wizard({
                       id="username"
                       name="username"
                       required
-                      autoComplete="username"
+                      // The Payter login, not Vendly's: a password manager must not fill in Vendly's own.
+                      autoComplete="off"
                       autoCapitalize="none"
                       autoCorrect="off"
                       spellCheck={false}
@@ -294,7 +295,7 @@ export function Wizard({
                       name="password"
                       type="password"
                       required
-                      autoComplete="current-password"
+                      autoComplete="off"
                       className={inputClass}
                     />
                   </div>

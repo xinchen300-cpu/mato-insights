@@ -1,7 +1,8 @@
 export const locales = ["en", "nl", "fr"] as const;
 export type Locale = (typeof locales)[number];
 
-export const defaultLocale: Locale = "en";
+/** Without a choice and without a browser preference Vendly knows: most of its users read Dutch. */
+export const defaultLocale: Locale = "nl";
 export const LOCALE_COOKIE = "vendly-locale";
 
 // Belgian conventions for money, numbers and dates in every language.

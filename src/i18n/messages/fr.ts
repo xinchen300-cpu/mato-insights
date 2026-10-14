@@ -1232,4 +1232,12 @@ export const fr: Messages = {
     notifyHint: "Activez les notifications dans Réglages pour les recevoir.",
     saved: "Enregistré. Valable dès la prochaine tournée.",
   },
+  errors: {
+    title: "Un problème est survenu",
+    hint: "Réessayez. Si cela ne marche toujours pas, rechargez la page.",
+    retry: "Réessayer",
+    home: "Vers l'aperçu",
+    notFoundTitle: "Cette page n'existe pas",
+    notFoundHint: "Elle a peut-être été déplacée, ou le lien n'est plus valable.",
+  },
 };
