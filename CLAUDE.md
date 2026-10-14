@@ -27,7 +27,8 @@ verkoopt. Bouw daar tegenin.
 - `src/lib/stats.ts` — de statistiek. `src/lib/insights.ts`, `expiry.ts`, `stock.ts`,
   `refill.ts`, `layout.ts` voor de rest van de logica.
 - `src/lib/sync.ts` + `supabase/functions/payter-sync` — Payter binnenhalen. De sync draait
-  elke 5 minuten via **pg_cron op Supabase**, niet via Vercel cron.
+  elke 15 seconden via **pg_cron op Supabase** (`payter-sync-every-15-sec`), niet via Vercel cron. Payter zelf
+  heeft ±30 seconden nodig, dus een verkoop staat er meestal binnen de minuut.
 - `src/i18n/messages/{nl,fr,en}.ts` — ±660 regels elk.
 
 ## De drie regels die er echt toe doen
