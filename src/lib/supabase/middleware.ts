@@ -40,7 +40,9 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && (pathname === "/login" || pathname === "/signup")) {
+  // Signed in already: the login page has nothing to offer, and neither does
+  // signing up, unless it is to take up an invitation with this account.
+  if (user && (pathname === "/login" || (pathname === "/signup" && !request.nextUrl.searchParams.has("invite")))) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     url.search = "";
