@@ -14,7 +14,7 @@ export async function leakedHashTails(prefix: string): Promise<string[]> {
   if (!/^[0-9A-F]{5}$/.test(prefix)) return [];
   try {
     const response = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
-      headers: { "Add-Padding": "true", "User-Agent": "MATO Insights" },
+      headers: { "Add-Padding": "true", "User-Agent": "Vendly" },
       next: { revalidate: 86_400 },
       signal: AbortSignal.timeout(4000),
     });

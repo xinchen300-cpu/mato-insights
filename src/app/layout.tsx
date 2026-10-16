@@ -17,10 +17,10 @@ const jetbrainsMono = JetBrains_Mono({
 export async function generateMetadata(): Promise<Metadata> {
   const { m } = await getI18n();
   return {
-    title: { default: "MATO Insights", template: "%s · MATO Insights" },
+    title: { default: "Vendly", template: "%s · Vendly" },
     description: `${m.brand.subtitle}. ${m.brand.tagline}.`,
-    applicationName: "MATO Insights",
-    appleWebApp: { capable: true, title: "MATO Insights", statusBarStyle: "default" },
+    applicationName: "Vendly",
+    appleWebApp: { capable: true, title: "Vendly", statusBarStyle: "default" },
     icons: { apple: "/pwa-icon/180" },
   };
 }

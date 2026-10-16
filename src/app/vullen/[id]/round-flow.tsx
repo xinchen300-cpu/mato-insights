@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ChevronLeft, ChevronRight, MessageSquareText, Timer, TriangleAlert, Truck } from "lucide-react";
-import { InsightsWordmark } from "@/components/brand/insights-mark";
+import { VendlyWordmark } from "@/components/brand/vendly-mark";
 import { FrontView, type FrontSlot } from "@/components/machine/front-view";
 import { RefillTips } from "@/components/refill/refill-tips";
 import { useI18n } from "@/i18n/client";
@@ -464,7 +464,7 @@ export function RoundFlow({
           {t.backToRound}
         </button>
       ) : (
-        <InsightsWordmark className="h-[24px] w-auto text-[#2a2520]" />
+        <VendlyWordmark className="h-[24px] w-auto text-[#2a2520]" />
       )}
       {error ? (
         <span className="text-[13px] font-semibold text-negative">{error}</span>

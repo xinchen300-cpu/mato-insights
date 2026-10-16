@@ -39,5 +39,5 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     ]),
   ];
 
-  return csvResponse(`mato-insights-refill-${sheet.created_at.slice(0, 10)}.csv`, rows);
+  return csvResponse(`vendly-refill-${sheet.created_at.slice(0, 10)}.csv`, rows);
 }

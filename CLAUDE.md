@@ -1,8 +1,8 @@
 @AGENTS.md
 
-# MATO Insights — dashboard voor vending-uitbaters
+# Vendly — dashboard voor vending-uitbaters
 
-**Naam:** naar de gebruiker toe heet dit sinds 14-10-2026 weer **MATO Insights** (30-09 → 11-10 MATO Insights, 11-10 → 14-10 Vendly). Logo `[mato insights]`, merk `[m]`. De naam staat in `src/app/layout.tsx`, `src/app/manifest.ts`, het logo `src/components/brand/insights-mark.tsx`, de app-iconen (`src/app/icon.svg`, `src/app/pwa-icon`), `public/brand/mato-insights-*.svg` en als `m.brand.name` / op ±30 plaatsen in elk `messages/*.ts`. Schrijf "Vendly" nergens meer in tekst die een gebruiker leest. De repo heet `mato-insights`; het Vercel-project heet nog `vendly` (interne naam, mag blijven).
+**Naam:** naar de gebruiker toe heet dit **Vendly**. Van 30-09 tot 11-10-2026 heette het "MATO Insights", en op 14-10 even opnieuw (commit 5fbd0a3, logo `[mato insights]`); op 16-10-2026 koos Xin "laat voorlopig Vendly", dus dat is teruggedraaid (logo `[vendly]`, merk `[v]`). De naam staat in `src/app/layout.tsx`, `src/app/manifest.ts`, het logo `src/components/brand/vendly-mark.tsx`, de app-iconen (`src/app/icon.svg`, `src/app/pwa-icon`), `public/brand/vendly-*.svg` en als `m.brand.name` / op ±30 plaatsen in elk `messages/*.ts`. Schrijf "MATO Insights" nergens in tekst die een gebruiker leest zolang Xin niet anders beslist. De repo heet `mato-insights`; het Vercel-project heet `vendly`.
 
 **Drie dingen moeten `vendly` blijven heten, hernoemen breekt ze** (ook `vendly:hide-numbers` in localStorage hoort daarbij):
 - `LOCALE_COOKIE = "vendly-locale"` in `src/i18n/config.ts` — hernoemen wist ieders taalkeuze.

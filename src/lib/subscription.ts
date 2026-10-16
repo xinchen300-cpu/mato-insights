@@ -43,7 +43,7 @@ export async function startMandateCheckout(orgId: string, returnPath: string): P
   const payment = await createFirstPayment({
     customerId,
     orgId,
-    description: "MATO Insights – betaalgegevens bevestigen",
+    description: "Vendly: betaalgegevens bevestigen",
     redirectUrl: `${origin}${returnPath}`,
     webhookUrl: `${origin}/api/mollie/webhook`,
   });
@@ -86,7 +86,7 @@ export async function ensureSubscription(orgId: string, origin: string): Promise
     mandateId: org.mollie_mandate_id as string,
     amountEur: priceInclVat(billing.plan),
     startDate,
-    description: `MATO Insights vanaf ${startDate}`,
+    description: `Vendly vanaf ${startDate}`,
     webhookUrl: `${origin}/api/mollie/webhook`,
     orgId,
   });

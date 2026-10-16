@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "MATO Insights",
-    short_name: "MATO Insights",
+    name: "Vendly · Vending Data Solutions",
+    short_name: "Vendly",
     description: "Statistics Won't Lie",
     start_url: "/",
     display: "standalone",
