@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, Clock, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import { Avatar, initial } from "@/components/list-row";
+import { SuccessCheck } from "@/components/motion/success";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -621,17 +622,20 @@ export function Wizard({
 
         {step === "ready" && (
           <>
-            <h1 style={{ "--i": 0 } as React.CSSProperties} className={heroTitleClass}>
+            <div style={{ "--i": 0 } as React.CSSProperties} className="mb-7">
+              <SuccessCheck sparks className="size-16" />
+            </div>
+            <h1 style={{ "--i": 1 } as React.CSSProperties} className={heroTitleClass}>
               {m.welcome.readyTitle}
             </h1>
-            <p style={{ "--i": 1 } as React.CSSProperties} className={cn(bodyClass, "mt-4")}>
+            <p style={{ "--i": 2 } as React.CSSProperties} className={cn(bodyClass, "mt-4")}>
               {m.welcome.readyBody}
             </p>
-            <p style={{ "--i": 2 } as React.CSSProperties} className={cn(noteClass, "mt-7")}>
+            <p style={{ "--i": 3 } as React.CSSProperties} className={cn(noteClass, "mt-7")}>
               {m.welcome.readyNext}
               <span className="mt-2 block text-muted-foreground">{m.welcome.readyLater}</span>
             </p>
-            <div style={{ "--i": 3 } as React.CSSProperties} className={actionsClass}>
+            <div style={{ "--i": 4 } as React.CSSProperties} className={actionsClass}>
               <Button size="lg" onClick={() => leave("/")} disabled={isPending} className="w-full sm:w-auto">
                 {m.welcome.readyToDashboard}
                 <ArrowRight />

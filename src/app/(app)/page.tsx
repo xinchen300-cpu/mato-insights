@@ -24,6 +24,7 @@ import {
   getStatsReport,
   getUnassigned,
   getSetupState,
+  type OpenRound,
 } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -51,18 +52,7 @@ export default async function OverviewPage() {
   await denyFiller();
   const { m, f } = await getI18n();
   const orgId = await getCurrentOrgId();
-
-  // Wie nog nooit door de rondleiding is, hoort niet op een leeg dashboard te
-  // landen. Eén keer, en daarna nooit meer.
   const operator = await isOperator();
-  if (orgId && operator) {
-    const { data: org } = await createAdminClient()
-      .from("organizations")
-      .select("onboarded_at")
-      .eq("id", orgId)
-      .maybeSingle();
-    if (org && !org.onboarded_at) redirect("/welkom");
-  }
 
   if (!orgId) {
     // Signed in but in no organisation: registered without the invitation's
@@ -84,13 +74,12 @@ export default async function OverviewPage() {
     );
   }
 
-  // Only the rounds actually out (started), and only for the operator.
-  const liveRounds = operator ? (await getOpenRounds(orgId)).filter((round) => round.readyAt) : [];
-
+  // Everything on the page is asked for at once, each loader with its own
+  // checks, and the onboarding question below runs alongside instead of first.
   // Weekday patterns only from whole weeks, and enough of them (see lib/stats).
   const patternWeeks = 8;
-  const [today, week, month, weeks, machines, stock, unassigned, expiring, lastSales, syncedAt, setup, recentSales] =
-    await Promise.all([
+  const loads = Promise.all([
+    operator ? getOpenRounds(orgId) : Promise.resolve<OpenRound[]>([]),
     getStatsReport(orgId, { period: "today" }),
     getStatsReport(orgId, { period: "week" }),
     getStatsReport(orgId, { period: "month" }),
@@ -104,6 +93,24 @@ export default async function OverviewPage() {
     getSetupState(orgId),
     getLiveSales(orgId),
   ]);
+  // A redirect below leaves it unawaited: a failure in it must not go unhandled.
+  loads.catch(() => undefined);
+
+  // Wie nog nooit door de rondleiding is, hoort niet op een leeg dashboard te
+  // landen. Eén keer, en daarna nooit meer. Wat al geladen werd, vervalt dan.
+  if (operator) {
+    const { data: org } = await createAdminClient()
+      .from("organizations")
+      .select("onboarded_at")
+      .eq("id", orgId)
+      .maybeSingle();
+    if (org && !org.onboarded_at) redirect("/welkom");
+  }
+
+  const [openRounds, today, week, month, weeks, machines, stock, unassigned, expiring, lastSales, syncedAt, setup, recentSales] =
+    await loads;
+  // Only the rounds actually out (started), and only for the operator.
+  const liveRounds = openRounds.filter((round) => round.readyAt);
 
   if (month.totals.units === 0 && weeks.totals.units === 0) {
     return (

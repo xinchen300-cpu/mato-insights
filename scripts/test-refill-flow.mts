@@ -1,7 +1,7 @@
 // Checks the refill round logic (src/lib/refill-flow.ts). Run: npm run test:flow
 import { uncovered } from "../src/lib/assignments.ts";
 import { cleanRoundSettings, DEFAULT_ROUND_SETTINGS } from "../src/lib/round-settings.ts";
-import { allocate, itemReport, roundActual, roundCost, levelAfter, onlyMine, pickList, returnsFor, roundTimings, slotKey, pickKey, type FlowLine } from "../src/lib/refill-flow.ts";
+import { allocate, itemReport, roundActual, roundCost, levelAfter, onlyMine, pickList, returnsFor, roundTimings, slotKey, pickKey, type FlowLine, type StopRecord } from "../src/lib/refill-flow.ts";
 import type { RefillLine, RefillSheet } from "../src/lib/types.ts";
 import { compareMoneySince } from "../src/lib/stats.ts";
 const L = (sel: string, product: string, cap: number, stock: number | null, take: number, row = 1): FlowLine =>
@@ -139,3 +139,77 @@ ok("money: pieces and money up is up", compareMoneySince(200, 100, 800, 500, nul
 ok("money: more pieces for less money is noise, not up", compareMoneySince(200, 100, 450, 500, null, "2026-09-01") === "noise");
 ok("money: fewer pieces for more money is noise, not down", compareMoneySince(50, 100, 520, 500, null, "2026-09-01") === "noise");
 ok("money: too few stays too few", compareMoneySince(10, 8, 50, 20, null, "2026-09-01") === "tooFew");
+
+// ── A filler's own figures (src/lib/filler-stats.ts) and the time rules in stats.ts ──
+import { compareTimes, isRecord, MIN_ROUNDS } from "../src/lib/stats.ts";
+import { fillerStats, levelFor, progressFrame, roundEta, roundResult, roundReward, type MyRound } from "../src/lib/filler-stats.ts";
+
+ok("times: fewer than MIN_ROUNDS earlier rounds is no comparison", MIN_ROUNDS === 3 && compareTimes(30, [60, 62]) === "tooFew");
+ok("times: inside the usual spread is usual", compareTimes(57, [60, 62, 58]) === "usual");
+ok("times: well under the usual time is faster", compareTimes(50, [60, 62, 58]) === "faster");
+ok("times: well over is slower", compareTimes(75, [60, 62, 58]) === "slower");
+ok("times: rounds that happen to agree do not make a second a trend", compareTimes(59, [60, 60, 60, 60]) === "usual" && compareTimes(57, [60, 60, 60, 60]) === "usual");
+ok("times: one flat tyre does not widen the spread", compareTimes(50, [60, 61, 59, 60, 140]) === "faster");
+ok("record: needs MIN_ROUNDS earlier rounds to beat", !isRecord(10, [60, 62]) && isRecord(57, [60, 62, 58]));
+ok("record: a tie is no record", !isRecord(58, [60, 62, 58]));
+
+ok("level: a new filler is on level 1", levelFor(0).level === 1 && levelFor(0).progress === 0 && levelFor(99).level === 1);
+ok("level: 100 pieces is level 2, 300 is 3, 600 is 4", levelFor(100).level === 2 && levelFor(299).level === 2 && levelFor(300).level === 3 && levelFor(600).level === 4);
+ok("level: progress runs from where the level began", levelFor(200).from === 100 && levelFor(200).to === 300 && levelFor(200).progress === 0.5);
+
+const on = (day: number, hour: number, minute = 0) => new Date(Date.UTC(2026, 9, day, hour, minute)).toISOString();
+const done = (filled: number[], from: string, to: string, skipped = false): StopRecord => ({
+  checkedAt: skipped ? null : from, completedAt: to, skipped, technical: false, note: null,
+  lines: skipped ? [] : filled.map((n, i) => ({ selection: String(i + 1), prepared: n, filled: n, removed: [], countAfter: null, full: false })),
+});
+// One route (a, b), every week; minutes 60, 62, 58, then the round under test.
+const R = (id: string, day: number, minutes: number, opts: { skip?: boolean; machines?: string[]; filled?: number } = {}): MyRound => {
+  const machineIds = opts.machines ?? ["a", "b"];
+  const start = on(day, 8);
+  const end = new Date(Date.parse(start) + minutes * 60_000).toISOString();
+  return { id, readyAt: start, completedAt: end, machineIds, stops: Object.fromEntries(machineIds.map((m, i) =>
+    [m, done([opts.filled ?? 10, opts.filled ?? 10], on(day, 8, 10 + i * 20), on(day, 8, 20 + i * 20), opts.skip === true && i === 1)])) };
+};
+const history = [R("r1", 1, 60), R("r2", 2, 62), R("r3", 3, 58)];
+
+const one = roundResult(R("x", 5, 45, { skip: true }));
+ok("result: a skipped machine is not visited, and its pieces do not count", one.visited === 1 && one.skipped === 1 && one.items === 20 && !one.complete);
+ok("result: the route is the machines in any order", roundResult(R("y", 5, 45, { machines: ["b", "a"] })).route === roundResult(R("z", 5, 45)).route);
+ok("result: a round left open overnight has no time", roundResult({ ...R("o", 5, 60), completedAt: on(6, 9) }).minutes === null);
+
+const first = roundReward([], R("f", 1, 60));
+ok("reward: a first round compares with nothing, and earns the first badge", first.verdict === "tooFew" && !first.record && first.newBadges.join() === "first");
+const quick = roundReward(history, R("q", 8, 50));
+ok("reward: clearly under the usual time on this route is faster and a record", quick.verdict === "faster" && quick.record && quick.previousBest === 58 && quick.usual === 60);
+const close = roundReward(history, R("c", 8, 57));
+ok("reward: a minute under the best is a record, but no trend", close.record && close.verdict === "usual");
+const skipped = roundReward(history, R("s", 8, 30, { skip: true }));
+ok("reward: a round with a skip sets no time", !skipped.record && skipped.verdict === "tooFew");
+const elsewhere = roundReward(history, R("e", 8, 20, { machines: ["c"] }));
+ok("reward: another route has no earlier times", elsewhere.verdict === "tooFew" && !elsewhere.record && elsewhere.earlierOnRoute === 0);
+const later = roundReward([...history, R("later", 20, 40)], R("q", 8, 50));
+ok("reward: looking back, rounds that ended later do not count against it", later.record && later.earlierOnRoute === 3);
+// Two lines on each of two machines: a round of `filled` puts in four times that.
+const big = roundReward([R("b1", 1, 60, { filled: 120 }), R("b2", 2, 60, { filled: 120 })], R("b3", 3, 60, { filled: 15 }));
+ok("reward: crossing 1.000 pieces earns that badge, with the level before and after", big.newBadges.includes("items1000") && big.before.items === 960 && big.after.items === 1020 && big.after.level === 5);
+
+const stats = fillerStats([...history, R("q", 8, 50), R("w", 13, 70, { machines: ["c"] }), R("w2", 14, 66, { skip: true })], "Europe/Brussels", new Date(on(15, 12)));
+ok("stats: totals over every round", stats.rounds === 6 && stats.items === 4 * 40 + 20 + 20 && stats.visits === 10);
+ok("stats: this week is Monday 12 October on", stats.week.rounds === 2 && stats.week.items === 40);
+ok("stats: records counted, the newest one remembered", stats.records === 1 && stats.lastRecord?.minutes === 50 && stats.lastRecord.at === R("q", 8, 50).completedAt);
+const route = stats.routes[0];
+ok("stats: per route the best, the usual and the last complete time", route.rounds === 4 && route.best === 50 && route.usual === 59 && route.last === null);
+ok("stats: a record is marked on its round, newest first", stats.recent[0].id === "w2" && stats.recent.find((r) => r.id === "q")?.record === true);
+ok("stats: the record badge is earned when the record was set", stats.badges.find((b) => b.id === "record")?.earnedAt === R("q", 8, 50).completedAt);
+
+const legs = { "start→a": { minutes: 10, count: 2 }, "b→a": { minutes: 15, count: 1 }, "b→end": { minutes: 12, count: 2 } };
+const machinesAt = { a: { minutes: 8, count: 2 }, b: { minutes: 6, count: 2 } };
+const t0 = Date.parse(on(16, 8));
+ok("eta: the drives and the work still ahead, then back", roundEta({ remaining: ["a", "b"], from: "start", since: on(16, 8), times: { machines: machinesAt, legs }, now: t0 }) === t0 + (10 + 8 + 15 + 6 + 12) * 60_000);
+ok("eta: never before now", roundEta({ remaining: ["b"], from: "a", since: on(16, 8), times: { machines: machinesAt, legs }, now: t0 + 60 * 60_000 }) === t0 + (60 + 6 + 12) * 60_000);
+ok("eta: one drive never measured is no estimate", roundEta({ remaining: ["a", "c"], from: "start", since: on(16, 8), times: { machines: machinesAt, legs }, now: t0 }) === null);
+ok("eta: only the way back is left", roundEta({ remaining: [], from: "b", since: on(16, 8), times: { machines: machinesAt, legs }, now: t0 }) === t0 + 12 * 60_000);
+ok("frame: what is done before halfway, what is left from halfway", progressFrame(1, 4) === "done" && progressFrame(2, 4) === "left" && progressFrame(0, 1) === "done");
+const threeRecords = fillerStats([R("t1", 1, 60), R("t2", 2, 62), R("t3", 3, 58), R("t4", 4, 57), R("t5", 5, 56), R("t6", 6, 59), R("t7", 7, 55)], "Europe/Brussels", new Date(on(15, 12)));
+ok("badges: three records earn '3 records', on the round of the third", threeRecords.records === 3 && threeRecords.badges.find((b) => b.id === "records3")?.earnedAt === R("t7", 7, 55).completedAt);
+ok("badges: no badge counts rounds without a skip", !threeRecords.badges.some((b) => (b.id as string).startsWith("streak")));

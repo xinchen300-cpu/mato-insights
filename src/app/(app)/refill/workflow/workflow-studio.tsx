@@ -23,6 +23,7 @@ import { VendlyMark, VendlyWordmark } from "@/components/brand/vendly-mark";
 import { MachineIcon } from "@/components/machine/machine-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SuccessCheck } from "@/components/motion/success";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
 import { MAX_CHECKS, MAX_CHECK_LENGTH, MAX_MESSAGE_LENGTH, type RoundSettings } from "@/lib/round-settings";
@@ -532,14 +533,14 @@ function FillerScreen({ step, settings, names }: { step: Step; settings: RoundSe
       </>
     );
   }
+  // As the filler's own end screen: the tick, the time, then what the round earned.
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-      <span className="grid size-14 place-items-center rounded-full bg-foreground text-background">
-        <Check className="size-7" strokeWidth={2.6} />
-      </span>
-      <p className="text-[22px] font-bold tracking-[-0.03em]">{r.thanks}</p>
+    <div className="flex flex-1 flex-col items-center justify-center gap-2.5 text-center">
+      <SuccessCheck className="size-14" />
+      <p className="mt-1 text-[20px] font-bold tracking-[-0.03em]">{r.roundDone}</p>
+      <p className="tabular text-[26px] font-bold leading-none tracking-[-0.04em]">1 u 12 min</p>
       <p className="text-muted-foreground">{fmt(r.thanksSummary, { machines: 3, filled: 38, removed: 1, back: 1 })}</p>
-      <p className="font-semibold">{fmt(r.took, { time: "1 u 12 min" })}</p>
+      <p className="mt-1 w-full rounded-xl bg-primary/10 px-3 py-2 font-semibold">{r.recordTitle}</p>
     </div>
   );
 }

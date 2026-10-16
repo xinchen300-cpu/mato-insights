@@ -14,6 +14,7 @@ import {
   authLink,
   authTitle,
 } from "@/components/auth-frame";
+import { SuccessCheck } from "@/components/motion/success";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,6 +41,8 @@ export function SignupForm({
   const [loading, setLoading] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [exists, setExists] = useState(false);
+  // Signed in straight away: the name to welcome while the app opens.
+  const [welcome, setWelcome] = useState<string | null>(null);
   // Back here after signing in, so the invitation can be taken up.
   const signInHref = invite ? `/login?next=${encodeURIComponent(`/signup?invite=${invite}`)}` : "/login";
 
@@ -86,9 +89,24 @@ export function SignupForm({
       console.error(error);
       return setError(known[error.code ?? ""] ?? m.common.error);
     }
-    // With email confirmation off, Supabase signs the user in right away.
-    if (data.session) window.location.href = "/";
-    else setSentTo(email);
+    // With email confirmation off, Supabase signs the user in right away. The
+    // app starts opening at once; the welcome only fills the moment it takes.
+    if (data.session) {
+      setWelcome(name || email.split("@")[0]);
+      window.location.href = "/";
+    } else setSentTo(email);
+  }
+
+  if (welcome !== null) {
+    return (
+      <div className={authCard} role="status">
+        <div className="flex flex-col items-center gap-3 py-3 text-center">
+          <SuccessCheck sparks className="mb-2 size-16" />
+          <h1 className={authTitle}>{fmt(m.auth.welcomeIn, { name: welcome })}</h1>
+          <p className={authHint}>{m.auth.welcomeInHint}</p>
+        </div>
+      </div>
+    );
   }
 
   if (sentTo) {

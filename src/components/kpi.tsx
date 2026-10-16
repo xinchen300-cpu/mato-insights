@@ -1,4 +1,5 @@
 import { Delta } from "@/components/delta";
+import { RollingNumber } from "@/components/motion/rolling-number";
 import type { Formatters } from "@/i18n/format";
 import type { Verdict } from "@/lib/stats";
 import { cn } from "@/lib/utils";
@@ -61,7 +62,9 @@ export function KpiHero({
   return (
     <div className={cn("flex flex-col gap-2", className)}>
       <p className="text-[14px] font-medium text-muted-foreground">{label}</p>
-      <p className="tabular text-[40px] font-semibold leading-none tracking-[-0.04em] sm:text-[48px]">{value}</p>
+      <p className="tabular text-[40px] font-semibold leading-none tracking-[-0.04em] sm:text-[48px]">
+        <RollingNumber value={value} />
+      </p>
       <ChangeLine compare={compare} detail={detail} f={f} />
     </div>
   );

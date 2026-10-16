@@ -5,6 +5,7 @@ import { denyFillerAccess, getScope, isFiller, isOperator, requireOperator, requ
 import { displayName } from "@/lib/people";
 import { cleanRoundSettings, type RoundSettings } from "@/lib/round-settings";
 import { onlyMine, roundTimings, slotKey, type Average, type FlowLine, type RoundTimings, type ShopView, type StopRecord } from "@/lib/refill-flow";
+import type { MyRound } from "@/lib/filler-stats";
 import { terminalStatus, type TerminalStatus } from "@/lib/terminal-status";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
 import { reportDay } from "@/lib/stats";
@@ -292,20 +293,19 @@ export type OpenRound = {
 export async function getOpenRounds(orgId: string): Promise<OpenRound[]> {
   if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
   const admin = createAdminClient();
-  const { data: sheets } = await admin
-    .from("refill_sheets")
-    .select("id, created_at, ready_at, machine_ids, stops, filled_by")
-    .eq("org_id", orgId)
-    .eq("flow_version", 2)
-    .is("completed_at", null)
-    .order("created_at", { ascending: false })
-    .limit(20);
-  const ids = [...new Set((sheets ?? []).flatMap((sheet) => (sheet.machine_ids ?? []) as string[]))];
-  const { data: machines } = await admin
-    .from("machines")
-    .select("id, name")
-    .eq("org_id", orgId)
-    .in("id", ids.length ? ids : [NOTHING]);
+  // The names come alongside the rounds, not after them: every machine of the
+  // organisation, of which only the rounds' own are used.
+  const [{ data: sheets }, { data: machines }] = await Promise.all([
+    admin
+      .from("refill_sheets")
+      .select("id, created_at, ready_at, machine_ids, stops, filled_by")
+      .eq("org_id", orgId)
+      .eq("flow_version", 2)
+      .is("completed_at", null)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    admin.from("machines").select("id, name").eq("org_id", orgId),
+  ]);
   const name = new Map((machines ?? []).map((row) => [row.id as string, row.name as string]));
   return (sheets ?? []).map((sheet) => {
     const stops = (sheet.stops ?? {}) as Record<string, StopRecord>;
@@ -358,6 +358,43 @@ export async function getRouteTimes(orgId: string): Promise<RouteTimes> {
   if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
   const { machines, legs } = await timedRounds(orgId);
   return { machines, legs };
+}
+
+/**
+ * The finished step-by-step rounds of the person looking, for their own
+ * figures: the operator or a filler, in their own organisation. Machines,
+ * pieces and clocks only, no money, and nobody else's rounds. A round knows
+ * its filler by the name it got at "Start ronde" (see people.ts), so this
+ * matches on that same name.
+ */
+export async function getMyRounds(orgId: string): Promise<MyRound[]> {
+  if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
+  const {
+    data: { user },
+  } = await (await createClient()).auth.getUser();
+  const me = displayName(user)?.toLocaleLowerCase();
+  if (!me) return [];
+  // ilike narrows it in the database; its wildcards (% _ *) could still let a
+  // look-alike name through, so the exact comparison below decides.
+  const { data } = await createAdminClient()
+    .from("refill_sheets")
+    .select("id, filled_by, ready_at, completed_at, machine_ids, stops")
+    .eq("org_id", orgId)
+    .eq("flow_version", 2)
+    .ilike("filled_by", me)
+    .not("ready_at", "is", null)
+    .not("completed_at", "is", null)
+    .order("completed_at", { ascending: false })
+    .limit(500);
+  return (data ?? [])
+    .filter((row) => (row.filled_by as string | null)?.trim().toLocaleLowerCase() === me)
+    .map((row) => ({
+      id: row.id as string,
+      readyAt: row.ready_at as string,
+      completedAt: row.completed_at as string,
+      machineIds: (row.machine_ids ?? []) as string[],
+      stops: (row.stops ?? {}) as Record<string, StopRecord>,
+    }));
 }
 
 export type FillerOverview = RoundTimings & {
@@ -815,8 +852,9 @@ export async function getLiveSales(
   orgId: string,
   { after = null, limit = 6 }: { after?: string | null; limit?: number } = {},
 ): Promise<LiveSale[]> {
-  await denyFillerAccess();
-  if ((await getScope()).orgId !== orgId) throw new Error("Not found");
+  // Both checks at once: polled from a route, where getScope is not cached.
+  const [, scope] = await Promise.all([denyFillerAccess(), getScope()]);
+  if (scope.orgId !== orgId) throw new Error("Not found");
   const [machines, shared] = await Promise.all([getMachines(orgId), sharedSelections(orgId)]);
   if (machines.length === 0) return [];
   // On a shared machine a shop's own slots are picked in the query itself, so

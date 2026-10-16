@@ -23,16 +23,20 @@ export default async function RefillMachinePage({
   const mode = rawMode === "correction" ? "correction" : "refill";
   const { m } = await getI18n();
   const orgId = await requireOrgId();
+  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
 
-  const machine = await getMachine(orgId, id);
+  // Everything at once: each loader keeps its own checks (another account's
+  // machine comes back as nothing), and nothing is shown before the machine
+  // turned out to be this account's. How long each product keeps lets the date
+  // picker suggest one, the same number the share-link sheet uses.
+  const [machine, slots, products, presets] = await Promise.all([
+    getMachine(orgId, id),
+    getMachineStock(orgId, [id]),
+    getProducts(orgId),
+    getShelfLifePresets(orgId),
+  ]);
   if (!machine) notFound();
-
-  const slots = await getMachineStock(orgId, [id]);
   if (slots.length === 0) redirect(`/machines/${id}/layout`);
-
-  // How long each product keeps, so the date picker can suggest one — the same
-  // number the share-link sheet uses.
-  const [products, presets] = await Promise.all([getProducts(orgId), getShelfLifePresets(orgId)]);
   const presetDays = new Map(presets.map((p) => [p.id, p.days]));
   const shelfLife = Object.fromEntries(
     products.map((p) => [

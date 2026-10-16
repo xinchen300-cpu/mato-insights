@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Avatar, initial } from "@/components/list-row";
+import { RollingNumber } from "@/components/motion/rolling-number";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
 import type { LiveSale } from "@/lib/data";
@@ -117,7 +118,9 @@ export function LiveSales({ initial: first }: { initial: LiveSale[] }) {
                     {sale.machineName} · {when(sale.occurredAt)}
                   </span>
                 </span>
-                <span className="tabular shrink-0 text-[15px] font-semibold">{f.euro(sale.amount)}</span>
+                <span className="tabular shrink-0 text-[15px] font-semibold">
+                  {isNew ? <RollingNumber value={f.euro(sale.amount)} /> : f.euro(sale.amount)}
+                </span>
               </Link>
             </li>
           );

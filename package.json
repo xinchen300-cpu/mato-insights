@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "check:guards": "node scripts/check-filler-guards.mjs",
-    "test:flow": "node --experimental-strip-types --no-warnings scripts/test-refill-flow.mts"
+    "test:flow": "node --experimental-strip-types --no-warnings --import ./scripts/resolve-app-paths.mjs scripts/test-refill-flow.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

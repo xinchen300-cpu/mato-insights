@@ -9,7 +9,8 @@ import { buttonVariants } from "@/components/ui/button";
 import { duration, fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { LiveRounds } from "@/components/refill/live-rounds";
-import { getMachines, getOpenRounds, getRefillSheet, getRunRates, getRunSummary } from "@/lib/data";
+import { getMachines, getOpenRounds, getRefillSheet, getRunRates, getRunSummary, type OpenRound } from "@/lib/data";
+import type { Machine, RunSummaryRow } from "@/lib/types";
 import { linesToFill } from "@/lib/refill";
 import { roundActual, roundCost } from "@/lib/refill-flow";
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
@@ -40,17 +41,23 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
   const sheet = await getRefillSheet(orgId, id);
   if (!sheet) notFound();
 
-  // Only a closed run has something to report.
-  const summary = sheet.completed_at ? await getRunSummary(orgId, sheet.id) : [];
   // A stop with nothing to fill has no line to borrow a name from.
   const step = sheet.flow_version === 2;
   // A shop follows the round; doing it is for the operator and their fillers.
   const operator = await isOperator();
   const canFill = step && operator;
-  // Out right now: the same live card as on the overview, kept fresh.
-  const live = canFill && sheet.started_at && !sheet.completed_at ? (await getOpenRounds(orgId)).filter((r) => r.id === sheet.id) : [];
-  // Names for the stops, and each machine's distance there and back for the cost.
-  const fleet = step || (operator && sheet.completed_at) ? await getMachines(orgId) : [];
+  const timed = Boolean(sheet.started_at && sheet.completed_at);
+  // The rest at once, each loader with its own checks. Only a closed run has
+  // something to report; a round out right now gets the same live card as on
+  // the overview; the stops need names, and the cost each machine's distance
+  // there and back; the cost itself is the operator's, for a closed round.
+  const [summary, open, fleet, rates] = await Promise.all([
+    sheet.completed_at ? getRunSummary(orgId, sheet.id) : Promise.resolve<RunSummaryRow[]>([]),
+    canFill && sheet.started_at && !sheet.completed_at ? getOpenRounds(orgId) : Promise.resolve<OpenRound[]>([]),
+    step || (operator && sheet.completed_at) ? getMachines(orgId) : Promise.resolve<Machine[]>([]),
+    operator && sheet.completed_at && timed ? getRunRates(orgId) : Promise.resolve(null),
+  ]);
+  const live = open.filter((r) => r.id === sheet.id);
   const machineName = new Map(fleet.map((machine) => [machine.id, machine.name]));
 
   const total = sheet.lines.reduce((sum, l) => sum + l.to_add, 0);
@@ -85,7 +92,6 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
   // What the round cost, for the operator only: its time and its kilometres at
   // the rates in Settings, with the sum written out next to it.
   const km = sheet.km === null ? null : Number(sheet.km);
-  const rates = operator && sheet.completed_at && minutes !== null ? await getRunRates(orgId) : null;
   const cost =
     rates && minutes !== null
       ? roundCost({

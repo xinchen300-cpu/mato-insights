@@ -175,6 +175,53 @@ export function lastFullWeeks(n: number, timeZone: string, now: Date = new Date(
   };
 }
 
+// ── Times: how long a filler took, against their own earlier times ──────────
+//
+// A round on the same machines takes a different time every week: traffic, a
+// machine that was emptier, a phone call. One quick round is no trend. The
+// spread is measured on the filler's own earlier rounds on that route, robustly
+// (the median distance to the median, scaled to a standard deviation, so one
+// round with a flat tyre does not widen it), and a round only counts as faster
+// or slower when it falls more than 1.96 of those outside the usual time.
+
+/** Below this many earlier rounds on a route, a time is not compared at all. */
+export const MIN_ROUNDS = 3;
+/** The spread is never taken narrower than this share of the usual time... */
+const MIN_SPREAD_SHARE = 0.08;
+/** ...or than this many minutes: a few rounds that happen to agree are no promise. */
+const MIN_SPREAD_MINUTES = 2;
+
+export type TimeVerdict = "tooFew" | "usual" | "faster" | "slower";
+
+const median = (values: number[]) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+};
+
+/** The usual time over earlier rounds, or null while there are too few to say. */
+export function usualTime(earlier: number[]): number | null {
+  return earlier.length >= MIN_ROUNDS ? median(earlier) : null;
+}
+
+/** One time against the same person's earlier times on the same work. */
+export function compareTimes(current: number, earlier: number[]): TimeVerdict {
+  const usual = usualTime(earlier);
+  if (usual === null) return "tooFew";
+  const mad = median(earlier.map((t) => Math.abs(t - usual)));
+  const spread = Math.max(1.4826 * mad, MIN_SPREAD_SHARE * usual, MIN_SPREAD_MINUTES);
+  const z = (usual - current) / spread;
+  return z >= Z95 ? "faster" : z <= -Z95 ? "slower" : "usual";
+}
+
+/**
+ * The best time ever on this work. A fact, not a trend, but one with nothing
+ * before it beats nobody: a record needs MIN_ROUNDS earlier rounds to beat.
+ */
+export function isRecord(current: number, earlier: number[]): boolean {
+  return earlier.length >= MIN_ROUNDS && current < Math.min(...earlier);
+}
+
 /**
  * What share of a product ends up in the bin, and whether that share is solid
  * enough to act on. Same arithmetic as the rest of Vendly: a proportion out of

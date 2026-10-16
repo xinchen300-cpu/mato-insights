@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getI18n } from "@/i18n/server";
-import { getRefillRound, getRouteTimes } from "@/lib/data";
+import { getMyRounds, getRefillRound, getRouteTimes } from "@/lib/data";
 import { displayName } from "@/lib/people";
 import { createClient } from "@/lib/supabase/server";
 import { requireRefillAccess } from "@/lib/org";
@@ -28,5 +28,9 @@ export default async function RoundPage({ params }: { params: Promise<{ id: stri
     createClient().then((client) => client.auth.getUser()),
   ]);
   if (!round) notFound();
-  return <RoundFlow round={round} who={displayName(me.data.user)} times={times} />;
+  // This person's earlier rounds only matter once this one ends, for what it
+  // earned: not on every reload while the round is on.
+  const ending = Boolean(round.completedAt) || round.machines.every((machine) => round.stops[machine.id]?.completedAt);
+  const history = ending ? await getMyRounds(orgId) : null;
+  return <RoundFlow round={round} who={displayName(me.data.user)} times={times} history={history} />;
 }

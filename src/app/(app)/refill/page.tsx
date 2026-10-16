@@ -1,11 +1,16 @@
 import Link from "next/link";
-import { CircleCheck, ClipboardList } from "lucide-react";
+import { ChevronRight, CircleCheck, ClipboardList } from "lucide-react";
+import { FiguresCard, HowItWorks } from "@/components/filler/figures";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { duration, fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getMachines, getMachineStock, getOpenRounds, getRefillSheets, getShortages, getStatsReport, type OpenRound } from "@/lib/data";
+import { getMachines, getMachineStock, getMyRounds, getOpenRounds, getRefillSheets, getShortages, getStatsReport, type OpenRound } from "@/lib/data";
+import { fillerStats } from "@/lib/filler-stats";
+import { displayName } from "@/lib/people";
+import { createClient } from "@/lib/supabase/server";
+import { cn } from "@/lib/utils";
 import { LiveRounds } from "@/components/refill/live-rounds";
 import { RefillTabs } from "@/components/refill/refill-tabs";
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
@@ -25,10 +30,12 @@ export default async function RefillPage() {
   // A filler gets their own view of the refill work: rounds and pieces, no money.
   if (await isFiller()) {
     const fillerOrg = await requireRefillAccess();
-    const [rounds, fleet, slots] = await Promise.all([
+    const [rounds, fleet, slots, mine, me] = await Promise.all([
       getOpenRounds(fillerOrg),
       getMachines(fillerOrg),
       getMachineStock(fillerOrg),
+      getMyRounds(fillerOrg),
+      createClient().then((client) => client.auth.getUser()),
     ]);
     const pieces = new Map<string, { toAdd: number; counted: number; low: number }>();
     for (const slot of slots) {
@@ -54,11 +61,18 @@ export default async function RefillPage() {
           note: busy.has(mc.id) ? m.refill.onOpenRound : undefined,
         };
       });
+    const stats = fillerStats(mine, DISPLAY_TIME_ZONE);
+    const name = displayName(me.data.user);
+    // The round to do now, big at the top: one already under way first, else the newest.
+    const next = rounds.find((round) => round.readyAt) ?? rounds[0] ?? null;
     return (
       <>
-        <PageHeader title={m.refill.title} />
-        <div className="flex flex-col gap-10">
-          <OpenRounds rounds={rounds} m={m} f={f} />
+        <PageHeader title={name ? fmt(m.round.hello, { name }) : m.refill.title} />
+        <div className="flex flex-col gap-8">
+          {next && <NextRound round={next} m={m} />}
+          {/* Someone new sees how a round goes; after the first one, their own figures. */}
+          {stats.rounds > 0 ? <FiguresCard stats={stats} /> : <HowItWorks />}
+          <OpenRounds rounds={rounds.filter((round) => round.id !== next?.id)} m={m} f={f} />
           {choices.length > 0 ? (
             <MachinePicker machines={choices} />
           ) : (
@@ -69,9 +83,11 @@ export default async function RefillPage() {
     );
   }
   const orgId = await requireOrgId();
-  const openRounds = (await isOperator()) ? await getOpenRounds(orgId) : [];
+  const operator = await isOperator();
   const window = lastFullWeeks(4, DISPLAY_TIME_ZONE);
-  const [machines, stock, sheets, shortages, { data: org }, weeks] = await Promise.all([
+  // All at once, each loader with its own checks: the open rounds no longer wait their turn.
+  const [openRounds, machines, stock, sheets, shortages, { data: org }, weeks] = await Promise.all([
+    operator ? getOpenRounds(orgId) : Promise.resolve<OpenRound[]>([]),
     getMachines(orgId),
     getMachineStock(orgId),
     getRefillSheets(orgId),
@@ -207,7 +223,6 @@ export default async function RefillPage() {
 
   const machineName = new Map(machines.map((mc) => [mc.id, mc.name]));
 
-  const operator = await isOperator();
   return (
     <>
       <PageHeader title={m.refill.title} actions={operator ? <RefillTabs active="rounds" m={m} /> : undefined} />
@@ -361,6 +376,50 @@ function OpenRounds({
         ))}
       </RowList>
     </Section>
+  );
+}
+
+/**
+ * The round a filler should do now, as one big card: where it goes, how far
+ * along it is, and one black button. For a filler this is the whole point of
+ * the page, so it is the first and largest thing on it.
+ */
+function NextRound({ round, m }: { round: OpenRound; m: Awaited<ReturnType<typeof getI18n>>["m"] }) {
+  const underway = Boolean(round.readyAt);
+  const done = round.machines.filter((machine) => machine.done).length;
+  return (
+    <section className="surface-card flex flex-col gap-4 p-5">
+      <div className="flex items-center gap-3.5">
+        <span
+          className={cn(
+            "grid size-12 shrink-0 place-items-center rounded-full",
+            underway ? "bg-positive/12 text-positive" : "bg-surface text-foreground",
+          )}
+        >
+          <ClipboardList className="size-6" aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-[19px] font-semibold tracking-[-0.02em]">{underway ? m.me.nextUnderway : m.me.nextReady}</h2>
+          <p className="mt-0.5 truncate text-[13.5px] text-muted-foreground">
+            {fmt(round.machines.length === 1 ? m.me.nextSubOne : m.me.nextSub, { n: round.machines.length, done })}
+          </p>
+        </div>
+      </div>
+      {round.machines.length > 1 && (
+        <div className="flex gap-1.5" aria-hidden="true">
+          {round.machines.map((machine) => (
+            <span
+              key={machine.id}
+              className={cn("h-2 flex-1 rounded-full", machine.skipped ? "bg-warning/50" : machine.done ? "bg-positive" : "bg-surface")}
+            />
+          ))}
+        </div>
+      )}
+      <Link href={`/vullen/${round.id}`} className={cn(buttonVariants({ size: "lg" }), "h-14 w-full rounded-2xl text-base")}>
+        {underway ? m.me.nextContinue : m.me.nextBegin}
+        <ChevronRight className="size-5" />
+      </Link>
+    </section>
   );
 }
 

@@ -9,6 +9,8 @@ import { RefillTips } from "@/components/refill/refill-tips";
 import { useI18n } from "@/i18n/client";
 import { duration, fmt } from "@/i18n/format";
 import type { RefillRound, RouteTimes } from "@/lib/data";
+import { roundReward, type MyRound } from "@/lib/filler-stats";
+import { haptic } from "@/lib/haptics";
 import {
   allocate,
   pickList,
@@ -24,6 +26,18 @@ import { DEFAULT_MACHINE_PHOTO, mediaUrl } from "@/lib/media";
 import { bandBg, machineFill, machineTotals, type FillBand } from "@/lib/stock";
 import { cn } from "@/lib/utils";
 import { completeRound, completeStop, savePicked, skipStop, startRound, type StopInput } from "./actions";
+import { RoundDone, RoundProgress, SlotProgress, StopToast, type SegmentState } from "./round-moments";
+import { chip, ghost, outline, primary, stepper } from "./styles";
+
+/** What the screen asks of the server: the real actions, or stand-ins for a preview. */
+export type RoundApi = {
+  savePicked: typeof savePicked;
+  startRound: typeof startRound;
+  completeStop: typeof completeStop;
+  skipStop: typeof skipStop;
+  completeRound: typeof completeRound;
+};
+const serverApi: RoundApi = { savePicked, startRound, completeStop, skipStop, completeRound };
 
 // The round as a checklist: pack, each machine, bring back. One list that
 // always says where the filler is, a clock that runs by itself from the start,
@@ -76,25 +90,22 @@ function load(id: string): Saved | null {
   }
 }
 
-const primary =
-  "flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-foreground text-[16px] font-semibold text-background transition-transform active:scale-[0.99] disabled:opacity-50";
-const outline =
-  "flex h-14 w-full items-center justify-center rounded-2xl border border-input bg-card text-[16px] font-semibold active:scale-[0.99]";
-const ghost = "flex h-12 w-full items-center justify-center rounded-2xl text-[15px] font-semibold text-muted-foreground";
-const stepper =
-  "grid size-12 shrink-0 place-items-center rounded-full bg-surface text-2xl font-medium text-foreground active:scale-95 disabled:opacity-40";
-const chip = "inline-flex h-10 items-center gap-1.5 rounded-full bg-card px-3.5 text-[14px] font-semibold ring-1 ring-border";
 
 export function RoundFlow({
   round: initial,
   who,
   times,
+  history = null,
+  api = serverApi,
 }: {
   round: RefillRound;
   /** The person holding the phone, under the name a round gets. */
   who: string | null;
   /** Earlier rounds' drives, for the plan. */
   times: RouteTimes;
+  /** This person's own finished rounds, for what the end of this one earned; null until it ends. */
+  history?: MyRound[] | null;
+  api?: RoundApi;
 }) {
   const { m, f } = useI18n();
   const t = m.round;
@@ -172,7 +183,7 @@ export function RoundFlow({
     setPicked((current) => {
       const next = change(current);
       if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => void savePicked(initial.id, next).catch(() => undefined), 1200);
+      saveTimer.current = setTimeout(() => void api.savePicked(initial.id, next).catch(() => undefined), 1200);
       return next;
     });
   }
@@ -321,7 +332,7 @@ export function RoundFlow({
       const work = job.work;
       if (!work) {
         run(
-          () => skipStop(initial.id, job.machineId, doneAgo),
+          () => api.skipStop(initial.id, job.machineId, doneAgo),
           () => {
             setStops((all) => ({
               ...all,
@@ -337,7 +348,7 @@ export function RoundFlow({
       }
       const checkedAgo = job.checkedAt ? Math.max(0, Date.now() - Date.parse(job.checkedAt)) : null;
       run(
-        () => completeStop(initial.id, job.machineId, { ...work, checkedAgo, doneAgo }),
+        () => api.completeStop(initial.id, job.machineId, { ...work, checkedAgo, doneAgo }),
         () => {
           setStops((all) => ({
             ...all,
@@ -415,6 +426,7 @@ export function RoundFlow({
   }
 
   function finishStop(machineId: string, open: "empty" | "planned", full?: Set<string>) {
+    haptic("success");
     const draft = draftFor(machineId);
     hold({ machineId, work: stopInput(machineId, open, full), checkedAt: draft.checkedAt ?? draft.openedAt ?? null, tappedAt: tapTime() });
   }
@@ -431,6 +443,7 @@ export function RoundFlow({
   }
 
   function skipMachine(machineId: string) {
+    haptic();
     hold({ machineId, work: null, checkedAt: null, tappedAt: tapTime() });
   }
 
@@ -447,7 +460,7 @@ export function RoundFlow({
 
   function start() {
     run(
-      () => startRound(initial.id, picked),
+      () => api.startRound(initial.id, picked),
       () => {
         setReadyAt(new Date().toISOString());
         setShowShort(false);
@@ -480,34 +493,21 @@ export function RoundFlow({
     const filled = Object.values(stops).reduce((sum, stop) => sum + stop.lines.reduce((s, l) => s + l.filled, 0), 0);
     const removed = back.filter((r) => r.source === "removed").reduce((sum, r) => sum + r.qty, 0);
     const leftover = back.filter((r) => r.source === "leftover").reduce((sum, r) => sum + r.qty, 0);
+    const visited = Object.values(stops).filter((stop) => !stop.skipped).length;
+    // What this round earned, against this person's own rounds before it.
+    // Until the earlier rounds are in, the end shows the round itself; what it earned follows.
+    const reward =
+      readyAt && completedAt && history
+        ? roundReward(history, { id: initial.id, readyAt, completedAt, machineIds: initial.machines.map((mc) => mc.id), stops })
+        : null;
     return (
       <Screen>
         {header()}
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
-          <span className="grid size-20 place-items-center rounded-full bg-foreground text-background">
-            <Check className="size-9" strokeWidth={2.6} />
-          </span>
-          <h1 className="text-[36px] font-bold tracking-[-0.035em]">{t.thanks}</h1>
-          <p className="text-[16px] text-muted-foreground">
-            {fmt(Object.values(stops).filter((stop) => !stop.skipped).length === 1 ? t.thanksSummaryOne : t.thanksSummary, {
-              machines: Object.values(stops).filter((stop) => !stop.skipped).length,
-              filled,
-              removed,
-              back: leftover,
-            })}
-          </p>
-          {readyAt && completedAt && (
-            <p className="tabular text-[16px] font-semibold">
-              {fmt(t.took, {
-                time: duration(
-                  (new Date(completedAt).getTime() - new Date(readyAt).getTime()) / 60000,
-                  m.refill.runTime,
-                  m.refill.runTimeHours,
-                ),
-              })}
-            </p>
-          )}
-        </div>
+        <RoundDone
+          reward={reward}
+          minutes={readyAt && completedAt ? (Date.parse(completedAt) - Date.parse(readyAt)) / 60000 : null}
+          summary={fmt(visited === 1 ? t.thanksSummaryOne : t.thanksSummary, { machines: visited, filled, removed, back: leftover })}
+        />
       </Screen>
     );
   }
@@ -524,7 +524,7 @@ export function RoundFlow({
         askKm={initial.settings.askKm}
         onFinish={(choices, km) =>
           run(
-            () => completeRound(initial.id, choices, km !== null && Number.isFinite(km) ? km : null),
+            () => api.completeRound(initial.id, choices, km !== null && Number.isFinite(km) ? km : null),
             () => {
               setCompleted(true);
               setCompletedAt(new Date().toISOString());
@@ -567,7 +567,10 @@ export function RoundFlow({
             <button
               type="button"
               className="h-10 rounded-full px-3 text-[14.5px] font-semibold"
-              onClick={() => setPicks(() => Object.fromEntries(rows.map((row) => [row.key, row.take])))}
+              onClick={() => {
+                haptic();
+                setPicks(() => Object.fromEntries(rows.map((row) => [row.key, row.take])));
+              }}
             >
               {t.checkAll}
             </button>
@@ -591,10 +594,14 @@ export function RoundFlow({
                           type="button"
                           role="checkbox"
                           aria-checked={done}
-                          onClick={() => setPicks((current) => ({ ...current, [row.key]: done ? 0 : row.take }))}
+                          onClick={() => {
+                            haptic();
+                            setPicks((current) => ({ ...current, [row.key]: done ? 0 : row.take }));
+                          }}
                           className="flex min-h-[68px] min-w-0 flex-1 items-center gap-3 px-1 text-left"
                         >
                           <Tick done={done} />
+                          <ProductPhoto path={row.photoPath} />
                           <span className={cn("min-w-0 flex-1 truncate text-[16px] font-semibold", done && "text-muted-foreground line-through")}>
                             {row.productName}
                           </span>
@@ -710,6 +717,7 @@ export function RoundFlow({
               <FillPill fill={fillOf(current.id)} />
             </div>
           </div>
+          <SlotProgress done={planned.length - open.length} total={planned.length} />
           <div className="mt-2 flex flex-wrap gap-2">
             <button type="button" className={chip} onClick={() => setReport({ selection: null })}>
               <TriangleAlert className="size-4 text-warning" />
@@ -735,7 +743,14 @@ export function RoundFlow({
           <div className="mt-2 flex items-center justify-between">
             <p className="text-[14.5px] text-muted-foreground">{t.fillHint}</p>
             {open.length > 0 && (
-              <button type="button" className="h-10 rounded-full px-3 text-[14.5px] font-semibold" onClick={tickAll}>
+              <button
+                type="button"
+                className="h-10 rounded-full px-3 text-[14.5px] font-semibold"
+                onClick={() => {
+                  haptic();
+                  tickAll();
+                }}
+              >
                 {t.checkAll}
               </button>
             )}
@@ -765,15 +780,23 @@ export function RoundFlow({
                     type="button"
                     role="checkbox"
                     aria-checked={done}
-                    onClick={() =>
-                      updateLine(current.id, line.selection, (l) => ({ ...l, filled: done ? undefined : prep }))
-                    }
+                    onClick={() => {
+                      haptic();
+                      updateLine(current.id, line.selection, (l) => ({ ...l, filled: done ? undefined : prep }));
+                    }}
                     className="flex min-h-[72px] min-w-0 flex-1 items-center gap-3 px-1 py-2 text-left"
                   >
                     <Tick done={done} />
-                    <span className="min-w-8 rounded-lg bg-surface px-1.5 py-1 text-center font-mono text-[12.5px] font-semibold">
+                    {/* The next slot to do stands out, so the eye goes straight to it. */}
+                    <span
+                      className={cn(
+                        "min-w-8 rounded-lg px-1.5 py-1 text-center font-mono text-[12.5px] font-semibold transition-colors",
+                        line.selection === open[0]?.selection ? "bg-foreground text-background" : "bg-surface",
+                      )}
+                    >
                       {line.selection}
                     </span>
+                    <ProductPhoto path={line.photoPath} />
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className={cn("truncate text-[15.5px] font-semibold", done && "text-muted-foreground")}>
                         {line.productName}
@@ -814,10 +837,11 @@ export function RoundFlow({
         <BottomBar>
           <button
             type="button"
-            className={primary}
+            className={cn(primary, open.length === 0 && "ready-shine")}
             onClick={() => (open.length > 0 ? setUnchecked(open.length) : requestFinish(current.id, "planned"))}
           >
-            {fmt(t.doneWith, { machine: current.name })}
+            {open.length === 0 && <Check className="size-5" strokeWidth={3} aria-hidden="true" />}
+            <span className="truncate">{fmt(t.doneWith, { machine: current.name })}</span>
           </button>
         </BottomBar>
 
@@ -969,6 +993,23 @@ export function RoundFlow({
     },
   ];
 
+  // The round as a bar, one segment per machine, and where the filler was
+  // last done, for the estimate: the latest machine filled (a skip says
+  // nothing about where they are now).
+  const segmentOf = (machineId: string): SegmentState =>
+    stops[machineId]?.skipped || (pendingId === machineId && pendingSkip)
+      ? "skipped"
+      : isDone(machineId)
+        ? "done"
+        : machineId === nextStop?.id
+          ? "now"
+          : "later";
+  const lastDone =
+    Object.entries(stops)
+      .filter(([, stop]) => stop.completedAt && !stop.skipped)
+      .map(([machineId, stop]) => ({ machineId, at: stop.completedAt as string }))
+      .sort((a, b) => b.at.localeCompare(a.at))[0] ?? null;
+
   // The drive after each step, as earlier rounds measured it: from the start
   // to the first machine, between machines (either way round), and back.
   const route = ["start", ...initial.machines.map((machine) => machine.id), "end"];
@@ -1008,6 +1049,15 @@ export function RoundFlow({
           </div>
         </div>
         {readyAt && <BigClock since={readyAt} startedLabel={fmt(t.running, { time: f.time(readyAt) })} />}
+        {readyAt && (
+          <RoundProgress
+            segments={initial.machines.map((machine) => ({ id: machine.id, state: segmentOf(machine.id) }))}
+            remaining={openStops.map((machine) => machine.id)}
+            from={lastDone?.machineId ?? "start"}
+            since={lastDone?.at ?? readyAt}
+            times={times}
+          />
+        )}
         {/* This round's own note first, then what the operator says before every round. */}
         {(initial.notes || initial.settings.message) && (
           <div className="mt-3 flex gap-3 rounded-2xl bg-primary/10 px-4 py-3">
@@ -1092,24 +1142,14 @@ export function RoundFlow({
           </p>
         )}
         {pendingMachine && countdown !== null && (
-          <div
-            className={cn(
-              "mb-1.5 flex items-center justify-between gap-3 rounded-2xl py-1.5 pl-4 pr-1.5",
-              pendingSkip ? "bg-warning/15" : "bg-positive/12",
-            )}
-          >
-            <span className="flex min-w-0 items-center gap-2 text-[15px] font-semibold">
-              {pendingSkip ? (
-                <TriangleAlert className="size-5 shrink-0 text-warning" />
-              ) : (
-                <Check className="size-5 shrink-0 text-positive" strokeWidth={3} />
-              )}
-              <span className="truncate">{fmt(pendingSkip ? t.stopSkippedToast : t.stopDoneToast, { machine: pendingMachine.name })}</span>
-            </span>
-            <button type="button" className="h-11 shrink-0 rounded-xl bg-card px-4 text-[15px] font-semibold ring-1 ring-border" onClick={undoFinish}>
-              {t.undo}
-            </button>
-          </div>
+          <StopToast
+            key={pendingMachine.id}
+            machine={pendingMachine.name}
+            skipped={pendingSkip}
+            left={openStops.length}
+            cheer={Object.values(stops).filter((stop) => stop.completedAt && !stop.skipped).length}
+            onUndo={undoFinish}
+          />
         )}
         {!readyAt ? (
           <button type="button" className={primary} onClick={() => setView("pick")}>
@@ -1200,19 +1240,28 @@ function FillPill({ fill, compact = false }: { fill: { percent: number; band: Fi
   );
 }
 
-/** A round checkbox, big enough for a thumb in a cold van. */
+/** A round checkbox, big enough for a thumb in a cold van. It pops when it is set. */
 function Tick({ done }: { done: boolean }) {
   return (
     <span
+      key={done ? "on" : "off"}
       className={cn(
         "grid size-8 shrink-0 place-items-center rounded-full border-2 transition-colors",
-        done ? "border-positive bg-positive text-background" : "border-border bg-card",
+        done ? "pop border-positive bg-positive text-background" : "border-border bg-card",
       )}
       aria-hidden="true"
     >
       {done && <Check className="size-[18px]" strokeWidth={3.2} />}
     </span>
   );
+}
+
+/** The product's own photo, when it has one: a picture is found faster than a name. */
+function ProductPhoto({ path }: { path: string | null }) {
+  const src = mediaUrl(path);
+  if (!src) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={src} alt="" loading="lazy" className="size-9 shrink-0 rounded-lg bg-surface object-cover" />;
 }
 
 /** The round's own clock, big on its overview: it runs from "Start ronde" on, by itself. */
@@ -1234,7 +1283,10 @@ function BigClock({ since, startedLabel }: { since: string; startedLabel: string
   return (
     <div className="mt-3 flex items-center gap-3 rounded-2xl bg-foreground px-4 py-3 text-background">
       <Timer className="size-6 shrink-0" strokeWidth={2.2} aria-hidden="true" />
-      <span className="tabular text-[34px] font-bold leading-none tracking-[-0.03em]">{now === null ? "0:00:00" : `${h}:${mm}:${ss}`}</span>
+      {/* Until the phone has read its own clock, the space is kept but nothing is shown: never a false 0:00:00. */}
+      <span className={cn("tabular text-[34px] font-bold leading-none tracking-[-0.03em]", now === null && "invisible")}>
+        {`${h}:${mm}:${ss}`}
+      </span>
       <span className="ml-auto text-right text-[13px] font-medium opacity-80">{startedLabel}</span>
     </div>
   );
@@ -1441,7 +1493,7 @@ function RoundClock({ since }: { since: string }) {
 
 function Screen({ children, padded = true }: { children: React.ReactNode; padded?: boolean }) {
   return (
-    <div className="mx-auto flex min-h-svh w-full max-w-md flex-col bg-background">
+    <div className="show-numbers mx-auto flex min-h-svh w-full max-w-md flex-col bg-background">
       <div className={cn("flex flex-1 flex-col", padded && "px-4 pb-7 pt-4")}>{children}</div>
     </div>
   );
