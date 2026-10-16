@@ -35,5 +35,5 @@ export async function GET(request: Request) {
     ...report.by_day.map((d) => [d.day, d.units, d.revenue]),
   ];
 
-  return csvResponse(`vendly-${report.period}-${firstDay}.csv`, rows);
+  return csvResponse(`mato-insights-${report.period}-${firstDay}.csv`, rows);
 }

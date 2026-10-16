@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarDays, Check, Minus, Plus } from "lucide-react";
+import { CalendarDays, Minus, Plus } from "lucide-react";
 import { ExpiryPicker } from "@/components/refill/date-picker";
 import { FrontView } from "@/components/machine/front-view";
 import { Avatar, RowList, initial as initialOf } from "@/components/list-row";
-import { Section } from "@/components/page-header";
+import { RefillTips } from "@/components/refill/refill-tips";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/client";
@@ -18,7 +18,6 @@ import { addDays } from "@/lib/expiry";
 import { recordStock } from "../../actions";
 
 const CHECK_KEYS = ["expired", "clean", "labels", "test"] as const;
-const FILLER_KEY = "vendly-filler";
 
 export function StockForm({
   machineId,
@@ -38,7 +37,7 @@ export function StockForm({
   const [error, setError] = useState(false);
 
   // Refill: everything starts full, only differences get changed.
-  // Correction: start from what Vendly thinks is in there now.
+  // Correction: start from what the app thinks is in there now.
   const initial = useMemo(
     () =>
       Object.fromEntries(
@@ -49,15 +48,6 @@ export function StockForm({
   const [levels, setLevels] = useState<Record<string, number>>(initial);
   const [touched, setTouched] = useState<Set<string>>(new Set());
   const [dates, setDates] = useState<Record<string, string>>({});
-  const [checks, setChecks] = useState<Record<string, boolean>>({});
-  const [filler, setFiller] = useState("");
-  const [nameMissing, setNameMissing] = useState(false);
-
-  useEffect(() => {
-    try {
-      setFiller(localStorage.getItem(FILLER_KEY) ?? "");
-    } catch {}
-  }, []);
 
   const days = (s: SlotStock) => (s.product_id ? (shelfLife[s.product_id] ?? null) : null);
   const suggested = (s: SlotStock) => {
@@ -81,13 +71,6 @@ export function StockForm({
   }
 
   function save() {
-    if (!filler.trim()) {
-      setNameMissing(true);
-      return;
-    }
-    try {
-      localStorage.setItem(FILLER_KEY, filler.trim());
-    } catch {}
     const targets = mode === "refill" ? editable : editable.filter((s) => touched.has(s.selection_number));
     if (targets.length === 0) return router.push(`/machines/${machineId}`);
 
@@ -105,8 +88,6 @@ export function StockForm({
                 ? (dates[s.selection_number] ?? suggested(s))
                 : null,
           })),
-          filler,
-          checks,
         );
         router.push(`/machines/${machineId}`);
         router.refresh();
@@ -244,50 +225,8 @@ export function StockForm({
             </section>
           ))}
 
-        <Section title={m.refill.checklistTitle}>
-          <RowList>
-            {CHECK_KEYS.map((key) => (
-              <li key={key}>
-                <button
-                  type="button"
-                  onClick={() => setChecks((c) => ({ ...c, [key]: !c[key] }))}
-                  aria-pressed={!!checks[key]}
-                  className="hover-surface flex min-h-14 w-full items-center gap-3.5 rounded-xl px-3 py-3 text-left text-[15px] font-medium"
-                >
-                  <span
-                    className={cn(
-                      "grid size-6 shrink-0 place-items-center rounded-full border transition-colors duration-150",
-                      checks[key] ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card",
-                    )}
-                  >
-                    {checks[key] && <Check className="size-3.5" strokeWidth={3} />}
-                  </span>
-                  {m.refill.checklist[key]}
-                </button>
-              </li>
-            ))}
-          </RowList>
-        </Section>
-
-        <label className="flex flex-col gap-2">
-          <span className="px-1 text-[15px] font-semibold tracking-[-0.01em]">{m.refill.filler}</span>
-          <input
-            value={filler}
-            onChange={(e) => {
-              setFiller(e.target.value);
-              setNameMissing(false);
-            }}
-            autoComplete="name"
-            aria-invalid={nameMissing || undefined}
-            className={cn(
-              "h-12 w-full rounded-xl border border-input bg-card px-4 text-base outline-none transition-[border-color,box-shadow] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25",
-              nameMissing && "border-negative focus-visible:border-negative focus-visible:ring-negative/20",
-            )}
-          />
-          <span className={cn("px-1 text-[13px]", nameMissing ? "text-negative" : "text-muted-foreground")}>
-            {nameMissing ? m.refill.fillerRequired : m.refill.fillerHint}
-          </span>
-        </label>
+        {/* Tips, not boxes to tick: refilling has to go smoothly (Xin, 14-10-2026). */}
+        <RefillTips tips={CHECK_KEYS.map((key) => m.refill.checklist[key])} />
 
         {/* Clears the tab bar on phones, the iPhone's home bar included. */}
         <div className="surface-card sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 flex flex-col gap-3 bg-card/90 p-3 backdrop-blur-xl sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 lg:bottom-4">

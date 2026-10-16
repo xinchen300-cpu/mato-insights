@@ -1,10 +1,10 @@
 @AGENTS.md
 
-# Vendly — dashboard voor vending-uitbaters
+# MATO Insights — dashboard voor vending-uitbaters
 
-**Naam:** naar de gebruiker toe heet dit sinds 11-10-2026 weer **Vendly** (van 30-09 tot 11-10 heette het "MATO Insights"). De naam staat in `src/app/layout.tsx`, `src/app/manifest.ts`, het logo `src/components/brand/vendly-mark.tsx` en op ±20 plaatsen in elk `messages/*.ts`. Schrijf "MATO Insights" nergens meer in tekst die een gebruiker leest. De repo heet nog `mato-insights` (hernoemd op 04-10-2026); het Vercel-project heet `vendly`.
+**Naam:** naar de gebruiker toe heet dit sinds 14-10-2026 weer **MATO Insights** (30-09 → 11-10 MATO Insights, 11-10 → 14-10 Vendly). Logo `[mato insights]`, merk `[m]`. De naam staat in `src/app/layout.tsx`, `src/app/manifest.ts`, het logo `src/components/brand/insights-mark.tsx`, de app-iconen (`src/app/icon.svg`, `src/app/pwa-icon`), `public/brand/mato-insights-*.svg` en als `m.brand.name` / op ±30 plaatsen in elk `messages/*.ts`. Schrijf "Vendly" nergens meer in tekst die een gebruiker leest. De repo heet `mato-insights`; het Vercel-project heet nog `vendly` (interne naam, mag blijven).
 
-**Drie dingen moeten `vendly` blijven heten, hernoemen breekt ze:**
+**Drie dingen moeten `vendly` blijven heten, hernoemen breekt ze** (ook `vendly:hide-numbers` in localStorage hoort daarbij):
 - `LOCALE_COOKIE = "vendly-locale"` in `src/i18n/config.ts` — hernoemen wist ieders taalkeuze.
 - De opslagsleutels in de browser voor een bijvulronde — hernoemen kost een vuller zijn halve ronde.
 - De omgevingsvariabele `VENDLY_REQUIRE_LOGIN`.

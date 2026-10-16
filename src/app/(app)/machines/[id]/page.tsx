@@ -27,6 +27,7 @@ import { fillLevel, levelColor } from "@/lib/stock";
 import { cn } from "@/lib/utils";
 import { assignProduct, createProductForMachine } from "../actions";
 import { MachineDetailsForm } from "./machine-details-form";
+import { MachinePhotoForm } from "./machine-photo-form";
 import { MachineStatus, TerminalPanel } from "./terminal-panel";
 import { AutoRefresh } from "@/components/auto-refresh";
 
@@ -281,6 +282,9 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
         )}
 
         <Section title={m.machines.settings}>
+          <div className="surface-card mb-4 p-5 sm:p-6">
+            <MachinePhotoForm machineId={machine.id} photoPath={machine.photo_path} />
+          </div>
           <div className="surface-card p-5 sm:p-6">
             <MachineDetailsForm machine={machine} businesses={businesses} />
           </div>

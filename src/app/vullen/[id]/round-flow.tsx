@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ChevronLeft, ChevronRight, MessageSquareText, Timer, TriangleAlert, Truck } from "lucide-react";
-import { VendlyWordmark } from "@/components/brand/vendly-mark";
+import { InsightsWordmark } from "@/components/brand/insights-mark";
 import { FrontView, type FrontSlot } from "@/components/machine/front-view";
+import { RefillTips } from "@/components/refill/refill-tips";
 import { useI18n } from "@/i18n/client";
 import { duration, fmt } from "@/i18n/format";
 import type { RefillRound, RouteTimes } from "@/lib/data";
@@ -19,6 +20,8 @@ import {
   type ReturnRow,
   type StopRecord,
 } from "@/lib/refill-flow";
+import { DEFAULT_MACHINE_PHOTO, mediaUrl } from "@/lib/media";
+import { bandBg, machineFill, machineTotals, type FillBand } from "@/lib/stock";
 import { cn } from "@/lib/utils";
 import { completeRound, completeStop, savePicked, skipStop, startRound, type StopInput } from "./actions";
 
@@ -154,6 +157,13 @@ export function RoundFlow({
   const totalTake = rows.reduce((sum, row) => sum + row.take, 0);
   const totalPicked = rows.reduce((sum, row) => sum + Math.min(row.take, picked[row.key] ?? 0), 0);
   const prepared = useMemo(() => allocate(initial.lines, picked), [initial.lines, picked]);
+  // How full each machine still is, from the counted slots only: a machine
+  // nobody counted yet gets a grey "?" instead of a made-up percentage.
+  const fills = useMemo(() => machineTotals(initial.slots.map((slot) => ({ machine_id: slot.machineId, stock: slot.stock, capacity: slot.capacity }))), [initial.slots]);
+  const fillOf = (machineId: string) => {
+    const total = fills.get(machineId);
+    return total ? machineFill(total.stock, total.capacity, total.counted) : null;
+  };
 
   // Save the box now and then, so another phone can take over.
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -259,7 +269,7 @@ export function RoundFlow({
     return {
       technical: draft.technical,
       note: draft.note,
-      checks: draft.checks ?? {},
+      checks: draft.checks,
       lines: [...selections].map((selection) => {
         const line = planned.find((l) => l.selection === selection);
         const edit = draft.lines[selection] ?? emptyLine();
@@ -337,7 +347,7 @@ export function RoundFlow({
               skipped: false,
               technical: work.technical,
               note: work.note,
-              ...(initial.settings.checks.length
+              ...(initial.settings.checks.length && work.checks && Object.keys(work.checks).length > 0
                 ? {
                     checks: Object.fromEntries(
                       initial.settings.checks.map((label) => [label, work.checks?.[label] === true]),
@@ -454,7 +464,7 @@ export function RoundFlow({
           {t.backToRound}
         </button>
       ) : (
-        <VendlyWordmark className="h-[24px] w-auto text-[#2a2520]" />
+        <InsightsWordmark className="h-[24px] w-auto text-[#2a2520]" />
       )}
       {error ? (
         <span className="text-[13px] font-semibold text-negative">{error}</span>
@@ -693,17 +703,13 @@ export function RoundFlow({
           <p className="mt-1 text-[14px] font-semibold text-muted-foreground">
             {fmt(t.stopOf, { n: stopIndex, total: initial.machines.length })}
           </p>
-          <h1 className="text-[30px] font-bold leading-tight tracking-[-0.03em]">{current.name}</h1>
-          <p className="flex items-center gap-2 text-[14px]">
-            <span
-              className={cn(
-                "size-2.5 rounded-full",
-                current.status === "online" ? "bg-positive" : current.status === "offline" ? "bg-warning" : "bg-muted-foreground",
-              )}
-            />
-            <b>{current.status === "online" ? t.online : current.status === "offline" ? t.offline : t.unknownStatus}</b>
-            {current.lastSale && <span className="text-muted-foreground">· {fmt(t.lastSale, { when: f.relative(current.lastSale) })}</span>}
-          </p>
+          <div className="flex items-center gap-3.5">
+            <MachineThumb path={current.photoPath} className="size-16 rounded-2xl" />
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-[28px] font-bold leading-tight tracking-[-0.03em]">{current.name}</h1>
+              <FillPill fill={fillOf(current.id)} />
+            </div>
+          </div>
           <div className="mt-2 flex flex-wrap gap-2">
             <button type="button" className={chip} onClick={() => setReport({ selection: null })}>
               <TriangleAlert className="size-4 text-warning" />
@@ -801,32 +807,8 @@ export function RoundFlow({
               );
             })}
           </ul>
-          {initial.settings.checks.length > 0 && (
-            <section className="flex flex-col gap-2">
-              <p className="px-2 pt-2 text-[15px] font-semibold">{t.checksTitle}</p>
-              <ul className="surface-card flex flex-col px-2 py-1">
-                {initial.settings.checks.map((label) => {
-                  const done = draft.checks?.[label] === true;
-                  return (
-                    <li key={label} className="border-b border-border/60 last:border-0">
-                      <button
-                        type="button"
-                        role="checkbox"
-                        aria-checked={done}
-                        onClick={() =>
-                          updateDraft(current.id, (d) => touch({ ...d, checks: { ...(d.checks ?? {}), [label]: !done } }))
-                        }
-                        className="flex min-h-14 w-full items-center gap-3 px-1 py-2 text-left"
-                      >
-                        <Tick done={done} />
-                        <span className={cn("text-[15.5px] font-semibold", done && "text-muted-foreground")}>{label}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          )}
+          {/* The operator's checks as tips, not boxes to tick at every machine. */}
+          <RefillTips tips={initial.settings.checks} className="mt-1" />
         </div>
 
         <BottomBar>
@@ -944,6 +926,8 @@ export function RoundFlow({
     state: "done" | "now" | "later" | "skipped";
     aside?: string;
     onOpen?: () => void;
+    /** Machine steps only: the photo to recognise it by. */
+    machine?: { photoPath: string | null; id: string };
   }[] = [
     {
       key: "pick",
@@ -973,6 +957,7 @@ export function RoundFlow({
             ? fmt(t.doneAt, { time: f.time(record.completedAt) })
             : undefined,
         onOpen: readyAt && !done ? () => openStop(machine.id) : undefined,
+        machine: { photoPath: machine.photoPath, id: machine.id },
       };
     }),
     {
@@ -1071,13 +1056,17 @@ export function RoundFlow({
                     step.state === "later" && "opacity-70",
                   )}
                 >
+                  {step.machine && (
+                    <MachineThumb path={step.machine.photoPath} className={cn("size-12 rounded-xl", passed && "opacity-60")} />
+                  )}
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className={cn("truncate text-[16.5px] font-semibold", passed && "text-muted-foreground")}>{step.title}</span>
                     <span className="truncate text-[13.5px] text-muted-foreground">{step.sub}</span>
                   </span>
+                  {step.machine && !passed && <FillPill fill={fillOf(step.machine.id)} compact />}
                   {step.aside ? (
                     <span className="shrink-0 text-[13px] font-semibold text-muted-foreground">{step.aside}</span>
-                  ) : step.state === "now" ? (
+                  ) : step.state === "now" && !step.machine ? (
                     <span className="shrink-0 rounded-full bg-foreground px-2.5 py-1 text-[12px] font-bold text-background">{t.now}</span>
                   ) : step.onOpen ? (
                     <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
@@ -1167,6 +1156,48 @@ function slotRows(slots: RefillRound["slots"]): FrontSlot[][] {
     ]);
   }
   return [...rows.values()];
+}
+
+/** The machine's photo, small: what the filler looks for in the car park. */
+function MachineThumb({ path, className }: { path: string | null; className?: string }) {
+  const url = mediaUrl(path);
+  return (
+    <span
+      className={cn(
+        "relative grid shrink-0 place-items-center overflow-hidden bg-[linear-gradient(160deg,#f6f2ea,#ece6da)] shadow-[inset_0_0_0_1px_rgb(0_0_0/0.04)]",
+        className,
+      )}
+      aria-hidden="true"
+    >
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" className="absolute inset-0 size-full object-cover" />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={DEFAULT_MACHINE_PHOTO} alt="" className="absolute inset-0 size-full object-contain p-[12%]" />
+      )}
+    </span>
+  );
+}
+
+/** How full a machine still is: red under 30%, orange under 60%, green above; grey "?" when never counted. */
+function FillPill({ fill, compact = false }: { fill: { percent: number; band: FillBand } | null; compact?: boolean }) {
+  const { m } = useI18n();
+  const label = fill ? fmt(m.round.fillLeft, { n: fill.percent }) : m.round.fillUnknown;
+  return (
+    <span
+      className={cn(
+        "tabular inline-flex shrink-0 items-center gap-1.5 rounded-full font-bold",
+        compact ? "h-8 px-2.5 text-[14px]" : "mt-1 h-7 w-fit px-2.5 text-[13.5px]",
+        fill ? cn(bandBg[fill.band], "text-white") : "bg-surface text-muted-foreground",
+      )}
+      title={label}
+      aria-label={label}
+    >
+      {fill ? `${fill.percent}%` : compact ? "?" : m.round.fillUnknown}
+      {!compact && fill && <span className="font-semibold opacity-90">{m.round.fillWord}</span>}
+    </span>
+  );
 }
 
 /** A round checkbox, big enough for a thumb in a cold van. */

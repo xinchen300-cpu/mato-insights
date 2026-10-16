@@ -9,6 +9,7 @@ import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
 import { mediaUrl } from "@/lib/media";
 import { ExpiryPicker } from "@/components/refill/date-picker";
+import { RefillTips } from "@/components/refill/refill-tips";
 import { combineByProduct, groupByMachine, lineKey, suggestedDate } from "@/lib/refill";
 import type { RefillLine } from "@/lib/types";
 import { completeSheet, refreshLines, saveBox } from "./actions";
@@ -39,7 +40,6 @@ export function FillerView({
   const [dates, setDates] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<"idle" | "done" | "already_done" | "error">(completed ? "already_done" : "idle");
   const [filler, setFiller] = useState("");
-  const [checks, setChecks] = useState<Record<string, boolean>>({});
   const [nameMissing, setNameMissing] = useState(false);
   const [short, setShort] = useState<Record<string, number>>({});
   const [expiry, setExpiry] = useState<"none" | "found" | null>(null);
@@ -64,7 +64,6 @@ export function FillerView({
       if (Array.isArray(saved.ticked)) setTicked(new Set(saved.ticked));
       if (saved.amounts && typeof saved.amounts === "object") setAmounts(saved.amounts);
       if (saved.dates && typeof saved.dates === "object") setDates(saved.dates);
-      if (saved.checks && typeof saved.checks === "object") setChecks(saved.checks);
       if (saved.short && typeof saved.short === "object") setShort(saved.short);
       setFiller(localStorage.getItem(FILLER_KEY) ?? "");
     } catch {}
@@ -72,9 +71,9 @@ export function FillerView({
 
   useEffect(() => {
     try {
-      localStorage.setItem(storageKey, JSON.stringify({ ticked: [...ticked], amounts, dates, checks, short }));
+      localStorage.setItem(storageKey, JSON.stringify({ ticked: [...ticked], amounts, dates, short }));
     } catch {}
-  }, [storageKey, ticked, amounts, dates, checks, short]);
+  }, [storageKey, ticked, amounts, dates, short]);
 
   // What is in the cool box is part of the run, so the shop can see it while
   // the filler is on the road. Written after a pause, not on every tap.
@@ -182,7 +181,7 @@ export function FillerView({
         adjustments,
         expiries,
         filler,
-        checks,
+        {},
         km.trim() === "" ? null : Number(km.replace(",", ".")),
         Object.entries(short)
           .filter(([, qty]) => qty > 0)
@@ -471,29 +470,8 @@ export function FillerView({
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className={cn(sectionTitle, "px-1")}>{m.refill.checklistTitle}</h2>
-        <ul className="surface-card flex flex-col p-2">
-          {CHECK_KEYS.map((key) => (
-            <li key={key}>
-              <button
-                type="button"
-                onClick={() => setChecks((c) => ({ ...c, [key]: !c[key] }))}
-                aria-pressed={!!checks[key]}
-                className="hover-surface flex min-h-14 w-full items-center gap-3.5 rounded-xl px-3 py-3 text-left text-[16px]"
-              >
-                <span
-                  className={cn(
-                    "grid size-7 shrink-0 place-items-center rounded-lg transition-colors duration-150",
-                    checks[key] ? "bg-foreground text-background" : "bg-card shadow-[inset_0_0_0_1.5px_var(--input)]",
-                  )}
-                >
-                  {checks[key] && <Check className="size-4" strokeWidth={3} />}
-                </span>
-                {m.refill.checklist[key]}
-              </button>
-            </li>
-          ))}
-        </ul>
+        {/* Tips, not boxes to tick: refilling has to go smoothly (Xin, 14-10-2026). */}
+        <RefillTips tips={CHECK_KEYS.map((key) => m.refill.checklist[key])} />
 
         <div className="surface-card mt-2 flex flex-col gap-6 p-5">
           <label className="block">

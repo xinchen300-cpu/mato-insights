@@ -124,7 +124,7 @@ export async function startRound(sheetId: string, picked: Record<string, number>
   if (round.settings.notify.start) {
     after(() =>
       notifyOperators(orgId, {
-        title: "Vendly",
+        title: "MATO Insights",
         body: fmt(round.machines.length === 1 ? PUSH.pushStartedOne : PUSH.pushStarted, {
           name: who ?? PUSH.pushSomeone,
           count: round.machines.length,
@@ -245,8 +245,11 @@ export async function completeStop(sheetId: string, machineId: string, input: St
       technical: input.technical === true,
       note: typeof input.note === "string" ? input.note.slice(0, 200) : null,
       lines,
-      // Only the operator's own checks, as they stand now; nothing else can be ticked.
-      ...(round.settings.checks.length
+      // Only the operator's own checks, as they stand now; nothing else can be
+      // ticked. Since 16-10-2026 the filler's screen shows them as tips, not as
+      // boxes to tick, so a stop without any ticks records no checks at all
+      // instead of a row of unticked ones.
+      ...(round.settings.checks.length && input.checks && Object.keys(input.checks).length > 0
         ? { checks: Object.fromEntries(round.settings.checks.map((label) => [label, input.checks?.[label] === true])) }
         : {}),
     },
@@ -257,7 +260,7 @@ export async function completeStop(sheetId: string, machineId: string, input: St
     const machine = round.machines.find((mc) => mc.id === machineId)?.name ?? "";
     after(() =>
       notifyOperators(orgId, {
-        title: "Vendly",
+        title: "MATO Insights",
         body: fmt(PUSH.pushStopDone, { name: who ?? PUSH.pushSomeone, machine }),
         url: `/refill/${sheetId}`,
         tag: `round-${sheetId}`,
@@ -415,7 +418,7 @@ export async function completeRound(
   if (round.settings.notify.finish) {
     after(() =>
       notifyOperators(orgId, {
-        title: "Vendly",
+        title: "MATO Insights",
         body: fmt(visited === 1 ? PUSH.pushDoneOne : PUSH.pushDone, { name: who, count: visited, minutes }),
         url: `/refill/${sheetId}`,
         tag: `round-${sheetId}`,

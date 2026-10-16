@@ -19,7 +19,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { VendlyMark, VendlyWordmark } from "@/components/brand/vendly-mark";
+import { InsightsMark, InsightsWordmark } from "@/components/brand/insights-mark";
 import { MachineIcon } from "@/components/machine/machine-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -413,7 +413,7 @@ function FillerScreen({ step, settings, names }: { step: Step; settings: RoundSe
   if (step === "plan") {
     return (
       <>
-        <VendlyWordmark className="h-4 w-auto text-[#2a2520]" />
+        <InsightsWordmark className="h-4 w-auto text-[#2a2520]" />
         <p className="text-[17px] font-bold tracking-[-0.02em]">{t.demoReady}</p>
         {[first, second, third].map((name, i) => (
           <div key={name} className="flex items-center gap-2 rounded-xl bg-card px-2.5 py-2 ring-1 ring-border">
@@ -550,11 +550,11 @@ function Bubble({ text }: { text: string }) {
   return (
     <div className="flex items-start gap-2.5 rounded-2xl bg-card/90 px-3 py-2.5 shadow-[0_8px_24px_-12px_rgb(0_0_0/0.35)] ring-1 ring-border backdrop-blur animate-in fade-in slide-in-from-top-3 duration-500">
       <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#F4F1EA]">
-        <VendlyMark className="h-4 w-auto" />
+        <InsightsMark className="h-4 w-auto" />
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex justify-between text-[12px] font-semibold">
-          Vendly <span className="font-normal text-muted-foreground">{m.workflow.demoNow}</span>
+          {m.brand.name} <span className="font-normal text-muted-foreground">{m.workflow.demoNow}</span>
         </span>
         <span className="block text-[13px] leading-snug">{text}</span>
       </span>

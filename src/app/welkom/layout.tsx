@@ -1,4 +1,4 @@
-import { VendlyWordmark } from "@/components/brand/vendly-mark";
+import { InsightsWordmark } from "@/components/brand/insights-mark";
 import { LanguageToggle } from "@/components/shell/language-toggle";
 
 // Geen navigatie: wie hier staat heeft één taak, en elke andere knop is een
@@ -7,7 +7,7 @@ export default function WelcomeLayout({ children }: { children: React.ReactNode 
   return (
     <div className="min-h-svh bg-background">
       <header className="mx-auto flex h-16 w-full max-w-3xl items-center justify-between gap-3 px-5 sm:px-8">
-        <VendlyWordmark />
+        <InsightsWordmark />
         <LanguageToggle />
       </header>
       <main>{children}</main>

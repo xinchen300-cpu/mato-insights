@@ -45,6 +45,8 @@ export type Machine = {
   business_logo_path: string | null;
   data_since: string | null;
   km_round_trip: number | null;
+  /** The tile photo in the media bucket; null shows the placeholder. */
+  photo_path: string | null;
   /** From Payter: its standing connection's last connect and disconnect. */
   last_connected_at: string | null;
   last_disconnected_at: string | null;

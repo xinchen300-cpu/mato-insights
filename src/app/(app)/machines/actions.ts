@@ -10,7 +10,10 @@ import {
   requireSelectionAccess,
 } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { displayName } from "@/lib/people";
 import { MACHINE_TYPES, SLOT_SIZES, type LayoutRowSpec, type MachineType, type Product, type SlotSize } from "@/lib/types";
+import { imageFrom, removeImage, uploadImage } from "@/lib/upload";
 import { createProduct } from "../products/actions";
 
 export async function assignProduct(machineId: string, selection: string, productId: string | null) {
@@ -95,6 +98,32 @@ export async function updateMachineDetails(
     .eq("org_id", orgId);
   if (error) throw new Error(error.message);
 
+  revalidatePath("/", "layout");
+}
+
+/** The photo on the machine's tile: a new one, or none to go back to the placeholder. */
+export async function updateMachinePhoto(machineId: string, formData: FormData) {
+  const orgId = await requireOrgId();
+  await requireMachineAccess(orgId, machineId);
+  const admin = createAdminClient();
+  const { data: current, error: readError } = await admin
+    .from("machines")
+    .select("photo_path")
+    .eq("id", machineId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (readError) throw new Error(readError.message);
+  if (!current) throw new Error("Not found");
+
+  const photo = imageFrom(formData, "photo");
+  if (!photo && formData.get("removePhoto") !== "1") return;
+  const photoPath = photo ? await uploadImage(orgId, "machines", machineId, photo) : null;
+  const { error } = await admin.from("machines").update({ photo_path: photoPath }).eq("id", machineId).eq("org_id", orgId);
+  if (error) {
+    await removeImage(photoPath);
+    throw new Error(error.message);
+  }
+  await removeImage(current.photo_path);
   revalidatePath("/", "layout");
 }
 
@@ -202,12 +231,19 @@ export async function recordStock(
     }));
   if (clean.length === 0) return;
 
+  // Every account is one person, so the name comes from the account itself;
+  // nobody types it at the machine any more (Xin, 14-10-2026).
+  const who =
+    filler.trim() ||
+    displayName((await (await createClient()).auth.getUser()).data.user) ||
+    "";
+
   const { error } = await createAdminClient().rpc("record_stock", {
     target_org: orgId,
     target_machine: machineId,
     event_type: type,
     entries: clean,
-    filler_name: filler.trim().slice(0, 80),
+    filler_name: who.slice(0, 80),
     check_state: Object.fromEntries(Object.entries(checks).filter(([, v]) => v === true)),
   });
   if (error) throw new Error(error.message);

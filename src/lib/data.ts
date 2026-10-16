@@ -129,7 +129,14 @@ export async function getStatsReport(orgId: string, filters: StatsFilters): Prom
   return data as StatsReport;
 }
 
-export type RoundMachine = { id: string; name: string; status: TerminalStatus; lastSale: string | null };
+export type RoundMachine = {
+  id: string;
+  name: string;
+  status: TerminalStatus;
+  lastSale: string | null;
+  /** The tile photo, so the filler recognises the machine at a glance. */
+  photoPath: string | null;
+};
 /** Every slot of a machine on the round, for "something is wrong here" on any slot, planned or not. */
 export type RoundSlot = {
   machineId: string;
@@ -188,7 +195,7 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
   const [{ data: machineRows }, stock, lastSales, { data: org }] = await Promise.all([
     admin
       .from("machines")
-      .select("id, name, last_connected_at, last_disconnected_at")
+      .select("id, name, photo_path, last_connected_at, last_disconnected_at")
       .eq("org_id", orgId)
       .in("id", machineIds.length ? machineIds : [NOTHING]),
     getMachineStock(orgId, machineIds.length ? machineIds : [NOTHING]),
@@ -233,6 +240,7 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
           name: row.name as string,
           status: terminalStatus(row.last_connected_at as string | null, row.last_disconnected_at as string | null),
           lastSale: lastSales.get(id) ?? null,
+          photoPath: (row.photo_path as string | null) ?? null,
         };
       }),
     lines,
@@ -506,7 +514,7 @@ export async function getMonthlyReport(
 
 // One literal: Supabase types the result by parsing this string.
 const MACHINE_COLUMNS =
-  "id, name, type, payter_serial_number, business_id, shared_business_id, data_since, km_round_trip, last_connected_at, last_disconnected_at, terminal_model, terminal_network, terminal_flags, businesses!machines_business_id_fkey(name, logo_path)";
+  "id, name, type, payter_serial_number, business_id, shared_business_id, data_since, km_round_trip, photo_path, last_connected_at, last_disconnected_at, terminal_model, terminal_network, terminal_flags, businesses!machines_business_id_fkey(name, logo_path)";
 
 export async function getMachines(orgId: string): Promise<Machine[]> {
   const { businessId } = await getScope();
@@ -549,6 +557,7 @@ type MachineRow = {
   shared_business_id: string | null;
   data_since: string | null;
   km_round_trip: number | string | null;
+  photo_path: string | null;
   last_connected_at: string | null;
   last_disconnected_at: string | null;
   terminal_model: string | null;
@@ -570,6 +579,7 @@ function toMachine(row: MachineRow): Machine {
     business_logo_path: business?.logo_path ?? null,
     data_since: row.data_since,
     km_round_trip: row.km_round_trip === null ? null : Number(row.km_round_trip),
+    photo_path: row.photo_path,
     last_connected_at: row.last_connected_at,
     last_disconnected_at: row.last_disconnected_at,
     terminal_model: row.terminal_model,
