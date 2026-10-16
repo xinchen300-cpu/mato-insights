@@ -17,7 +17,16 @@ const selectClass =
   "h-11 w-full rounded-xl border border-input bg-card px-3.5 text-base outline-none transition-[border-color,box-shadow] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25 md:text-sm";
 const hintClass = "text-[13px] leading-snug text-muted-foreground";
 
-export function MachineDetailsForm({ machine, businesses }: { machine: Machine; businesses: Business[] }) {
+export function MachineDetailsForm({
+  machine,
+  businesses,
+  operator,
+}: {
+  machine: Machine;
+  businesses: Business[];
+  /** A shop renames its machine; everything else on it is the operator's. */
+  operator: boolean;
+}) {
   const { m } = useI18n();
   const router = useRouter();
   const [shared, setShared] = useState(Boolean(machine.shared_business_id));
@@ -54,6 +63,28 @@ export function MachineDetailsForm({ machine, businesses }: { machine: Machine; 
         setStatus("error");
       }
     });
+  }
+
+  const saveRow = (
+    <div className="flex flex-col gap-3 border-t pt-5 sm:col-span-2 sm:flex-row sm:items-center">
+      <Button onClick={save} disabled={isPending || !name.trim() || sharedIncomplete} className="w-full sm:w-auto">
+        {isPending ? m.common.saving : m.common.save}
+      </Button>
+      {status === "saved" && <span className="text-sm font-medium text-positive">{m.common.saved}</span>}
+      {status === "error" && <span className="text-sm font-medium text-negative">{m.common.error}</span>}
+    </div>
+  );
+
+  if (!operator) {
+    return (
+      <div className="grid gap-x-4 gap-y-6 sm:grid-cols-2">
+        <div className="grid gap-2 sm:col-span-2">
+          <Label htmlFor="machine-name">{m.machines.name}</Label>
+          <Input id="machine-name" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        {saveRow}
+      </div>
+    );
   }
 
   return (
@@ -177,17 +208,7 @@ export function MachineDetailsForm({ machine, businesses }: { machine: Machine; 
         />
         <p className={hintClass}>{m.machines.kmRoundTripHint}</p>
       </div>
-      <div className="flex flex-col gap-3 border-t pt-5 sm:col-span-2 sm:flex-row sm:items-center">
-        <Button
-          onClick={save}
-          disabled={isPending || !name.trim() || sharedIncomplete}
-          className="w-full sm:w-auto"
-        >
-          {isPending ? m.common.saving : m.common.save}
-        </Button>
-        {status === "saved" && <span className="text-sm font-medium text-positive">{m.common.saved}</span>}
-        {status === "error" && <span className="text-sm font-medium text-negative">{m.common.error}</span>}
-      </div>
+      {saveRow}
     </div>
   );
 }

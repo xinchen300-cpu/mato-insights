@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/page-header";
 import { getI18n } from "@/i18n/server";
 import { businessMachineIds, getBusinesses, getMachines } from "@/lib/data";
-import { denyFiller, requireOrgId } from "@/lib/org";
+import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
 import { AddBusiness, BusinessList } from "./business-list";
 
 export async function generateMetadata() {
@@ -27,7 +27,7 @@ export default async function BusinessesPage() {
         title={m.businesses.title}
         backHref="/machines"
         backLabel={m.nav.machines}
-        actions={<AddBusiness />}
+        actions={(await isOperator()) ? <AddBusiness /> : undefined}
       />
       <BusinessList businesses={rows} />
     </>

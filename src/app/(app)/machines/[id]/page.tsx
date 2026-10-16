@@ -10,6 +10,7 @@ import { DISPLAY_TIME_ZONE, fmt, weekdayIndex } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import {
   canEditLayout,
+  getOwnSelections,
   getBusinesses,
   getMachine,
   getMachineStock,
@@ -22,7 +23,7 @@ import {
 } from "@/lib/data";
 import { toFrontRows } from "@/lib/layout";
 import { mediaUrl } from "@/lib/media";
-import { denyFiller, requireOrgId } from "@/lib/org";
+import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
 import { fillLevel, levelColor } from "@/lib/stock";
 import { cn } from "@/lib/utils";
 import { assignProduct, createProductForMachine } from "../actions";
@@ -95,6 +96,9 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
 
   // A shared machine: every slot belongs to one of its two businesses.
   const shared = Boolean(machine.shared_business_id);
+  const operator = await isOperator();
+  // On a shared fridge a shop picks products for its own slots only.
+  const ownSlots = shared ? await getOwnSelections(orgId, id) : null;
   const ownerIds = [machine.business_id, machine.shared_business_id].filter((id): id is string => Boolean(id));
   const owners = ownerIds.map((ownerId, i) => ({
     id: ownerId,
@@ -221,6 +225,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
               <SlotProducts
                 rows={toFrontRows(slots, shared ? toneOf : undefined).map((row) => row.map(decorate))}
                 products={products}
+                editable={ownSlots}
                 onAssign={assignProduct.bind(null, id)}
                 onCreate={createProductForMachine.bind(null, id)}
               />
@@ -281,14 +286,17 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
           </Section>
         )}
 
-        <Section title={m.machines.settings}>
-          <div className="surface-card mb-4 p-5 sm:p-6">
-            <MachinePhotoForm machineId={machine.id} photoPath={machine.photo_path} />
-          </div>
-          <div className="surface-card p-5 sm:p-6">
-            <MachineDetailsForm machine={machine} businesses={businesses} />
-          </div>
-        </Section>
+        {/* A shop renames a machine of its own; a shared fridge's settings are the operator's alone. */}
+        {(operator || !shared) && (
+          <Section title={m.machines.settings}>
+            <div className="surface-card mb-4 p-5 sm:p-6">
+              <MachinePhotoForm machineId={machine.id} photoPath={machine.photo_path} />
+            </div>
+            <div className="surface-card p-5 sm:p-6">
+              <MachineDetailsForm machine={machine} businesses={operator ? businesses : []} operator={operator} />
+            </div>
+          </Section>
+        )}
       </div>
     </>
   );

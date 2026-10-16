@@ -75,7 +75,17 @@ export function SignupForm({
     if (error?.code === "user_already_exists" || (data.user && data.user.identities?.length === 0)) {
       return setExists(true);
     }
-    if (error) return setError(error.message);
+    if (error) {
+      // Supabase answers in technical English: say it in the reader's language.
+      const known: Record<string, string> = {
+        weak_password: m.auth.passwordWeak,
+        email_address_invalid: m.auth.emailInvalid,
+        over_email_send_rate_limit: m.auth.tooMany,
+        over_request_rate_limit: m.auth.tooMany,
+      };
+      console.error(error);
+      return setError(known[error.code ?? ""] ?? m.common.error);
+    }
     // With email confirmation off, Supabase signs the user in right away.
     if (data.session) window.location.href = "/";
     else setSentTo(email);

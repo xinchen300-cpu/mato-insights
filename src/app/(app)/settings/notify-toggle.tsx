@@ -21,12 +21,16 @@ function toBytes(base64: string) {
  */
 export function NotifyToggle({ publicKey }: { publicKey: string }) {
   const { m } = useI18n();
-  const [state, setState] = useState<"unknown" | "off" | "on" | "blocked" | "unsupported">("unknown");
+  const [state, setState] = useState<"unknown" | "off" | "on" | "blocked" | "unsupported" | "ios">("unknown");
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return setState("unsupported");
+    // Safari on an iPhone only offers push to a web app on the home screen:
+    // say how to get there instead of "this browser cannot".
+    const iphone = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const standalone = window.matchMedia("(display-mode: standalone)").matches || (navigator as { standalone?: boolean }).standalone === true;
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return setState(iphone && !standalone ? "ios" : "unsupported");
     if (Notification.permission === "denied") return setState("blocked");
 
     navigator.serviceWorker
@@ -77,14 +81,14 @@ export function NotifyToggle({ publicKey }: { publicKey: string }) {
     });
   }
 
-  if (state === "unsupported" || state === "blocked") {
+  if (state === "unsupported" || state === "blocked" || state === "ios") {
     return (
       <div className="flex min-h-16 items-center gap-3.5 rounded-xl px-3 py-3">
         <Avatar>
           <BellOff />
         </Avatar>
         <p className="min-w-0 text-[14px] text-muted-foreground">
-          {state === "unsupported" ? m.settings.notifyUnsupported : m.settings.notifyBlocked}
+          {state === "ios" ? m.settings.notifyIos : state === "unsupported" ? m.settings.notifyUnsupported : m.settings.notifyBlocked}
         </p>
       </div>
     );
@@ -104,7 +108,7 @@ export function NotifyToggle({ publicKey }: { publicKey: string }) {
               : "text-[14px] leading-snug text-muted-foreground",
           )}
         >
-          {state === "on" ? m.settings.notifyOnHere : m.settings.notifyIos}
+          {state === "on" ? m.settings.notifyOnHere : m.settings.notifyOffHere}
         </p>
       </div>
       <div className="shrink-0 pl-[54px] sm:pl-0">

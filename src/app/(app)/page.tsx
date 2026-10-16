@@ -28,15 +28,15 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { buildInsights } from "@/lib/insights";
-import { compareSince, fillDays, lastFullWeeks } from "@/lib/stats";
+import { compareMoneySince, compareSince, fillDays, lastFullWeeks } from "@/lib/stats";
 import { terminalStatus } from "@/lib/terminal-status";
 import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
 import { fillLevel, needsAttention } from "@/lib/stock";
 import { MachineIcon } from "@/components/machine/machine-icon";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { LiveSales } from "@/components/live-sales";
+import { isRecent } from "@/lib/unassigned";
 
-const RECENT_MS = 90 * 24 * 60 * 60 * 1000;
 
 // Urgency of a to-do row, worst first: a dead terminal outranks a stale label.
 type Tone = "negative" | "warning" | "muted";
@@ -114,11 +114,13 @@ export default async function OverviewPage() {
         {setup.done || !operator ? (
           <EmptyState
             title={m.overview.noData}
-            hint={m.overview.noDataHint}
+            hint={operator ? m.overview.noDataHint : m.overview.noDataShop}
             action={
-              <Link href="/settings" className={buttonVariants()}>
-                {m.overview.toSettings}
-              </Link>
+              operator && (
+                <Link href="/settings" className={buttonVariants()}>
+                  {m.overview.toSettings}
+                </Link>
+              )
             }
           />
         ) : (
@@ -153,7 +155,7 @@ export default async function OverviewPage() {
     (mc) => terminalStatus(mc.last_connected_at, mc.last_disconnected_at) === "offline",
   );
 
-  const recentUnassigned = unassigned.filter((g) => Date.now() - new Date(g.last_sale).getTime() < RECENT_MS);
+  const recentUnassigned = unassigned.filter((g) => isRecent(g));
 
   // Everything that asks for a decision today, gathered in one place instead of
   // three separate banners further down the page.
@@ -242,7 +244,15 @@ export default async function OverviewPage() {
     current: report.totals.revenue,
     previous: report.totals.prev_revenue,
     label,
-    verdict: compareSince(report.totals.units, report.totals.prev_units, report.first_sale, report.prev_start),
+    // Money shown, pieces tested: a mix shift is "about the same", not a real change.
+    verdict: compareMoneySince(
+      report.totals.units,
+      report.totals.prev_units,
+      report.totals.revenue,
+      report.totals.prev_revenue,
+      report.first_sale,
+      report.prev_start,
+    ),
     notes: { tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise, same: m.stats.aboutSame, new: newSince(report.first_sale) },
   });
 

@@ -11,6 +11,7 @@ import {
 } from "@/lib/data";
 import { denyFiller, requireOrgId } from "@/lib/org";
 import { ProductGrid } from "./product-grid";
+import { isRecent } from "@/lib/unassigned";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -30,11 +31,14 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
     getShelfLifePresets(orgId),
   ]);
 
+  // The same count as on the overview: what sold lately and still has no product.
+  const recent = unassigned.filter((g) => isRecent(g));
+
   return (
     <ProductGrid
       title={m.products.title}
       notice={
-        unassigned.length > 0 && (
+        recent.length > 0 && (
           <RowList className="mb-6">
             <li>
               <ListRow
@@ -46,7 +50,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                 }
                 title={
                   <span className="whitespace-normal font-medium">
-                    {fmt(m.overview.unassigned, { count: unassigned.length })}
+                    {fmt(m.overview.unassigned, { count: recent.length })}
                   </span>
                 }
                 chevron

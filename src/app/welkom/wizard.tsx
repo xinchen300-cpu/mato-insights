@@ -69,6 +69,7 @@ export function Wizard({
   const [leaving, setLeaving] = useState(false);
   const [connected, setConnected] = useState(payterConnected);
   const [terminals, setTerminals] = useState<Pick[] | null>(null);
+  const [unreachable, setUnreachable] = useState(false);
   const [loadingTerminals, setLoadingTerminals] = useState(false);
   const [plan, setPlan] = useState<string | null>(chosenPlan);
   const [accepted, setAccepted] = useState(false);
@@ -94,6 +95,12 @@ export function Wizard({
     setLoadingTerminals(true);
     try {
       const found = await fetchTerminals();
+      // Payter did not answer: say so, and never take that for an empty account.
+      setUnreachable(found === null);
+      if (found === null) {
+        setTerminals([]);
+        return;
+      }
       const known = new Map(knownMachines.map((k) => [k.serial, k]));
       const onPayter = new Set(found.map((t) => t.serial));
       // A machine linked earlier that Payter no longer lists still counts for
@@ -115,6 +122,7 @@ export function Wizard({
         ...orphans,
       ]);
     } catch {
+      setUnreachable(true);
       setTerminals([]);
     } finally {
       setLoadingTerminals(false);
@@ -345,9 +353,11 @@ export function Wizard({
             <p style={{ "--i": 1 } as React.CSSProperties} className={bodyClass}>
               {terminals === null || loadingTerminals
                 ? m.welcome.machinesWaitingBody
-                : terminals.length === 0
-                  ? m.welcome.machinesNoneBody
-                  : m.welcome.machinesBody}
+                : unreachable
+                  ? m.settings.payterUnreachable
+                  : terminals.length === 0
+                    ? m.welcome.machinesNoneBody
+                    : m.welcome.machinesBody}
             </p>
 
             <div style={{ "--i": 2 } as React.CSSProperties} className="mt-7">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
+import { Avatar, RowList, initial } from "@/components/list-row";
 import { Section } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,16 +80,16 @@ export function TeamPanel({
           const removable = !you && member.role !== "owner";
           return (
             <li key={member.userId}>
-              <ListRow
+              <TeamRow
                 leading={<Avatar>{initial(member.email ?? "?")}</Avatar>}
                 title={
-                  <span className="whitespace-normal">
+                  <>
                     {member.email ?? m.common.unknown}
                     {you && <span className="font-normal text-muted-foreground"> · {t.you}</span>}
-                  </span>
+                  </>
                 }
                 subtitle={member.businessName ? `${roleLabel[member.role]} · ${member.businessName}` : roleLabel[member.role]}
-                value={
+                actions={
                   removable ? (
                     confirming === member.userId ? (
                       <Button
@@ -107,23 +107,19 @@ export function TeamPanel({
                     )
                   ) : undefined
                 }
-                valueSub={
-                  confirming === member.userId ? (
-                    <span className="text-muted-foreground">{fmt(t.removeConfirm, { email: member.email ?? "" })}</span>
-                  ) : undefined
-                }
+                note={confirming === member.userId ? fmt(t.removeConfirm, { email: member.email ?? "" }) : undefined}
               />
             </li>
           );
         })}
         {invites.map((invite) => (
           <li key={invite.email}>
-            <ListRow
+            <TeamRow
               leading={<Avatar tone="warning">{initial(invite.email)}</Avatar>}
-              title={<span className="whitespace-normal">{invite.email}</span>}
+              title={invite.email}
               subtitle={`${roleLabel[invite.role]} · ${t.invitedBadge}`}
-              value={
-                <span className="flex items-center gap-1">
+              actions={
+                <>
                   <Button variant="ghost" size="sm" onClick={() => copyLink(linkFor(invite.token))}>
                     {copied === linkFor(invite.token) ? t.copied : t.copyLink}
                   </Button>
@@ -135,7 +131,7 @@ export function TeamPanel({
                   >
                     {t.revoke}
                   </Button>
-                </span>
+                </>
               }
             />
           </li>
@@ -199,5 +195,38 @@ export function TeamPanel({
         )}
       </form>
     </Section>
+  );
+}
+
+/**
+ * One person in the team: who and what on top, the actions under the address
+ * on a phone and beside it on a wider screen, so a long address never gets
+ * squeezed to a few letters. A question about the row goes under it, full width.
+ */
+function TeamRow({
+  leading,
+  title,
+  subtitle,
+  actions,
+  note,
+}: {
+  leading: React.ReactNode;
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
+  actions?: React.ReactNode;
+  note?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-xl px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3.5">
+      <div className="flex min-w-0 flex-1 items-center gap-3.5">
+        {leading}
+        <span className="min-w-0 flex-1">
+          <span className="block break-words text-[15px] font-semibold tracking-[-0.01em]">{title}</span>
+          {subtitle && <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">{subtitle}</span>}
+        </span>
+      </div>
+      {actions && <div className="flex shrink-0 flex-wrap items-center gap-1 pl-[46px] sm:pl-0">{actions}</div>}
+      {note && <p className="pl-[54px] text-[13px] text-muted-foreground sm:basis-full">{note}</p>}
+    </div>
   );
 }

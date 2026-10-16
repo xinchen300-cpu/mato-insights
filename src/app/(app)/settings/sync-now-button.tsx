@@ -21,11 +21,13 @@ export function SyncNowButton() {
       if (result.status === "success") {
         setMessage(
           result.transactionsSynced > 0
-            ? fmt(m.settings.synced, { count: result.transactionsSynced })
+            ? fmt(result.transactionsSynced === 1 ? m.settings.syncedOne : m.settings.synced, { count: result.transactionsSynced })
             : m.settings.syncedNone,
         );
       } else {
-        setMessage(fmt(m.settings.syncFailed, { error: result.error ?? "" }));
+        // The engine's own words are technical English: a refused login and anything else, in plain words.
+        console.error(result.error);
+        setMessage(/login|401|403/i.test(result.error ?? "") ? m.settings.payterFailed : m.settings.payterUnreachable);
       }
       router.refresh();
     });

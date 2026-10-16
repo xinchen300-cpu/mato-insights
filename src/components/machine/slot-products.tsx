@@ -27,6 +27,7 @@ export function SlotProducts({
   extra,
   onAssign,
   onCreate,
+  editable = null,
 }: {
   rows: FrontSlot[][];
   products: Product[];
@@ -39,6 +40,8 @@ export function SlotProducts({
   onAssign: (selection: string, productId: string | null) => Promise<void>;
   /** Makes a product for this machine and returns it. */
   onCreate: (name: string) => Promise<Product>;
+  /** The selections that may be changed here; null for all. A co-tenant's slot is shown, not offered. */
+  editable?: string[] | null;
 }) {
   const { m } = useI18n();
   // What was just picked, shown at once; the server's rows underneath catch up.
@@ -55,8 +58,9 @@ export function SlotProducts({
   const search = useRef<HTMLInputElement>(null);
 
   const order = useMemo(() => rows.flat(), [rows]);
+  const mayChange = (slot: FrontSlot) => editable === null || editable.includes(slot.selection);
   const open = order.find((slot) => slot.key === openKey) ?? null;
-  const next = open ? (order[order.findIndex((slot) => slot.key === open.key) + 1] ?? null) : null;
+  const next = open ? (order.slice(order.findIndex((slot) => slot.key === open.key) + 1).find(mayChange) ?? null) : null;
 
   // What this machine already holds comes first, most used first; then the rest.
   const sorted = useMemo(() => {
@@ -125,7 +129,8 @@ export function SlotProducts({
         rows={rows}
         showStock={showStock}
         selectedKey={openKey}
-        onSlotClick={(slot) => openSlot(slot.key === openKey ? null : slot.key)}
+        onSlotClick={(slot) => (mayChange(slot) ? openSlot(slot.key === openKey ? null : slot.key) : undefined)}
+        lockedKeys={editable === null ? undefined : order.filter((slot) => !mayChange(slot)).map((slot) => slot.key)}
       />
       <p className="mt-3 px-1 text-[13px] text-muted-foreground">{hint ?? m.layout.tapSlot}</p>
 

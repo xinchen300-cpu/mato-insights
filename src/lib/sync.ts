@@ -29,20 +29,29 @@ export type PayterTerminal = {
 
 /**
  * Every terminal on the connected Payter account, importing nothing. One login
- * can carry machines belonging to other businesses — a reseller account always
- * does — so the operator says which are theirs before any of it counts.
+ * can carry machines belonging to other businesses (a reseller account always
+ * does), so the operator says which are theirs before any of it counts.
+ *
+ * Null when Payter could not be asked: the function then answers with an
+ * error and no terminals, and an empty list would read as "every machine has
+ * left your account".
  */
-export async function listPayterTerminals(orgId: string): Promise<PayterTerminal[]> {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/payter-sync`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ orgId, action: "terminals" }),
-    cache: "no-store",
-  });
-  if (!res.ok) return [];
-  const json = await res.json();
-  return (json.terminals ?? []) as PayterTerminal[];
+export async function listPayterTerminals(orgId: string): Promise<PayterTerminal[] | null> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/payter-sync`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ orgId, action: "terminals" }),
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (json.error || !Array.isArray(json.terminals)) return null;
+    return json.terminals as PayterTerminal[];
+  } catch {
+    return null;
+  }
 }

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { denyFillerAccess, getScope, isFiller, isOperator, requireOperator, requireRefillAccess, type Role } from "@/lib/org";
@@ -622,7 +623,12 @@ export async function getMachineStock(orgId: string, machineIds?: string[]): Pro
     );
 }
 
-/** Per machine: payments that went through and those that did not, since a date. */
+/**
+ * Per machine: payments that went through and those that did not, since a
+ * date. A shop gets its own machines only, and on a shared one only what its
+ * own slots took (sale_business): the machine-wide count would give away the
+ * co-tenant's trade.
+ */
 export async function getPaymentHealth(orgId: string, since: Date): Promise<Map<string, PaymentHealth>> {
   await denyFillerAccess();
   const { data, error } = await createAdminClient().rpc("payment_health", {
@@ -630,7 +636,7 @@ export async function getPaymentHealth(orgId: string, since: Date): Promise<Map<
     since: since.toISOString(),
   });
   if (error) throw new Error(error.message);
-  return new Map(
+  const all = new Map(
     ((data ?? []) as PaymentHealth[]).map((h) => [
       h.machine_id,
       {
@@ -643,6 +649,70 @@ export async function getPaymentHealth(orgId: string, since: Date): Promise<Map<
       },
     ]),
   );
+  if (!(await getScope()).businessId) return all;
+  const [machines, shared] = await Promise.all([getMachines(orgId), sharedSelections(orgId)]);
+  const scoped = new Map<string, PaymentHealth>();
+  await Promise.all(
+    machines.map(async (machine) => {
+      const own = shared?.get(machine.id);
+      if (own) scoped.set(machine.id, await ownPaymentHealth(orgId, machine.id, own, since));
+      else if (all.has(machine.id)) scoped.set(machine.id, all.get(machine.id)!);
+    }),
+  );
+  return scoped;
+}
+
+/** payment_health for a shop's own slots of one shared machine, counted the same way. */
+async function ownPaymentHealth(orgId: string, machineId: string, own: Set<string>, since: Date): Promise<PaymentHealth> {
+  const admin = createAdminClient();
+  const selections = own.size ? [...own] : [NOTHING];
+  const { count: approved, error: countError } = await admin
+    .from("transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .eq("machine_id", machineId)
+    .gte("occurred_at", since.toISOString())
+    .in("item_ref", selections)
+    .eq("disposition", "APPROVED");
+  if (countError) throw new Error(countError.message);
+  // Every refused or broken-off attempt, a page at a time: the API stops at
+  // a thousand rows, and a busy fridge must not lose the rest without a word.
+  const problems: { occurred_at: string; amount: unknown; disposition: unknown; requested: unknown }[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await admin
+      .from("transactions")
+      .select("occurred_at, amount, disposition, requested:raw_json->>requestedAmount")
+      .eq("org_id", orgId)
+      .eq("machine_id", machineId)
+      .gte("occurred_at", since.toISOString())
+      .in("item_ref", selections)
+      .not("disposition", "is", null)
+      .neq("disposition", "APPROVED")
+      .order("occurred_at", { ascending: false })
+      .range(from, from + 999);
+    if (error) throw new Error(error.message);
+    problems.push(...((data ?? []) as typeof problems));
+    if (!data || data.length < 1000) break;
+  }
+  // What the customer tried to pay, as attempted_amount() takes it: a refusal commits nothing.
+  const tried = (t: { amount: unknown; requested: unknown }) =>
+    Number(t.amount) > 0
+      ? Number(t.amount)
+      : typeof t.requested === "string" && /^[0-9]+$/.test(t.requested)
+        ? Number(t.requested) / 100
+        : Number(t.amount);
+  const declined = problems.filter((t) => t.disposition === "DECLINED");
+  const failed = problems.filter((t) => t.disposition !== "DECLINED");
+  return {
+    machine_id: machineId,
+    approved: approved ?? 0,
+    declined: declined.length,
+    failed: failed.length,
+    declined_amount: declined.reduce((sum, t) => sum + tried(t), 0),
+    failed_amount: failed.reduce((sum, t) => sum + tried(t), 0),
+    // Newest first, so the first row is the latest problem.
+    last_problem_at: problems[0]?.occurred_at ?? null,
+  };
 }
 
 /** The machine's latest payments: the ones that worked and the ones that did not. */
@@ -665,7 +735,7 @@ export async function getPayments(
   await requireMachineAccess(orgId, machineId);
   const { businessId } = await getScope();
   const admin = createAdminClient();
-  const [{ data: machine }, { data: assignments }, { data: slots }] = await Promise.all([
+  const [{ data: machine, error: machineError }, { data: assignments }, { data: slots, error: slotsError }] = await Promise.all([
     admin.from("machines").select("business_id, shared_business_id").eq("id", machineId).eq("org_id", orgId).maybeSingle(),
     admin
       .from("selection_assignments")
@@ -674,6 +744,8 @@ export async function getPayments(
       .eq("machine_id", machineId),
     admin.from("slots").select("selection_number, business_id").eq("org_id", orgId).eq("machine_id", machineId),
   ]);
+  // Who owns which slot decides what a shop sees: an unread answer must not open the whole machine.
+  if (machineError || slotsError) throw new Error((machineError ?? slotsError)!.message);
 
   let query = admin
     .from("transactions")
@@ -833,11 +905,54 @@ export async function getMachineSalesSplit(
   }));
 }
 
+/**
+ * When each machine last sold something, paid. A shop gets its own machines
+ * only, and on a shared one the last sale of its own slots: when the
+ * co-tenant last sold is not its business.
+ */
 export async function getLastSales(orgId: string): Promise<Map<string, string | null>> {
   const { data } = await createAdminClient().rpc("dashboard_machine_last_sale", { target_org: orgId });
-  return new Map(
+  const all = new Map(
     ((data ?? []) as { machine_id: string; last_sale: string | null }[]).map((r) => [r.machine_id, r.last_sale]),
   );
+  const { businessId } = await getScope();
+  if (!businessId) return all;
+  const [machines, shared, { data: business }] = await Promise.all([
+    getMachines(orgId),
+    sharedSelections(orgId),
+    createAdminClient().from("businesses").select("started_on").eq("id", businessId).eq("org_id", orgId).maybeSingle(),
+  ]);
+  const scoped = new Map<string, string | null>();
+  await Promise.all(
+    machines.map(async (machine) => {
+      const own = shared?.get(machine.id);
+      if (!own) return void scoped.set(machine.id, all.get(machine.id) ?? null);
+      let query = createAdminClient()
+        .from("transactions")
+        .select("occurred_at")
+        .eq("org_id", orgId)
+        .eq("machine_id", machine.id)
+        .eq("disposition", "APPROVED")
+        .gt("amount", 0)
+        .in("item_ref", own.size ? [...own] : [NOTHING]);
+      // Where its sales start, as sales_start() has it: the terminal's date, else the shop's own.
+      const start = machine.data_since ?? (business?.started_on as string | null | undefined) ?? null;
+      if (start) query = query.gte("occurred_at", brusselsMidnight(start));
+      const { data: last } = await query.order("occurred_at", { ascending: false }).limit(1).maybeSingle();
+      scoped.set(machine.id, (last?.occurred_at as string | undefined) ?? null);
+    }),
+  );
+  return scoped;
+}
+
+/** Midnight of a calendar day in Brussels, as a moment: how sales_start() reads a start date. */
+function brusselsMidnight(day: string): string {
+  const offset =
+    new Intl.DateTimeFormat("en-US", { timeZone: DISPLAY_TIME_ZONE, timeZoneName: "shortOffset" })
+      .formatToParts(new Date(`${day}T00:00:00Z`))
+      .find((part) => part.type === "timeZoneName")?.value ?? "GMT+1";
+  const hours = Number(offset.replace("GMT", "") || "0");
+  return new Date(Date.parse(`${day}T00:00:00Z`) - hours * 3_600_000).toISOString();
 }
 
 export const PRODUCT_COLUMNS =
@@ -869,15 +984,20 @@ export async function getShelfLifePresets(orgId: string): Promise<ShelfLifePrese
   return data ?? [];
 }
 
+/** In how many slots each product is right now; a shop gets its own products only. */
 export async function getProductSlotCounts(orgId: string): Promise<Map<string, number>> {
   await denyFillerAccess();
-  const { data } = await createAdminClient()
-    .from("selection_assignments")
-    .select("product_id")
-    .eq("org_id", orgId)
-    .is("valid_to", null);
+  const { businessId } = await getScope();
+  const [{ data }, mine] = await Promise.all([
+    createAdminClient().from("selection_assignments").select("product_id").eq("org_id", orgId).is("valid_to", null),
+    businessId ? getProducts(orgId, { includeArchived: true }) : Promise.resolve(null),
+  ]);
+  const own = mine ? new Set(mine.map((product) => product.id)) : null;
   const counts = new Map<string, number>();
-  for (const row of data ?? []) counts.set(row.product_id, (counts.get(row.product_id) ?? 0) + 1);
+  for (const row of data ?? []) {
+    if (own && !own.has(row.product_id)) continue;
+    counts.set(row.product_id, (counts.get(row.product_id) ?? 0) + 1);
+  }
   return counts;
 }
 
@@ -894,15 +1014,20 @@ export async function getBusiness(orgId: string, id: string): Promise<Business |
     .eq("org_id", orgId)
     .eq("id", id)
     .maybeSingle();
-  return data ?? null;
+  return data ? forScope(data, businessId) : null;
 }
 
-/** The customer's own read-only page: no login, just the unguessable link. */
-export async function getBusinessByToken(token: string): Promise<(Business & { org_id: string }) | null> {
+/**
+ * The customer's own read-only page: no login, just the unguessable link.
+ * Only what that page shows: never the operator's notes or contact details.
+ */
+export async function getBusinessByToken(
+  token: string,
+): Promise<(Pick<Business, "id" | "name" | "logo_path"> & { org_id: string }) | null> {
   if (!token) return null;
   const { data } = await createAdminClient()
     .from("businesses")
-    .select(`${BUSINESS_COLUMNS}, org_id`)
+    .select("id, name, logo_path, org_id")
     .eq("share_token", token)
     .maybeSingle();
   return data ?? null;
@@ -942,7 +1067,12 @@ export async function getBusinesses(orgId: string): Promise<Business[]> {
   if (businessId) query = query.eq("id", businessId);
   const { data, error } = await query.order("name");
   if (error) throw new Error(error.message);
-  return data ?? [];
+  return (data ?? []).map((business) => forScope(business, businessId));
+}
+
+/** What the operator notes about a customer is not the customer's to read: one rule for every loader. */
+function forScope<T extends { notes: string | null }>(business: T, businessId: string | null): T {
+  return businessId ? { ...business, notes: null } : business;
 }
 
 /** Slots with stock over date or going over within the day, worst first. */
@@ -1348,23 +1478,27 @@ export async function requireMachineAccess(orgId: string, machineId: string): Pr
  * first business (as sale_business decides); a selection without a slot
  * belongs to neither shop. Null for the operator, who owns every slot.
  */
-async function sharedSelections(orgId: string): Promise<Map<string, Set<string>> | null> {
+const sharedSelections = cache(async (orgId: string): Promise<Map<string, Set<string>> | null> => {
   const { businessId } = await getScope();
   if (!businessId) return null;
   const admin = createAdminClient();
-  const { data: machines } = await admin
+  // A failed read must refuse, never pass: an empty answer here would make
+  // every shared machine look like the shop's alone.
+  const { data: machines, error } = await admin
     .from("machines")
     .select("id, business_id, shared_business_id")
     .eq("org_id", orgId)
     .not("shared_business_id", "is", null);
+  if (error) throw new Error(error.message);
   const shared = (machines ?? []).filter((m) => m.business_id === businessId || m.shared_business_id === businessId);
   const owned = new Map<string, Set<string>>(shared.map((m) => [m.id as string, new Set<string>()]));
   if (shared.length === 0) return owned;
-  const { data: slots } = await admin
+  const { data: slots, error: slotsError } = await admin
     .from("slots")
     .select("machine_id, selection_number, business_id")
     .eq("org_id", orgId)
     .in("machine_id", shared.map((m) => m.id as string));
+  if (slotsError) throw new Error(slotsError.message);
   for (const slot of slots ?? []) {
     const machine = shared.find((m) => m.id === slot.machine_id);
     if (!machine) continue;
@@ -1374,6 +1508,16 @@ async function sharedSelections(orgId: string): Promise<Map<string, Set<string>>
     if (owner === businessId) owned.get(machine.id as string)!.add(slot.selection_number as string);
   }
   return owned;
+});
+
+/**
+ * The slots of a machine the caller may change, for the screens that offer
+ * it: null for all of them, else a shop's own slots on a shared machine.
+ */
+export async function getOwnSelections(orgId: string, machineId: string): Promise<string[] | null> {
+  await requireMachineAccess(orgId, machineId);
+  const own = (await sharedSelections(orgId))?.get(machineId);
+  return own ? [...own] : null;
 }
 
 /**

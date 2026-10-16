@@ -46,6 +46,28 @@ export function compareSince(
 }
 
 /**
+ * The verdict for a change in money. The test counts pieces (it is sales that
+ * spread like counts), but the money can go the other way when the mix shifts:
+ * more cheap things, fewer dear ones. "A real increase" over a minus sign is
+ * the kind of nonsense Vendly exists to avoid, so the verdict only stands when
+ * pieces and money point the same way, and is "noise" otherwise.
+ */
+export function compareMoneySince(
+  units: number,
+  previousUnits: number,
+  revenue: number,
+  previousRevenue: number,
+  firstSale: string | null | undefined,
+  previousStart: string,
+): Verdict {
+  const verdict = compareSince(units, previousUnits, firstSale, previousStart);
+  if (verdict !== "up" && verdict !== "down") return verdict;
+  const moneyUp = revenue > previousRevenue;
+  const moneyDown = revenue < previousRevenue;
+  return (verdict === "up" && moneyUp) || (verdict === "down" && moneyDown) ? verdict : "noise";
+}
+
+/**
  * Two sales counts over periods of different length, such as a February
  * against a January: what is compared is the rate per day. With equal lengths
  * this is exactly compareCounts.

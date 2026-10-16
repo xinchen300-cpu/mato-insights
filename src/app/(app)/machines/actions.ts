@@ -54,23 +54,34 @@ export async function updateMachineDetails(
   await requireMachineAccess(orgId, machineId);
   const admin = createAdminClient();
 
-  const name = input.name.trim();
+  const name = input.name.trim().slice(0, 80);
   if (!name) throw new Error("Name is required");
   if (input.type && !MACHINE_TYPES.includes(input.type)) throw new Error("Invalid type");
 
-  // Who a machine belongs to is the operator's call. A shop that shares a
-  // fridge may rename it, but not write its co-tenant out of it.
-  let businessId = input.businessId;
+  // A shop may rename its own machine and nothing else. Who it belongs to, its
+  // kind, the day its figures start and the drive there are the operator's,
+  // and so is the name of a fridge two businesses share: the co-tenant sees it
+  // too. Whatever else the form sends is ignored, not trusted.
   if (!(await isOperator())) {
     const current = await getMachine(orgId, machineId);
-    if (
-      input.newBusinessName?.trim() ||
-      input.businessId !== (current?.business_id ?? null) ||
-      input.sharedBusinessId !== (current?.shared_business_id ?? null)
-    ) {
-      throw new Error("Not found");
-    }
+    if (!current || current.shared_business_id) throw new Error("Not found");
+    const { error } = await admin.from("machines").update({ name }).eq("id", machineId).eq("org_id", orgId);
+    if (error) throw new Error(error.message);
+    revalidatePath("/", "layout");
+    return;
   }
+  // The businesses named must be this organisation's own.
+  const named = [input.businessId, input.sharedBusinessId].filter((id): id is string => Boolean(id));
+  if (named.length) {
+    const { count, error } = await admin
+      .from("businesses")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .in("id", named);
+    if (error) throw new Error(error.message);
+    if ((count ?? 0) !== new Set(named).size) throw new Error("Not found");
+  }
+  let businessId = input.businessId;
   if (input.newBusinessName?.trim()) {
     const { data, error } = await admin
       .from("businesses")
@@ -105,6 +116,8 @@ export async function updateMachineDetails(
 export async function updateMachinePhoto(machineId: string, formData: FormData) {
   const orgId = await requireOrgId();
   await requireMachineAccess(orgId, machineId);
+  // A fridge two businesses share shows both the same photo: the operator's to choose.
+  if (!(await isOperator()) && (await getMachine(orgId, machineId))?.shared_business_id) throw new Error("Not found");
   const admin = createAdminClient();
   const { data: current, error: readError } = await admin
     .from("machines")
@@ -147,6 +160,8 @@ export async function saveLayout(
   // written: a refusal halfway would leave the new layout with the old links.
   await requireLayoutAccess(orgId, machineId);
   await requireSelectionAccess(orgId, machineId, Object.keys(assignments));
+  // A shop may lay out its own machine, but its kind is the operator's call.
+  const kind = (await isOperator()) ? type : ((await getMachine(orgId, machineId))?.type ?? type);
   for (const productId of new Set(Object.values(assignments))) {
     if (productId) await requireProductAccess(orgId, productId);
   }
@@ -178,14 +193,16 @@ export async function saveLayout(
   const { error } = await admin.rpc("save_machine_layout", {
     target_org: orgId,
     target_machine: machineId,
-    machine_type: type,
+    machine_type: kind,
     layout: clean.map((slots) => ({ slots })),
   });
   if (error) throw new Error(error.message);
 
   // Product links are kept per selection number, so only changed ones are written.
+  // A number renumbered away arrives as null: its old link is closed as well,
+  // or the product would stay attached to a slot that no longer exists.
   for (const [selection, productId] of Object.entries(assignments)) {
-    if (!seen.has(selection)) continue;
+    if (!seen.has(selection) && (productId !== null || !/^[0-9]+$/.test(selection))) continue;
     const { error: assignError } = await admin.rpc("assign_product", {
       target_org: orgId,
       target_machine: machineId,

@@ -45,6 +45,8 @@ export function NewPasswordForm() {
   const [state, setState] = useState<"checking" | "ready" | "paste" | "saving" | "expired">("checking");
   const [pasteError, setPasteError] = useState(false);
   const [leaked, setLeaked] = useState(false);
+  // A password Supabase will not take is said under the field; only a lost session sends you back for a new link.
+  const [refused, setRefused] = useState<"same" | "weak" | null>(null);
 
   /** Trade a one-time code for a session, without any redirect. */
   async function use(token: string) {
@@ -86,8 +88,13 @@ export function NewPasswordForm() {
     const password = String(formData.get("password"));
     const isLeaked = await isLeakedPassword(password);
     setLeaked(isLeaked);
+    setRefused(null);
     if (isLeaked) return setState("ready");
     const { error } = await createClient().auth.updateUser({ password });
+    if (error?.code === "same_password" || error?.code === "weak_password") {
+      setRefused(error.code === "same_password" ? "same" : "weak");
+      return setState("ready");
+    }
     if (error) return setState("expired");
     router.push("/");
     router.refresh();
@@ -152,6 +159,7 @@ export function NewPasswordForm() {
           <span className={authFieldHint}>{m.auth.passwordHint}</span>
         </div>
         {leaked && <p className={authError}>{m.auth.passwordLeaked}</p>}
+        {refused && <p className={authError}>{refused === "same" ? m.auth.passwordSame : m.auth.passwordWeak}</p>}
         <Button type="submit" size="lg" disabled={state !== "ready"} className="mt-1 w-full">
           {state === "saving" ? m.auth.resetSaving : m.auth.resetSave}
         </Button>

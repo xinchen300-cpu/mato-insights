@@ -34,12 +34,15 @@ export function FrontView({
   selectedKey,
   onSlotClick,
   renderSlotFooter,
+  lockedKeys,
 }: {
   rows: FrontSlot[][];
   showStock?: boolean;
   selectedKey?: string | null;
   onSlotClick?: (slot: FrontSlot) => void;
   renderSlotFooter?: (slot: FrontSlot) => React.ReactNode;
+  /** Slots shown but not offered, like a co-tenant's on a shared fridge. */
+  lockedKeys?: string[];
 }) {
   return (
     <div className="overflow-x-auto">
@@ -50,9 +53,11 @@ export function FrontView({
             <div key={rowIndex} className="flex gap-1.5 rounded-xl bg-foreground/[0.045] p-1.5">
               {row.map((slot) => {
                 const level = fillLevel(slot.stock, slot.capacity);
+                const clickable = Boolean(onSlotClick) && !lockedKeys?.includes(slot.key);
                 const className = cn(
                   "flex min-w-[52px] flex-col overflow-hidden rounded-lg bg-card text-left shadow-[0_0_0_1px_var(--border),var(--shadow-card)]",
-                  onSlotClick && "cursor-pointer transition-transform duration-150 hover:-translate-y-0.5",
+                  clickable && "cursor-pointer transition-transform duration-150 hover:-translate-y-0.5",
+                  lockedKeys?.includes(slot.key) && "opacity-60",
                   selectedKey === slot.key && "outline-2 outline-offset-1 outline-primary",
                 );
                 const style = { flexGrow: grow[slot.size], flexBasis: 0 };
@@ -105,7 +110,7 @@ export function FrontView({
                     {renderSlotFooter?.(slot)}
                   </>
                 );
-                return onSlotClick ? (
+                return clickable && onSlotClick ? (
                   <button
                     key={slot.key}
                     type="button"

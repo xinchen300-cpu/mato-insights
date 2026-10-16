@@ -15,7 +15,16 @@ import Link from "next/link";
 import { getBusinesses, getMachines, getPriceMismatches, getProducts, getStatsReport } from "@/lib/data";
 import { mediaUrl } from "@/lib/media";
 import { denyFiller, requireOrgId } from "@/lib/org";
-import { busiestWeekday, compareCounts, compareSince, fillDays, MIN_WEEKS, periodDays, weekdayStats } from "@/lib/stats";
+import {
+  busiestWeekday,
+  compareCounts,
+  compareMoneySince,
+  compareSince,
+  fillDays,
+  MIN_WEEKS,
+  periodDays,
+  weekdayStats,
+} from "@/lib/stats";
 import { compareLabelKey, parseStatsParams, type StatsSearchParams } from "@/lib/stats-params";
 import type { StatsReport } from "@/lib/types";
 import { MonthlyOverview, MonthlySkeleton } from "./monthly";
@@ -83,6 +92,14 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
     firstSale ? fmt(m.stats.newSince, { date: f.dayMonth(firstSale) }) : undefined;
   const since = (row: { units: number; prev_units: number; first_sale: string | null }) =>
     compareSince(row.units, row.prev_units, row.first_sale, report.prev_start);
+  // These arrows show money; see compareMoneySince for why a mix shift is grey.
+  const moneyVerdict = (row: {
+    units: number;
+    prev_units: number;
+    revenue: number;
+    prev_revenue: number;
+    first_sale: string | null;
+  }) => compareMoneySince(row.units, row.prev_units, row.revenue, row.prev_revenue, row.first_sale, report.prev_start);
   const unitsVerdict = since({ ...totals, first_sale: report.first_sale });
   const verdictNotes = { tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise, same: m.stats.aboutSame, new: newSince(report.first_sale) };
 
@@ -152,7 +169,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                   current: totals.revenue,
                   previous: totals.prev_revenue,
                   label: compare,
-                  verdict: unitsVerdict,
+                  verdict: moneyVerdict({ ...totals, first_sale: report.first_sale }),
                   notes: verdictNotes,
                 }}
                 f={f}
@@ -277,7 +294,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                           current={row.revenue}
                           previous={row.prev_revenue}
                           f={f}
-                          verdict={since(row)}
+                          verdict={moneyVerdict(row)}
                           noiseLabel={m.stats.withinNoise}
                           sameLabel={m.stats.aboutSame}
                           newLabel={newSince(row.first_sale)}
@@ -316,7 +333,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                             current={row.revenue}
                             previous={row.prev_revenue}
                             f={f}
-                            verdict={since(row)}
+                            verdict={moneyVerdict(row)}
                             noiseLabel={m.stats.withinNoise}
                             sameLabel={m.stats.aboutSame}
                             newLabel={newSince(row.first_sale)}

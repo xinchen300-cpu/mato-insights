@@ -18,7 +18,16 @@ import { MachineIcon } from "@/components/machine/machine-icon";
 
 const hintClass = "text-[13px] leading-snug text-muted-foreground";
 
-export function BusinessSettings({ business, canDelete }: { business: Business; canDelete: boolean }) {
+export function BusinessSettings({
+  business,
+  canDelete,
+  operator,
+}: {
+  business: Business;
+  canDelete: boolean;
+  /** A shop edits its own name, contact and logo; the start date, the notes and deleting are the operator's. */
+  operator: boolean;
+}) {
   const { m } = useI18n();
   const router = useRouter();
   const [logo, setLogo] = useState<{ file: File | null; removed: boolean }>({ file: null, removed: false });
@@ -60,17 +69,19 @@ export function BusinessSettings({ business, canDelete }: { business: Business; 
         <Input id="name" name="name" defaultValue={business.name} required />
       </div>
 
-      <div className="grid gap-2 sm:col-span-2">
-        <Label htmlFor="startedOn">{m.businesses.startedOn}</Label>
-        <Input
-          id="startedOn"
-          name="startedOn"
-          type="date"
-          defaultValue={business.started_on ?? ""}
-          className="w-fit"
-        />
-        <p className={hintClass}>{m.businesses.startedOnHint}</p>
-      </div>
+      {operator && (
+        <div className="grid gap-2 sm:col-span-2">
+          <Label htmlFor="startedOn">{m.businesses.startedOn}</Label>
+          <Input
+            id="startedOn"
+            name="startedOn"
+            type="date"
+            defaultValue={business.started_on ?? ""}
+            className="w-fit"
+          />
+          <p className={hintClass}>{m.businesses.startedOnHint}</p>
+        </div>
+      )}
 
       <div className="grid gap-2">
         <Label htmlFor="contactName">{m.businesses.contact}</Label>
@@ -85,17 +96,19 @@ export function BusinessSettings({ business, canDelete }: { business: Business; 
         <Input id="email" name="email" type="email" defaultValue={business.email ?? ""} />
       </div>
 
-      <div className="grid gap-2 sm:col-span-2">
-        <Label htmlFor="notes">{m.businesses.notes}</Label>
-        <textarea
-          id="notes"
-          name="notes"
-          rows={3}
-          defaultValue={business.notes ?? ""}
-          className="w-full min-w-0 resize-y rounded-xl border border-input bg-card px-3.5 py-2.5 text-base transition-[border-color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25 md:text-sm"
-        />
-        <p className={hintClass}>{m.businesses.notesHint}</p>
-      </div>
+      {operator && (
+        <div className="grid gap-2 sm:col-span-2">
+          <Label htmlFor="notes">{m.businesses.notes}</Label>
+          <textarea
+            id="notes"
+            name="notes"
+            rows={3}
+            defaultValue={business.notes ?? ""}
+            className="w-full min-w-0 resize-y rounded-xl border border-input bg-card px-3.5 py-2.5 text-base transition-[border-color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25 md:text-sm"
+          />
+          <p className={hintClass}>{m.businesses.notesHint}</p>
+        </div>
+      )}
 
       <div className="grid gap-2 sm:col-span-2">
         <Label>{m.businesses.logo}</Label>
@@ -115,19 +128,28 @@ export function BusinessSettings({ business, canDelete }: { business: Business; 
         </Button>
         {status === "saved" && <span className="text-[13.5px] font-medium text-positive">{m.common.saved}</span>}
         {status === "error" && <span className="text-[13.5px] font-medium text-negative">{m.common.error}</span>}
-        {canDelete && (
+        {operator && canDelete && (
           <Button type="button" variant="destructive" onClick={remove} disabled={isPending} className="ml-auto">
             <Trash2 />
             {m.common.delete}
           </Button>
         )}
       </div>
-      {!canDelete && <p className={`${hintClass} sm:col-span-2`}>{m.businesses.deleteHint}</p>}
+      {operator && !canDelete && <p className={`${hintClass} sm:col-span-2`}>{m.businesses.deleteHint}</p>}
     </form>
   );
 }
 
-export function MachineStarts({ machines, business }: { machines: Machine[]; business: Business }) {
+export function MachineStarts({
+  machines,
+  business,
+  operator,
+}: {
+  machines: Machine[];
+  business: Business;
+  /** Only the operator sets when a terminal's figures start; a shop reads it. */
+  operator: boolean;
+}) {
   const { m, f } = useI18n();
 
   if (machines.length === 0) {
@@ -139,7 +161,7 @@ export function MachineStarts({ machines, business }: { machines: Machine[]; bus
       {machines.map((machine) =>
         // A shared machine's terminal date would hit both businesses, so there
         // the business' own start date decides what counts as its sales.
-        machine.shared_business_id ? (
+        machine.shared_business_id || !operator ? (
           <SharedMachineRow key={machine.id} machine={machine} business={business} m={m} f={f} />
         ) : (
           <MachineStartRow key={machine.id} machine={machine} label={m.machines.dataSince} />
@@ -192,8 +214,9 @@ function SharedMachineRow({
     <li className={rowClass}>
       <MachineLink machine={machine} />
       <span className={`${underName} shrink-0 text-[13px] text-muted-foreground sm:text-right`}>
-        {business.started_on
-          ? fmt(m.businesses.salesFromBusiness, { date: f.date(business.started_on) })
+        {/* As sales_start counts: the terminal's own date first, else the day the business started. */}
+        {(machine.data_since ?? business.started_on)
+          ? fmt(m.businesses.salesFromBusiness, { date: f.date((machine.data_since ?? business.started_on)!) })
           : m.businesses.salesFromNotSet}
       </span>
     </li>

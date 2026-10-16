@@ -3,6 +3,7 @@ import { uncovered } from "../src/lib/assignments.ts";
 import { cleanRoundSettings, DEFAULT_ROUND_SETTINGS } from "../src/lib/round-settings.ts";
 import { allocate, itemReport, roundActual, roundCost, levelAfter, onlyMine, pickList, returnsFor, roundTimings, slotKey, pickKey, type FlowLine } from "../src/lib/refill-flow.ts";
 import type { RefillLine, RefillSheet } from "../src/lib/types.ts";
+import { compareMoneySince } from "../src/lib/stats.ts";
 const L = (sel: string, product: string, cap: number, stock: number | null, take: number, row = 1): FlowLine =>
   ({ machineId: "m1", selection: sel, row, slot: Number(sel), productId: product, productName: product.toUpperCase(), photoPath: null, capacity: cap, stock, take, expired: 0 });
 const lines = [L("1", "bami", 2, 0, 2), L("63", "bami", 2, 1, 1, 6), L("3", "nasi", 2, null, 2), L("5", "mihoen", 2, 2, 0)];
@@ -133,3 +134,8 @@ ok("settings: checks trimmed, kept once, capped", custom.checks.length === 2 && 
 ok("settings: message trimmed, flags kept, the rest default", custom.message === "Koelbox terug" && custom.askKm === false && custom.allowSkip === true && custom.notify.eachMachine && custom.notify.start && custom.notify.finish);
 ok("settings: at most eight checks", cleanRoundSettings({ checks: Array.from({ length: 12 }, (_, i) => `check ${i}`) }).checks.length === 8);
 
+// Money shown, pieces tested: only a change both agree on is real.
+ok("money: pieces and money up is up", compareMoneySince(200, 100, 800, 500, null, "2026-09-01") === "up");
+ok("money: more pieces for less money is noise, not up", compareMoneySince(200, 100, 450, 500, null, "2026-09-01") === "noise");
+ok("money: fewer pieces for more money is noise, not down", compareMoneySince(50, 100, 520, 500, null, "2026-09-01") === "noise");
+ok("money: too few stays too few", compareMoneySince(10, 8, 50, 20, null, "2026-09-01") === "tooFew");

@@ -2,7 +2,7 @@
 
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { requireBusinessAccess, requireOperator, requireOrgId } from "@/lib/org";
+import { isOperator, requireBusinessAccess, requireOperator, requireOrgId } from "@/lib/org";
 import { featureAllowed } from "@/lib/billing";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireMachineAccess } from "@/lib/data";
@@ -23,13 +23,16 @@ export async function saveBusiness(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Name is required");
 
+  // A shop keeps its own name, contact and logo up to date. The day it became
+  // a customer cuts its figures, and the notes are the operator's own: those
+  // two the operator alone writes, whatever a form sends.
+  const operator = await isOperator();
   const fields = {
     name,
-    started_on: text(formData, "startedOn"),
     contact_name: text(formData, "contactName"),
     email: text(formData, "email"),
     phone: text(formData, "phone"),
-    notes: text(formData, "notes"),
+    ...(operator ? { started_on: text(formData, "startedOn"), notes: text(formData, "notes") } : {}),
   };
 
   let business: { id: string; logo_path: string | null };
@@ -101,6 +104,8 @@ export async function setBusinessShare(
 /** Per-terminal override of the business start date, for a second-hand machine. */
 export async function setMachineDataSince(machineId: string, value: string | null) {
   const orgId = await requireOrgId();
+  // The day a terminal's figures start cuts sales and stock: the operator's call.
+  await requireOperator();
   await requireMachineAccess(orgId, machineId);
   const { error } = await createAdminClient()
     .from("machines")

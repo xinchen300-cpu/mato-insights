@@ -22,6 +22,17 @@ export async function canSignUp(): Promise<boolean> {
 }
 
 /**
+ * A brand-new installation with no account at all: the only time the login
+ * page offers to make one. Everyone else arrives through their invitation link.
+ */
+export async function isFreshInstall(): Promise<boolean> {
+  const { count: members } = await createAdminClient()
+    .from("memberships")
+    .select("user_id", { count: "exact", head: true });
+  return (members ?? 0) === 0;
+}
+
+/**
  * Whether this address may sign up with this link, checked before an account
  * is created. Only the address and the token together say yes: the address
  * alone is no proof of anything, and must not reveal who is invited.

@@ -3,6 +3,7 @@ import { EmptyState, PageHeader } from "@/components/page-header";
 import { getI18n } from "@/i18n/server";
 import { getPriceMismatches, getProducts, getUnassigned } from "@/lib/data";
 import { denyFiller, requireOrgId } from "@/lib/org";
+import { isRecent } from "@/lib/unassigned";
 import { PriceMismatches } from "./price-mismatches";
 import { UnassignedList } from "./unassigned-list";
 
@@ -22,20 +23,25 @@ export default async function UnassignedPage() {
   ]);
 
   // Busiest selections first within each machine: those are worth naming first.
-  const byMachine = new Map<string, { machineId: string; machineName: string; groups: typeof groups }>();
-  for (const g of groups) {
-    const section = byMachine.get(g.machine_id) ?? { machineId: g.machine_id, machineName: g.machine_name, groups: [] };
-    section.groups.push(g);
-    byMachine.set(g.machine_id, section);
-  }
-  const sections = [...byMachine.values()]
-    .sort((a, b) => a.machineName.localeCompare(b.machineName))
-    .map((s) => ({
-      ...s,
-      groups: s.groups
-        .sort((a, b) => b.sales - a.sales)
-        .map((g) => ({ ...g, lastSoldLabel: f.relative(g.last_sale) })),
-    }));
+  // What sold lately is the to-do; what has not sold in 90 days comes after, apart.
+  const sectionsOf = (list: typeof groups) => {
+    const byMachine = new Map<string, { machineId: string; machineName: string; groups: typeof groups }>();
+    for (const g of list) {
+      const section = byMachine.get(g.machine_id) ?? { machineId: g.machine_id, machineName: g.machine_name, groups: [] };
+      section.groups.push(g);
+      byMachine.set(g.machine_id, section);
+    }
+    return [...byMachine.values()]
+      .sort((a, b) => a.machineName.localeCompare(b.machineName))
+      .map((s) => ({
+        ...s,
+        groups: s.groups
+          .sort((a, b) => b.sales - a.sales)
+          .map((g) => ({ ...g, lastSoldLabel: f.relative(g.last_sale) })),
+      }));
+  };
+  const sections = sectionsOf(groups.filter((g) => isRecent(g)));
+  const older = sectionsOf(groups.filter((g) => !isRecent(g)));
 
   return (
     <>
@@ -46,7 +52,7 @@ export default async function UnassignedPage() {
         backLabel={m.nav.products}
       />
       <div className="flex flex-col gap-12">
-        {sections.length === 0 ? (
+        {sections.length === 0 && older.length === 0 ? (
           mismatches.length === 0 && (
             <EmptyState
               icon={<CircleCheck className="size-5" />}
@@ -60,7 +66,13 @@ export default async function UnassignedPage() {
               <Info className="mt-px size-4 shrink-0" />
               {m.unassigned.firstLinkNote}
             </p>
-            <UnassignedList sections={sections} products={products} />
+            {sections.length > 0 && <UnassignedList sections={sections} products={products} />}
+            {older.length > 0 && (
+              <section className="flex flex-col gap-3">
+                <h2 className="px-1 text-[15px] font-semibold text-muted-foreground">{m.unassigned.older}</h2>
+                <UnassignedList sections={older} products={products} />
+              </section>
+            )}
           </div>
         )}
 

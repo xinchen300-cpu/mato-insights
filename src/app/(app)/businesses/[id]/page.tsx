@@ -37,6 +37,7 @@ export default async function BusinessPage({ params }: { params: Promise<{ id: s
   const machineIds = businessMachineIds(machines).get(business.id) ?? new Set<string>();
   const own = machines.filter((mc) => machineIds.has(mc.id));
   const productCount = products.filter((p) => p.business_id === business.id).length;
+  const operator = await isOperator();
 
   // A profile: who it is on top, then where it sells, its own page, and the
   // particulars last — those are set once and rarely looked at again.
@@ -68,8 +69,8 @@ export default async function BusinessPage({ params }: { params: Promise<{ id: s
       />
 
       <div className="flex flex-col gap-10">
-        <Section title={m.businesses.machinesTitle} hint={m.machines.dataSinceHint}>
-          <MachineStarts machines={own} business={business} />
+        <Section title={m.businesses.machinesTitle} hint={operator ? m.machines.dataSinceHint : undefined}>
+          <MachineStarts machines={own} business={business} operator={operator} />
           <RowList>
             <li>
               <ListRow
@@ -88,13 +89,13 @@ export default async function BusinessPage({ params }: { params: Promise<{ id: s
 
         <Section title={m.businesses.shareTitle} hint={m.businesses.shareHint}>
           <div className="surface-card p-5 sm:p-6">
-            <ShareLink businessId={business.id} token={business.share_token} operator={await isOperator()} />
+            <ShareLink businessId={business.id} token={business.share_token} operator={operator} />
           </div>
         </Section>
 
         <Section title={m.businesses.details}>
           <div className="surface-card p-5 sm:p-6">
-            <BusinessSettings business={business} canDelete={own.length === 0} />
+            <BusinessSettings business={business} canDelete={own.length === 0} operator={operator} />
           </div>
         </Section>
       </div>

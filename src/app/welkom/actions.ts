@@ -17,7 +17,7 @@ import { startMandateCheckout } from "@/lib/subscription";
  * the operator waits, so the first sync is already on its way: without it the
  * list would stay empty until the five-minute cron came round.
  */
-export async function fetchTerminals(): Promise<PayterTerminal[]> {
+export async function fetchTerminals(): Promise<PayterTerminal[] | null> {
   const orgId = await requireOrgId();
   await requireOperator();
   const terminals = await listPayterTerminals(orgId);

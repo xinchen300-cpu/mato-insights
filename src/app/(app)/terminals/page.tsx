@@ -41,6 +41,25 @@ export default async function TerminalsPage() {
       .map((mc) => mc.payter_serial_number),
   );
 
+  // Payter did not answer: nothing on this page can be told from an empty list then.
+  if (terminals === null) {
+    return (
+      <div className="max-w-3xl">
+        <PageHeader title={m.terminals.title} backHref="/settings" backLabel={m.settings.title} />
+        <EmptyState
+          icon={<Nfc className="size-5" />}
+          title={m.terminals.unreachable}
+          hint={m.settings.payterUnreachable}
+          action={
+            <Link href="/terminals" className={buttonVariants()}>
+              {m.errors.retry}
+            </Link>
+          }
+        />
+      </div>
+    );
+  }
+
   const onPayter = new Set(terminals.map((t) => t.serial));
   const rows: TerminalRow[] = terminals.map((t) => {
     const machine = known.get(t.serial);

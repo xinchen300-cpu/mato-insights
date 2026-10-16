@@ -32,7 +32,8 @@ export default async function CustomersPage() {
       .select("id, name, plan, created_at, onboarded_at, trial_ends_at, cancelled_at, mollie_subscription_id")
       .eq("is_vendor", false)
       .order("created_at"),
-    admin.from("allowed_emails").select("email, org_id, claimed_at"),
+    // The customer's own invitation, the owner's: not a filler or manager they invited later.
+    admin.from("allowed_emails").select("email, org_id, claimed_at").eq("role", "owner"),
     admin.from("machines").select("org_id").eq("excluded", false),
   ]);
 
@@ -87,7 +88,7 @@ export default async function CustomersPage() {
                         {c.email ? fmt(m.customers.invitedTo, { email: c.email }) : f.date(c.since)}
                       </span>
                       <span className="figure mt-0.5 block text-[13px] text-muted-foreground">
-                        {fmt(m.customers.machinesCount, { count: c.machines })}
+                        {fmt(c.machines === 1 ? m.customers.machinesCountOne : m.customers.machinesCount, { count: c.machines })}
                         {" · "}
                         {c.plan ? `${m.plans[c.plan.id]} · ${f.euroRound(c.plan.pricePerMonth)}` : m.customers.noPlan}
                         {c.plan && c.cancelled && ` · ${m.billing.statusCancelled}`}
