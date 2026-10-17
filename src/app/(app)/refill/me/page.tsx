@@ -22,12 +22,15 @@ export default async function MyFiguresPage() {
   if (!orgId) notFound();
   const { m } = await getI18n();
   const [rounds, machines] = await Promise.all([getMyRounds(orgId), getMachines(orgId)]);
+  const stats = fillerStats(rounds, DISPLAY_TIME_ZONE);
+  // Only the names of machines on this person's own routes go to the page.
+  const onRoutes = new Set(stats.routes.flatMap((route) => route.machineIds));
   return (
     <>
       <PageHeader title={m.me.title} subtitle={m.me.subtitle} backHref="/refill" backLabel={m.nav.refill} />
       <FillerFigures
-        stats={fillerStats(rounds, DISPLAY_TIME_ZONE)}
-        names={Object.fromEntries(machines.map((machine) => [machine.id, machine.name]))}
+        stats={stats}
+        names={Object.fromEntries(machines.filter((machine) => onRoutes.has(machine.id)).map((machine) => [machine.id, machine.name]))}
       />
     </>
   );

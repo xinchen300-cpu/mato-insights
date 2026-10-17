@@ -1,5 +1,7 @@
 import { cache } from "react";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import type { User } from "@supabase/supabase-js";
 import { REQUIRE_LOGIN } from "@/lib/auth-config";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -22,18 +24,61 @@ export type Scope = {
 const narrowness = (row: { business_id: unknown; role: unknown }) => (row.business_id ? 0 : row.role === "filler" ? 1 : 2);
 
 /**
+ * Keeps an answer for the rest of one request, also where React's cache()
+ * keeps nothing: route handlers and server actions, which otherwise asked the
+ * session again for every check (six times for one poll of the live sales).
+ * The key is this request's own cookie store, an object Next makes for every
+ * request (and again for the page it renders after an action), so an answer
+ * can never reach another request or another person, and it goes when the
+ * request goes. A failed answer is not kept: the next check asks again.
+ */
+function perRequest<T>(resolve: () => Promise<T>): () => Promise<T> {
+  const answers = new WeakMap<object, Promise<T>>();
+  return async () => {
+    const store = await cookies();
+    const known = answers.get(store);
+    if (known) return known;
+    const answer = resolve();
+    answers.set(store, answer);
+    answer.catch(() => {
+      if (answers.get(store) === answer) answers.delete(store);
+    });
+    return answer;
+  };
+}
+
+/**
+ * The session, asked of Supabase once per request: who is signed in, and the
+ * client that asked. The membership is read with that same client, as it always
+ * was: if the login was refreshed while asking, it carries the fresh one.
+ */
+const getSession = cache(
+  perRequest(async () => {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    return { supabase, user };
+  }),
+);
+
+/** Who is signed in: the same answer the access checks got in this request. */
+export async function getSessionUser(): Promise<User | null> {
+  return (await getSession()).user;
+}
+
+/**
  * Resolves what to show. Prefers the logged-in user's own membership; falls
  * back to the first organization when no one is logged in, so the app works
  * without accounts during early/solo use. A membership tied to a business
  * narrows everything to that business — a shop sees its own machines and its
  * own share of a shared one, never the rest of the operator's fleet.
- * Cached per request.
+ * Once per request, in a page as much as in a route or a server action.
  */
-export const getScope = cache(async (): Promise<Scope> => {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export const getScope = cache(perRequest(resolveScope));
+
+async function resolveScope(): Promise<Scope> {
+  const { supabase, user } = await getSession();
 
   if (user) {
     // Filtered by hand as well as by the row policy, and ordered so that the
@@ -63,7 +108,7 @@ export const getScope = cache(async (): Promise<Scope> => {
     .maybeSingle();
 
   return { orgId: (org?.id as string) ?? null, businessId: null, role: "owner" };
-});
+}
 
 export async function getCurrentOrgId(): Promise<string | null> {
   return (await getScope()).orgId;

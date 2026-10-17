@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { getRefillRound, type RefillRound } from "@/lib/data";
-import { requireRefillAccess } from "@/lib/org";
+import { getSessionUser, requireRefillAccess } from "@/lib/org";
 import {
   DISPOSITIONS,
   REMOVAL_REASONS,
@@ -22,7 +22,6 @@ import { messages } from "@/i18n/messages";
 import { displayName } from "@/lib/people";
 import { notifyOperators } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 import type { RefillLine } from "@/lib/types";
 
 // Every action takes the round id from the phone, so every action checks it
@@ -77,10 +76,8 @@ function cleanPicked(round: RefillRound, picked: Record<string, number>): Record
  * they signed up, or else the part of their address before the @.
  */
 async function fillerName(): Promise<string | null> {
-  const {
-    data: { user },
-  } = await (await createClient()).auth.getUser();
-  return displayName(user);
+  // The same answer the access check already got in this request.
+  return displayName(await getSessionUser());
 }
 
 /** What is in the box so far, kept on the round so another phone can carry on. */
