@@ -100,14 +100,14 @@ export default async function FillMachinePage({
           </div>
         </div>
 
-        {/* Tap a slot, then set its count with minus and plus (Xin, 17-10-2026). */}
-        <Section title={m.refill.stockTitle} hint={stocked.length > 0 ? m.refill.tapSlotHint : undefined}>
-          {stocked.length === 0 ? (
+        {/* The slots, with one button to set their counts with a big minus and plus (Xin, 17-10-2026). */}
+        {stocked.length === 0 ? (
+          <Section title={m.refill.stockTitle}>
             <p className="px-1 text-sm text-muted-foreground">{m.machines.noLayoutHint}</p>
-          ) : (
-            <StockAdjust machineId={id} slots={stocked} />
-          )}
-        </Section>
+          </Section>
+        ) : (
+          <StockAdjust machineId={id} slots={stocked} />
+        )}
       </div>
     </>
   );
