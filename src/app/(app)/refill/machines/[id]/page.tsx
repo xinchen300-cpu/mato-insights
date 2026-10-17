@@ -1,7 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { StockLegend } from "@/components/machine/front-view";
-import { FrontView } from "@/components/machine/front-view";
 import { MachinePhoto } from "@/components/machine/machine-photo";
 import { StatusDot } from "@/components/machine/status-badge";
 import { PageHeader, Section } from "@/components/page-header";
@@ -9,7 +7,6 @@ import { buttonVariants } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getLastSales, getMachines, getMachineStock, getOpenRounds } from "@/lib/data";
-import { toFrontRows } from "@/lib/layout";
 import { requireRefillAccess } from "@/lib/org";
 import { bandBg, fillLevel, machineFill, machineTotals, needsAttention } from "@/lib/stock";
 import { terminalStatus } from "@/lib/terminal-status";
@@ -103,31 +100,14 @@ export default async function FillMachinePage({
           </div>
         </div>
 
-        <Section title={m.refill.stockTitle}>
+        {/* Tap a slot, then set its count with minus and plus (Xin, 17-10-2026). */}
+        <Section title={m.refill.stockTitle} hint={stocked.length > 0 ? m.refill.tapSlotHint : undefined}>
           {stocked.length === 0 ? (
             <p className="px-1 text-sm text-muted-foreground">{m.machines.noLayoutHint}</p>
           ) : (
-            <div className="flex flex-col gap-3">
-              <FrontView rows={toFrontRows(stocked)} />
-              <StockLegend
-                labels={{
-                  full: m.machines.legendFull,
-                  half: m.machines.legendHalf,
-                  low: m.machines.legendLow,
-                  empty: m.machines.legendEmpty,
-                  unknown: m.machines.legendUnknown,
-                }}
-              />
-            </div>
+            <StockAdjust machineId={id} slots={stocked} />
           )}
         </Section>
-
-        {/* Set a count right on the spot, product by product. */}
-        {stocked.length > 0 && (
-          <Section title={fmt(m.stock.correctTitle, { machine: machine.name })} hint={m.stock.correctHint}>
-            <StockAdjust machineId={id} slots={stocked} />
-          </Section>
-        )}
       </div>
     </>
   );

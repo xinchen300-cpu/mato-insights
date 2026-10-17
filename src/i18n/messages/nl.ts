@@ -443,6 +443,7 @@ export const nl: Messages = {
     fillThis: "Vul deze automaat",
     toRound: "Naar de ronde",
     stockTitle: "Voorraad per vak",
+    tapSlotHint: "Tik op een vak en zet met − en + hoeveel erin zit.",
     piecesIn: "{n} van {cap} stuks",
     moreMachinesRound: "Ronde met meerdere automaten",
     newRound: "Nieuwe ronde",

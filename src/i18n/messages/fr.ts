@@ -443,6 +443,7 @@ export const fr: Messages = {
     fillThis: "Remplir ce distributeur",
     toRound: "Aller à la tournée",
     stockTitle: "Stock par emplacement",
+    tapSlotHint: "Touchez une case, puis réglez la quantité avec − et +.",
     piecesIn: "{n} sur {cap} pièces",
     moreMachinesRound: "Tournée avec plusieurs distributeurs",
     newRound: "Nouvelle tournée",

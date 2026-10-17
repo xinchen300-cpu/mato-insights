@@ -443,6 +443,7 @@ export const en = {
     fillThis: "Fill this machine",
     toRound: "Go to the round",
     stockTitle: "Stock per slot",
+    tapSlotHint: "Tap a slot, then use − and + to set how many are in it.",
     piecesIn: "{n} of {cap} pieces",
     moreMachinesRound: "Round with several machines",
     newRound: "New round",
