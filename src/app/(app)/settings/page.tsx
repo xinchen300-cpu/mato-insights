@@ -1,32 +1,22 @@
-import Link from "next/link";
 import { headers } from "next/headers";
-import { ChevronDown, CircleAlert, KeyRound, LayoutTemplate, Nfc, PlugZap, RefreshCw, Trash2, Users } from "lucide-react";
+import { CalendarClock, ChevronDown, CircleAlert, Clock, KeyRound, LayoutTemplate, Nfc, PlugZap, Store, Trash2, Users } from "lucide-react";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { PageHeader, Section } from "@/components/page-header";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import {
-  businessMachineIds,
-  getBusinesses,
-  getLayoutTemplates,
-  getMachines,
-  getShelfLifePresets,
-  getTeam,
-} from "@/lib/data";
+import { getBusinesses, getLayoutTemplates, getMachines, getShelfLifePresets, getTeam } from "@/lib/data";
 import { mediaUrl } from "@/lib/media";
 import { billingAllows, getBilling, paymentsEnabled } from "@/lib/billing";
 import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { cn } from "@/lib/utils";
 import { PayterForm } from "./payter-form";
 import { deleteTemplate } from "./actions";
 import { CostForm } from "./cost-form";
 import { NotifyToggle } from "./notify-toggle";
 import { ShelfLifePresets } from "./shelf-life-presets";
 import { SubscriptionPanel } from "./subscription-panel";
-import { SyncNowButton } from "./sync-now-button";
 import { TeamPanel } from "./team-panel";
 import { AccountKind } from "./account-kind";
 import { LanguageToggle } from "@/components/shell/language-toggle";
@@ -46,31 +36,34 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   // Everything in one go, each loader with its own checks: one row of the
   // organisation for all its settings, and for the operator the subscription
   // and who is in the team (the operator's to see and change). The vendor has
-  // no subscription; it is read alongside and simply not shown.
-  const [{ data: org }, { data: credentials }, { data: syncLogs }, templates, businesses, machines, presets, ownBilling, team] = orgId
-    ? await Promise.all([
-        admin
-          .from("organizations")
-          .select("is_vendor, is_demo, cost_per_hour, cost_per_km, first_charge_on, rents_to_businesses")
-          .eq("id", orgId)
-          .maybeSingle(),
-        admin.from("payter_credentials").select("last_synced_at").eq("org_id", orgId).maybeSingle(),
-        admin
-          .from("sync_logs")
-          .select("started_at, status, transactions_synced, error")
-          .eq("org_id", orgId)
-          .order("started_at", { ascending: false })
-          .limit(6),
-        getLayoutTemplates(orgId),
-        getBusinesses(orgId),
-        getMachines(orgId),
-        getShelfLifePresets(orgId),
-        operator ? getBilling(orgId) : Promise.resolve(null),
-        operator ? getTeam(orgId) : Promise.resolve(null),
-      ])
-    : [{ data: null }, { data: null }, { data: [] }, [], [], [], [], null, null];
+  // no subscription; it is read alongside and simply not shown. Of the syncs
+  // only the last failure matters: Payter is asked every 15 seconds anyway.
+  const [{ data: org }, { data: credentials }, { data: lastError }, templates, businesses, machines, presets, ownBilling, team] =
+    orgId
+      ? await Promise.all([
+          admin
+            .from("organizations")
+            .select("is_vendor, is_demo, cost_per_hour, cost_per_km, first_charge_on, rents_to_businesses")
+            .eq("id", orgId)
+            .maybeSingle(),
+          admin.from("payter_credentials").select("last_synced_at").eq("org_id", orgId).maybeSingle(),
+          admin
+            .from("sync_logs")
+            .select("started_at, error")
+            .eq("org_id", orgId)
+            .eq("status", "error")
+            .order("started_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          getLayoutTemplates(orgId),
+          getBusinesses(orgId),
+          getMachines(orgId),
+          getShelfLifePresets(orgId),
+          operator ? getBilling(orgId) : Promise.resolve(null),
+          operator ? getTeam(orgId) : Promise.resolve(null),
+        ])
+      : [{ data: null }, { data: null }, { data: null }, [], [], [], [], null, null];
   const vendor = org;
-  const machineIds = businessMachineIds(machines);
 
   const ownTemplates = templates.filter((t) => t.org_id);
 
@@ -88,6 +81,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const canRent = Boolean(ownBilling && billingAllows(ownBilling, Boolean(org?.is_demo), "shareWithShops"));
 
   const payterConnected = Boolean(credentials || vendor?.is_demo);
+  // Red only while the last failure is newer than the last sync that worked.
+  const syncFailing =
+    Boolean(lastError) && (!credentials?.last_synced_at || lastError!.started_at > credentials.last_synced_at);
   const {
     data: { user },
   } = await (await createClient()).auth.getUser();
@@ -95,10 +91,16 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
   const signupUrl = `${requestHeaders.get("x-forwarded-proto") ?? "https"}://${host}/signup`;
 
+  // Businesses and customers are one row each: their lists live on their own pages.
+  const showBusinesses = rents;
+  const showCustomers = operator && Boolean(vendor?.is_vendor);
+  const onlyBusiness = businesses.length === 1 ? businesses[0] : null;
+
   return (
     <div className="max-w-2xl">
       <PageHeader title={m.settings.title} actions={<LanguageToggle />} />
 
+      {/* What you need most often first, what you rarely change last. */}
       <div className="flex flex-col gap-9 sm:gap-10">
         {billing && (
           <SubscriptionPanel
@@ -113,92 +115,66 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           />
         )}
 
-        {operator && orgId && (canRent || rents) && (
-          <Section title={m.settings.kindTitle}>
-            <AccountKind rents={rents} />
-          </Section>
-        )}
-
-        {operator && vendor?.is_vendor && (
-          <Section title={m.customers.title}>
-            <RowList>
-              <li>
-                <ListRow
-                  href="/klanten"
-                  leading={
-                    <Avatar>
-                      <Users />
-                    </Avatar>
-                  }
-                  title={m.customers.listTitle}
-                  chevron
-                />
-              </li>
-            </RowList>
-          </Section>
-        )}
-
         {team && (
           <TeamPanel members={team.members} invites={team.invites} youId={user?.id ?? null} signupUrl={signupUrl} />
         )}
 
-        {/* Payter, the syncs, the run cost, shelf lives and templates are the
-            operator's: a shop's login sees its language, its notifications
-            and its own business here, nothing of the fleet. */}
+        {/* Payter, the run cost, shelf lives and templates are the operator's:
+            a shop's login sees its language, its notifications and its own
+            business here, nothing of the fleet. */}
         {operator && (
           <Section title={m.settings.payter}>
             <div className="surface-card flex flex-col p-2">
               {/* The connection itself, the way a bank shows a linked account. */}
-              <SettingRow
-                leading={
-                  <Avatar tone={payterConnected ? "positive" : "neutral"}>
-                    <PlugZap />
-                  </Avatar>
-                }
-                title={payterConnected ? m.settings.connected : m.settings.notConnected}
-                subtitle={
-                  vendor?.is_demo && !credentials ? (
-                    <span className="block max-w-[60ch] leading-relaxed">{m.settings.demoNote}</span>
+              <div className="flex min-h-16 items-center gap-3.5 rounded-xl px-3 py-3">
+                <Avatar tone={payterConnected ? "positive" : "neutral"}>
+                  <PlugZap />
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="text-[15px] font-semibold tracking-[-0.01em]">
+                    {payterConnected ? m.settings.connected : m.settings.notConnected}
+                  </p>
+                  {vendor?.is_demo && !credentials ? (
+                    <p className="mt-0.5 max-w-[60ch] text-[13px] leading-relaxed text-muted-foreground">{m.settings.demoNote}</p>
                   ) : credentials ? (
-                    fmt(m.settings.lastUpdate, {
-                      time: credentials.last_synced_at ? f.relative(credentials.last_synced_at) : m.settings.never,
-                    })
-                  ) : undefined
-                }
-                control={credentials ? <SyncNowButton /> : undefined}
-              />
+                    <p className="mt-0.5 text-[13px] text-muted-foreground">
+                      {fmt(m.settings.lastUpdate, {
+                        time: credentials.last_synced_at ? f.relative(credentials.last_synced_at) : m.settings.never,
+                      })}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Only a failure gets a row: Payter refused the login, or did not answer. */}
+              {credentials && syncFailing && (
+                <div className="flex min-h-16 items-center gap-3.5 rounded-xl px-3 py-3">
+                  <Avatar tone="negative">
+                    <CircleAlert />
+                  </Avatar>
+                  <p className="min-w-0 flex-1 text-[14.5px] font-medium text-negative">
+                    {/login|401|403/i.test(lastError?.error ?? "") ? m.settings.payterFailed : m.settings.payterUnreachable}
+                  </p>
+                </div>
+              )}
 
               {credentials && (
                 <>
-                  {operator && (
-                    <ListRow
-                      href="/terminals"
-                      leading={
-                        <Avatar>
-                          <Nfc />
-                        </Avatar>
-                      }
-                      title={<span className="whitespace-normal">{m.terminals.title}</span>}
-                      chevron
-                    />
-                  )}
-                  <details className="group">
-                    <summary className="hover-surface flex min-h-16 cursor-pointer list-none items-center gap-3.5 rounded-xl px-3 py-3 [&::-webkit-details-marker]:hidden">
+                  <ListRow
+                    href="/terminals"
+                    leading={
                       <Avatar>
-                        <KeyRound />
+                        <Nfc />
                       </Avatar>
-                      <span className="min-w-0 flex-1 text-[15px] font-semibold tracking-[-0.01em]">
-                        {m.settings.reconnect}
-                      </span>
-                      <ChevronDown
-                        className="size-4 shrink-0 text-muted-foreground/70 transition-transform duration-150 group-open:rotate-180"
-                        aria-hidden="true"
-                      />
-                    </summary>
-                    <div className="px-3 pb-4 pt-1 sm:pl-[66px]">
+                    }
+                    title={<span className="whitespace-normal">{m.terminals.title}</span>}
+                    chevron
+                  />
+                  <Fold icon={<KeyRound />} title={m.settings.reconnect}>
+                    <div className="px-3 pb-3 sm:pl-[66px]">
                       <PayterForm submitLabel={m.common.save} />
                     </div>
-                  </details>
+                  </Fold>
                 </>
               )}
 
@@ -208,94 +184,6 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 </div>
               )}
             </div>
-          </Section>
-        )}
-
-        {operator && (
-          <Section title={m.settings.recentSyncs}>
-            {!syncLogs || syncLogs.length === 0 ? (
-              <p className="surface-card px-5 py-4 text-[14px] text-muted-foreground">{m.settings.noSyncs}</p>
-            ) : (
-              <RowList>
-                {syncLogs.map((log, i) => (
-                  <li key={i} className="flex min-h-16 items-center gap-3.5 rounded-xl px-3 py-3">
-                    {log.status === "error" ? (
-                      <Avatar tone="negative">
-                        <CircleAlert />
-                      </Avatar>
-                    ) : (
-                      <Avatar>
-                        <RefreshCw />
-                      </Avatar>
-                    )}
-                    <span className="min-w-0 flex-1">
-                      <span
-                        className={cn(
-                          "block break-words text-[15px] font-semibold tracking-[-0.01em]",
-                          log.status === "error" && "text-negative",
-                        )}
-                      >
-                        {log.status === "error"
-                          ? /login|401|403/i.test(log.error ?? "")
-                          ? m.settings.payterFailed
-                          : m.settings.payterUnreachable
-                          : fmt(log.transactions_synced === 1 ? m.settings.syncedOne : m.settings.synced, { count: log.transactions_synced })}
-                      </span>
-                      <span className="tabular mt-0.5 block text-[13px] text-muted-foreground">
-                        {f.dateTime(log.started_at)}
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </RowList>
-            )}
-          </Section>
-        )}
-
-        {/* Businesses are an automatenshop's; a zaak runs its own machines. */}
-        {rents && (
-          <Section
-            title={m.businesses.title}
-            actions={
-              <Link href="/businesses" className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "-mr-2 shrink-0")}>
-                {m.settings.allBusinesses}
-              </Link>
-            }
-          >
-            {businesses.length === 0 ? (
-              <p className="surface-card px-5 py-4 text-[14px] text-muted-foreground">{m.businesses.empty}</p>
-            ) : (
-              <RowList>
-                {businesses.map((b) => {
-                  const count = machineIds.get(b.id)?.size ?? 0;
-                  return (
-                    <li key={b.id}>
-                      <ListRow
-                        href={`/businesses/${b.id}`}
-                        leading={
-                          b.logo_path ? (
-                            <Avatar className="bg-card ring-1 ring-border">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={mediaUrl(b.logo_path)!} alt="" className="size-7 object-contain" />
-                            </Avatar>
-                          ) : (
-                            <Avatar>{initial(b.name)}</Avatar>
-                          )
-                        }
-                        title={b.name}
-                        subtitle={
-                          <>
-                            {plural(count, m.businesses.machinesOne, m.businesses.machinesOther)}
-                            {b.started_on && ` · ${fmt(m.businesses.since, { date: f.date(b.started_on) })}`}
-                          </>
-                        }
-                        chevron
-                      />
-                    </li>
-                  );
-                })}
-              </RowList>
-            )}
           </Section>
         )}
 
@@ -309,38 +197,133 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </div>
         </Section>
 
+        {/* The refill settings, each one row with its value; tap to change it. */}
         {operator && (
-          <>
-            <Section title={m.settings.costTitle} hint={m.settings.costHint}>
-              <CostForm perHour={Number(org?.cost_per_hour ?? 25)} perKm={Number(org?.cost_per_km ?? 0.42)} />
-            </Section>
+          <Section title={m.nav.refill}>
+            <div className="surface-card flex flex-col p-2">
+              <Fold
+                icon={<Clock />}
+                title={m.settings.costTitle}
+                value={fmt(m.settings.costValue, {
+                  hour: f.euro(Number(org?.cost_per_hour ?? 25)),
+                  km: f.euro(Number(org?.cost_per_km ?? 0.42)),
+                })}
+              >
+                <p className="px-3 pb-1 text-[13px] leading-snug text-muted-foreground sm:pl-[66px]">{m.settings.costHint}</p>
+                <CostForm perHour={Number(org?.cost_per_hour ?? 25)} perKm={Number(org?.cost_per_km ?? 0.42)} bare />
+              </Fold>
+              <Fold
+                icon={<CalendarClock />}
+                title={m.settings.shelfLifeTitle}
+                value={
+                  presets.length === 0
+                    ? m.settings.presetNone
+                    : plural(presets.length, m.settings.presetCountOne, m.settings.presetCount)
+                }
+              >
+                <p className="px-3 pb-1 text-[13px] leading-snug text-muted-foreground sm:pl-[66px]">{m.settings.shelfLifeHint}</p>
+                <ShelfLifePresets presets={presets} bare />
+              </Fold>
+              <Fold
+                icon={<LayoutTemplate />}
+                title={m.settings.templates}
+                value={
+                  ownTemplates.length === 0
+                    ? m.settings.templatesNone
+                    : plural(ownTemplates.length, m.settings.templatesCountOne, m.settings.templatesCount)
+                }
+              >
+                {ownTemplates.length === 0 ? (
+                  <p className="px-3 pb-3 text-[14px] text-muted-foreground sm:pl-[66px]">{m.settings.templatesEmpty}</p>
+                ) : (
+                  <ul className="flex flex-col">
+                    {ownTemplates.map((t) => (
+                      <li key={t.id} className="flex min-h-14 items-center gap-3.5 rounded-xl px-3 py-2 sm:pl-[66px]">
+                        <span className="min-w-0 flex-1 truncate text-[15px] font-medium">{t.name}</span>
+                        <form action={deleteTemplate.bind(null, t.id)}>
+                          <Button type="submit" variant="ghost" size="icon" aria-label={m.settings.deleteTemplate}>
+                            <Trash2 />
+                          </Button>
+                        </form>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Fold>
+            </div>
+          </Section>
+        )}
 
-            <Section title={m.settings.shelfLifeTitle} hint={m.settings.shelfLifeHint}>
-              <ShelfLifePresets presets={presets} />
-            </Section>
-
-            <Section title={m.settings.templates}>
-              {ownTemplates.length === 0 ? (
-                <p className="surface-card px-5 py-4 text-[14px] text-muted-foreground">{m.settings.templatesEmpty}</p>
-              ) : (
-                <RowList>
-                  {ownTemplates.map((t) => (
-                    <li key={t.id} className="flex min-h-16 items-center gap-3.5 rounded-xl px-3 py-3">
-                      <Avatar>
-                        <LayoutTemplate />
-                      </Avatar>
-                      <span className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.01em]">{t.name}</span>
-                      <form action={deleteTemplate.bind(null, t.id)}>
-                        <Button type="submit" variant="ghost" size="icon" aria-label={m.settings.deleteTemplate}>
-                          <Trash2 />
-                        </Button>
-                      </form>
-                    </li>
-                  ))}
-                </RowList>
+        {/* Businesses are an automatenshop's; a zaak runs its own machines. */}
+        {(showBusinesses || showCustomers) && (
+          <Section
+            title={
+              showBusinesses && showCustomers
+                ? m.settings.businessesAndCustomers
+                : showBusinesses
+                  ? m.businesses.title
+                  : m.customers.title
+            }
+          >
+            <RowList>
+              {showBusinesses && (
+                <li>
+                  {onlyBusiness ? (
+                    // One business (a shop's own, or the first one): straight to it.
+                    <ListRow
+                      href={`/businesses/${onlyBusiness.id}`}
+                      leading={
+                        onlyBusiness.logo_path ? (
+                          <Avatar className="bg-card ring-1 ring-border">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={mediaUrl(onlyBusiness.logo_path)!} alt="" className="size-7 object-contain" />
+                          </Avatar>
+                        ) : (
+                          <Avatar>{initial(onlyBusiness.name)}</Avatar>
+                        )
+                      }
+                      title={onlyBusiness.name}
+                      chevron
+                    />
+                  ) : (
+                    <ListRow
+                      href="/businesses"
+                      leading={
+                        <Avatar>
+                          <Store />
+                        </Avatar>
+                      }
+                      title={m.businesses.title}
+                      subtitle={
+                        businesses.length === 0 ? m.businesses.empty : plural(businesses.length, m.settings.businessCountOne, m.settings.businessCount)
+                      }
+                      chevron
+                    />
+                  )}
+                </li>
               )}
-            </Section>
-          </>
+              {showCustomers && (
+                <li>
+                  <ListRow
+                    href="/klanten"
+                    leading={
+                      <Avatar>
+                        <Users />
+                      </Avatar>
+                    }
+                    title={m.customers.listTitle}
+                    chevron
+                  />
+                </li>
+              )}
+            </RowList>
+          </Section>
+        )}
+
+        {operator && orgId && (canRent || rents) && (
+          <Section title={m.settings.kindTitle}>
+            <AccountKind rents={rents} />
+          </Section>
         )}
       </div>
     </div>
@@ -348,31 +331,34 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 }
 
 /**
- * One setting: what it is on the left, what you can do about it on the right.
- * On a phone the control drops under the text, lined up past the token.
+ * One setting as a row: what it is, its value under it, and a tap opens it.
+ * Folded, so the page reads as a short list instead of a stack of forms.
  */
-function SettingRow({
-  leading,
+function Fold({
+  icon,
   title,
-  subtitle,
-  control,
+  value,
+  children,
 }: {
-  leading: React.ReactNode;
+  icon: React.ReactNode;
   title: React.ReactNode;
-  subtitle?: React.ReactNode;
-  control?: React.ReactNode;
+  value?: React.ReactNode;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-xl px-3 py-3 sm:min-h-16 sm:flex-row sm:items-center sm:gap-4">
-      <div className="flex min-w-0 flex-1 items-center gap-3.5">
-        {leading}
-        <div className="min-w-0">
-          <p className="text-[15px] font-semibold tracking-[-0.01em]">{title}</p>
-          {subtitle && <div className="mt-0.5 text-[13px] text-muted-foreground">{subtitle}</div>}
-        </div>
-      </div>
-      {control && <div className="shrink-0 pl-[54px] sm:pl-0">{control}</div>}
-    </div>
+    <details className="group">
+      <summary className="hover-surface flex min-h-16 cursor-pointer list-none items-center gap-3.5 rounded-xl px-3 py-3 [&::-webkit-details-marker]:hidden">
+        <Avatar>{icon}</Avatar>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-semibold tracking-[-0.01em]">{title}</span>
+          {value && <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">{value}</span>}
+        </span>
+        <ChevronDown
+          className="size-4 shrink-0 text-muted-foreground/70 transition-transform duration-150 group-open:rotate-180"
+          aria-hidden="true"
+        />
+      </summary>
+      <div className="pb-1 pt-1">{children}</div>
+    </details>
   );
 }
-

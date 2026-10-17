@@ -50,6 +50,7 @@ export function KpiHero({
   compare,
   detail,
   f,
+  size = "lg",
   className,
 }: {
   label: string;
@@ -57,12 +58,19 @@ export function KpiHero({
   compare?: Compare;
   detail?: string;
   f: Formatters;
+  /** "md" where the figure shares the top of the page with another one. */
+  size?: "lg" | "md";
   className?: string;
 }) {
   return (
     <div className={cn("flex flex-col gap-2", className)}>
       <p className="text-[14px] font-medium text-muted-foreground">{label}</p>
-      <p className="tabular text-[40px] font-semibold leading-none tracking-[-0.04em] sm:text-[48px]">
+      <p
+        className={cn(
+          "tabular font-semibold leading-none",
+          size === "lg" ? "text-[40px] tracking-[-0.04em] sm:text-[48px]" : "text-[32px] tracking-[-0.035em] sm:text-[36px]",
+        )}
+      >
         <RollingNumber value={value} />
       </p>
       <ChangeLine compare={compare} detail={detail} f={f} />

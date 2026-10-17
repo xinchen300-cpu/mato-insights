@@ -5,7 +5,6 @@ import { featureAllowed } from "@/lib/billing";
 import { checkPayterLogin } from "@/lib/payter-login";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { denyFillerAccess, getCurrentBusinessId, getCurrentOrgId, requireOperator } from "@/lib/org";
-import { triggerPayterSync } from "@/lib/sync";
 
 async function requireOrgId() {
   const orgId = await getCurrentOrgId();
@@ -52,13 +51,6 @@ export async function connectPayter(formData: FormData): Promise<PayterConnectRe
 
   revalidatePath("/settings");
   return { ok: true };
-}
-
-export async function syncNow() {
-  const orgId = await requireOrgOwner();
-  const result = await triggerPayterSync(orgId);
-  revalidatePath("/", "layout");
-  return result;
 }
 
 export async function deleteTemplate(templateId: string) {

@@ -9,8 +9,8 @@ import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n/client";
 import { saveRunCost } from "./actions";
 
-/** The two numbers that turn a measured run into an amount. */
-export function CostForm({ perHour, perKm }: { perHour: number; perKm: number }) {
+/** The two numbers that turn a measured run into an amount. `bare` drops the card, for inside another one. */
+export function CostForm({ perHour, perKm, bare = false }: { perHour: number; perKm: number; bare?: boolean }) {
   const { m } = useI18n();
   const [status, setStatus] = useState<"idle" | "saved" | "bad">("idle");
   const [isPending, startTransition] = useTransition();
@@ -30,7 +30,7 @@ export function CostForm({ perHour, perKm }: { perHour: number; perKm: number })
 
   // Two settings rows, label left and the amount right, then one save for both.
   return (
-    <form action={submit} className="surface-card flex flex-col p-2">
+    <form action={submit} className={bare ? "flex flex-col" : "surface-card flex flex-col p-2"}>
       <div className="flex min-h-16 items-center gap-3.5 rounded-xl px-3 py-3">
         <Avatar>
           <Clock />

@@ -1,14 +1,8 @@
 import { Link2 } from "lucide-react";
 import { Avatar, ListRow, RowList } from "@/components/list-row";
-import { fmt } from "@/i18n/format";
+import { plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import {
-  getBusinesses,
-  getProducts,
-  getProductSlotCounts,
-  getShelfLifePresets,
-  getUnassigned,
-} from "@/lib/data";
+import { getBusinesses, getProducts, getShelfLifePresets, getUnassigned } from "@/lib/data";
 import { denyFiller, requireOrgId } from "@/lib/org";
 import { ProductGrid } from "./product-grid";
 import { isRecent } from "@/lib/unassigned";
@@ -23,9 +17,8 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const { business } = await searchParams;
   const { m } = await getI18n();
   const orgId = await requireOrgId();
-  const [products, slotCounts, unassigned, businesses, presets] = await Promise.all([
+  const [products, unassigned, businesses, presets] = await Promise.all([
     getProducts(orgId, { includeArchived: true }),
-    getProductSlotCounts(orgId),
     getUnassigned(orgId),
     getBusinesses(orgId),
     getShelfLifePresets(orgId),
@@ -50,7 +43,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                 }
                 title={
                   <span className="whitespace-normal font-medium">
-                    {fmt(m.overview.unassigned, { count: recent.length })}
+                    {plural(recent.length, m.overview.unassignedOne, m.overview.unassigned)}
                   </span>
                 }
                 chevron
@@ -60,7 +53,6 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
         )
       }
       products={products}
-      slotCounts={Object.fromEntries(slotCounts)}
       businesses={businesses.map((b) => ({ id: b.id, name: b.name }))}
       initialBusiness={businesses.some((b) => b.id === business) ? business : ""}
       presets={presets}

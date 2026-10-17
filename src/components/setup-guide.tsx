@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Check, CircleDashed } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
-import { fmt } from "@/i18n/format";
+import { fmt, plural } from "@/i18n/format";
 import type { Messages } from "@/i18n/messages";
 import type { SetupState } from "@/lib/data";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,8 @@ type Step = {
   /** Extra guidance, shown only while this is the step to do next. */
   how?: string;
   state: string | null;
+  /** The step as one short line among the overview's to-dos. */
+  short: string;
   done: boolean;
   href: string;
   action: string;
@@ -30,6 +32,7 @@ export function setupSteps(setup: SetupState, m: Messages): Step[] {
       why: m.setup.payterWhy,
       how: m.setup.payterHow,
       state: null,
+      short: m.setup.payter,
       done: setup.payterConnected,
       href: "/settings",
       action: m.setup.payterDo,
@@ -38,6 +41,7 @@ export function setupSteps(setup: SetupState, m: Messages): Step[] {
       title: m.setup.machines,
       why: m.setup.machinesWhy,
       state: setup.machines > 0 ? fmt(m.setup.machinesFound, { count: setup.machines }) : m.setup.machinesWaiting,
+      short: m.setup.machines,
       done: setup.machines > 0,
       href: "/terminals",
       action: m.terminals.title,
@@ -49,6 +53,10 @@ export function setupSteps(setup: SetupState, m: Messages): Step[] {
         setup.machines > setup.namedMachines
           ? fmt(m.setup.namingLeft, { count: setup.machines - setup.namedMachines })
           : null,
+      short:
+        setup.machines > setup.namedMachines
+          ? plural(setup.machines - setup.namedMachines, m.setup.namingTodoOne, m.setup.namingTodo)
+          : m.setup.naming,
       done: setup.machines > 0 && setup.namedMachines === setup.machines,
       href: "/terminals",
       action: m.terminals.title,
@@ -60,6 +68,10 @@ export function setupSteps(setup: SetupState, m: Messages): Step[] {
         setup.layoutable > setup.withLayout
           ? fmt(m.setup.layoutLeft, { count: setup.layoutable - setup.withLayout })
           : null,
+      short:
+        setup.layoutable > setup.withLayout
+          ? plural(setup.layoutable - setup.withLayout, m.setup.layoutTodoOne, m.setup.layoutLeft)
+          : m.setup.layout,
       done: setup.machines > 0 && setup.withLayout === setup.layoutable,
       href: "/machines",
       action: m.nav.machines,
@@ -68,6 +80,7 @@ export function setupSteps(setup: SetupState, m: Messages): Step[] {
       title: m.setup.products,
       why: m.setup.productsWhy,
       state: null,
+      short: m.setup.products,
       done: setup.products > 0,
       href: "/products",
       action: m.setup.productsDo,
@@ -76,6 +89,7 @@ export function setupSteps(setup: SetupState, m: Messages): Step[] {
       title: m.setup.linking,
       why: m.setup.linkingWhy,
       state: null,
+      short: m.setup.linking,
       done: setup.linkedSelections > 0,
       href: "/machines",
       action: m.setup.linkingDo,

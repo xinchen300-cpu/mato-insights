@@ -102,13 +102,13 @@ export async function MonthlyOverview({
                   }
                   title={capitalize(f.monthLong(row.month))}
                   subtitle={
+                    // A whole month says what it made per day, the figure its
+                    // percentage compares; the first month (started late) and the
+                    // running one say how many sales so far.
                     <span className="tabular">
-                      {plural(row.units, m.common.salesOne, m.common.salesOther)}
-                      {/* Per day only over a whole month of selling: the first month started late. */}
-                      {row.complete &&
-                        row.units > 0 &&
-                        row.month !== firstMonth &&
-                        ` · ${fmt(m.stats.perDay, { amount: f.euro(row.revenue / row.days) })}`}
+                      {row.complete && row.units > 0 && row.month !== firstMonth
+                        ? fmt(m.stats.perDay, { amount: f.euro(row.revenue / row.days) })
+                        : plural(row.units, m.common.salesOne, m.common.salesOther)}
                     </span>
                   }
                   value={f.euro(row.revenue)}
@@ -133,7 +133,6 @@ export async function MonthlyOverview({
           })}
         </RowList>
       )}
-      <p className="px-1 text-xs text-muted-foreground">{m.stats.monthlyLegend}</p>
     </Section>
   );
 }

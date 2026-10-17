@@ -55,17 +55,26 @@ export function StatsFilters({
   // 16px on phones so iOS does not zoom into the field on focus.
   const fieldClass =
     "h-11 w-full min-w-0 rounded-xl border border-input bg-card px-3.5 text-base outline-none transition-[border-color,box-shadow] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25 sm:h-10 md:text-sm";
+  // Filter pills, as on Producten: soft grey at rest, near-black once they narrow the figures.
   const selectClass = (active: boolean) =>
     cn(
-      "h-11 w-full min-w-0 cursor-pointer appearance-none truncate rounded-full border bg-card pl-4 pr-10 text-base text-foreground outline-none transition-[border-color,box-shadow,background-color] duration-150 hover:bg-surface focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25 sm:h-10 md:text-[14px]",
-      active ? "border-foreground/45 font-semibold" : "border-input font-medium",
+      "field-sizing-content h-10 max-w-full min-w-0 cursor-pointer appearance-none truncate rounded-full pl-4 pr-9 text-base font-medium outline-none transition-[background-color,color,box-shadow] duration-150 focus-visible:ring-3 focus-visible:ring-ring/40 md:h-9 md:text-[13.5px] [&>option]:bg-card [&>option]:text-foreground",
+      active ? "bg-foreground text-background" : "bg-surface text-foreground hover:bg-[#e6e6e9]",
     );
-  const chevron = (
+  const chevron = (active: boolean) => (
     <ChevronDown
-      className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+      className={cn(
+        "pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2",
+        active ? "text-background/70" : "text-muted-foreground",
+      )}
       aria-hidden="true"
     />
   );
+  // A filter with nothing to choose stays away: one business, one machine.
+  // One that is set stays, so it can always be cleared.
+  const showBusiness = businesses.length > 1 || Boolean(business);
+  const showMachine = machineOptions.length > 1 || Boolean(machineValue);
+  const showProduct = products.length > 1 || Boolean(product);
 
   return (
     <div aria-busy={isPending} className={cn("flex flex-col gap-3 transition-opacity duration-150", isPending && "opacity-70")}>
@@ -118,55 +127,61 @@ export function StatsFilters({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-        <div className="relative min-w-0 sm:w-56">
-          <select
-            aria-label={m.stats.business}
-            value={business ?? ""}
-            onChange={(e) => update({ business: e.target.value || null, machine: null })}
-            className={selectClass(Boolean(business))}
-          >
-            <option value="">{m.stats.allBusinesses}</option>
-            {businesses.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-          {chevron}
-        </div>
-        <div className="relative min-w-0 sm:w-56">
-          <select
-            aria-label={m.stats.machine}
-            value={machineValue ?? ""}
-            onChange={(e) => update({ machine: e.target.value || null })}
-            className={selectClass(Boolean(machineValue))}
-          >
-            <option value="">{m.stats.allMachines}</option>
-            {machineOptions.map((mc) => (
-              <option key={mc.id} value={mc.id}>
-                {mc.name}
-              </option>
-            ))}
-          </select>
-          {chevron}
-        </div>
-        <div className="relative col-span-2 min-w-0 sm:w-56">
-          <select
-            aria-label={m.stats.product}
-            value={product ?? ""}
-            onChange={(e) => update({ product: e.target.value || null })}
-            className={selectClass(Boolean(product))}
-          >
-            <option value="">{m.stats.allProducts}</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          {chevron}
-        </div>
+      <div className="flex flex-wrap gap-2">
+        {showBusiness && (
+          <div className="relative min-w-0 max-w-full">
+            <select
+              aria-label={m.stats.business}
+              value={business ?? ""}
+              onChange={(e) => update({ business: e.target.value || null, machine: null })}
+              className={selectClass(Boolean(business))}
+            >
+              <option value="">{m.stats.allBusinesses}</option>
+              {businesses.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+            {chevron(Boolean(business))}
+          </div>
+        )}
+        {showMachine && (
+          <div className="relative min-w-0 max-w-full">
+            <select
+              aria-label={m.stats.machine}
+              value={machineValue ?? ""}
+              onChange={(e) => update({ machine: e.target.value || null })}
+              className={selectClass(Boolean(machineValue))}
+            >
+              <option value="">{m.stats.allMachines}</option>
+              {machineOptions.map((mc) => (
+                <option key={mc.id} value={mc.id}>
+                  {mc.name}
+                </option>
+              ))}
+            </select>
+            {chevron(Boolean(machineValue))}
+          </div>
+        )}
+        {showProduct && (
+          <div className="relative min-w-0 max-w-full">
+            <select
+              aria-label={m.stats.product}
+              value={product ?? ""}
+              onChange={(e) => update({ product: e.target.value || null })}
+              className={selectClass(Boolean(product))}
+            >
+              <option value="">{m.stats.allProducts}</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            {chevron(Boolean(product))}
+          </div>
+        )}
       </div>
     </div>
   );

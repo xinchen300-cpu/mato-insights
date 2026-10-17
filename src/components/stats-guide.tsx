@@ -24,11 +24,7 @@ export function StatsGuide({ m, f }: { m: Messages; f: Formatters }) {
         <Avatar tone="gold">
           <GraduationCap />
         </Avatar>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[15px] font-semibold tracking-[-0.01em]">{m.guide.title}</span>
-          <span className="mt-0.5 block text-[13px] text-muted-foreground">{m.guide.intro}</span>
-        </span>
-        <span className="text-[13px] font-medium text-muted-foreground group-open:hidden">{m.guide.open}</span>
+        <span className="min-w-0 flex-1 text-[15px] font-semibold tracking-[-0.01em]">{m.guide.title}</span>
         <ChevronDown
           className="size-4 shrink-0 text-muted-foreground/70 transition-transform duration-200 group-open:rotate-180"
           aria-hidden="true"
@@ -52,7 +48,7 @@ export function StatsGuide({ m, f }: { m: Messages; f: Formatters }) {
               {SAMPLE_SIZES.map((n) => (
                 <tr key={n} className="border-b last:border-0">
                   <td className="tabular py-2.5">{f.number(n)}</td>
-                  <td className="tabular py-2.5 text-right font-semibold">±{f.percent(detectableChange(n))}</td>
+                  <td className="tabular py-2.5 text-right font-semibold">{f.percent(detectableChange(n))}</td>
                 </tr>
               ))}
             </tbody>

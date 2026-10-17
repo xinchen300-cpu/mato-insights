@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { UserPlus } from "lucide-react";
 import { Avatar, RowList, initial } from "@/components/list-row";
 import { Section } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,8 @@ export function TeamPanel({
   const [sent, setSent] = useState<{ email: string; link: string } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
+  // The form stays folded behind one button until someone is to be invited.
+  const [inviting, setInviting] = useState(false);
   const [pending, startTransition] = useTransition();
 
   function submit(event: React.FormEvent) {
@@ -138,62 +141,88 @@ export function TeamPanel({
         ))}
       </RowList>
 
-      <form onSubmit={submit} className="surface-card flex flex-col gap-4 p-5">
-        <p className="text-[15px] font-semibold">{t.inviteTitle}</p>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="team-email">{t.email}</Label>
-          <Input
-            id="team-email"
-            type="email"
-            autoComplete="off"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-        </div>
-        <fieldset className="grid gap-2 sm:grid-cols-2">
-          <legend className="sr-only">{t.title}</legend>
-          {(["filler", "admin"] as const).map((option) => (
-            <label
-              key={option}
-              className={cn(
-                "flex cursor-pointer flex-col gap-0.5 rounded-xl border px-4 py-3 transition-colors",
-                role === option ? "border-foreground bg-card" : "border-border hover:bg-surface/60",
-              )}
-            >
-              <input
-                type="radio"
-                name="team-role"
-                value={option}
-                checked={role === option}
-                onChange={() => setRole(option)}
-                className="sr-only"
-              />
-              <span className="text-[14.5px] font-semibold">{option === "filler" ? t.asFiller : t.asAdmin}</span>
-              <span className="text-[13px] text-muted-foreground">
-                {option === "filler" ? t.asFillerHint : t.asAdminHint}
-              </span>
-            </label>
-          ))}
-        </fieldset>
-        {error && <p className="text-sm text-negative">{error}</p>}
-        <Button type="submit" disabled={pending} className="w-full sm:w-fit">
-          {pending ? t.inviting : t.invite}
-        </Button>
-
-        {sent && (
-          <div className="flex flex-col gap-2 rounded-xl bg-surface p-4">
-            <p className="text-sm font-semibold">{fmt(t.sent, { email: sent.email })}</p>
-            <p className="text-sm text-muted-foreground">{t.sendLink}</p>
-            <div className="flex flex-wrap items-center gap-2">
-              <code className="min-w-0 select-all break-all rounded-lg bg-card px-3 py-2 text-[13px]">{sent.link}</code>
-              <Button type="button" variant="outline" size="sm" onClick={() => copyLink(sent.link)}>
-                {copied === sent.link ? t.copied : t.copy}
-              </Button>
-            </div>
+      {!inviting && !sent ? (
+        <button
+          type="button"
+          onClick={() => setInviting(true)}
+          className="surface-card hover-surface flex min-h-16 w-full items-center gap-3.5 px-5 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+        >
+          <Avatar tone="gold">
+            <UserPlus />
+          </Avatar>
+          <span className="text-[15px] font-semibold tracking-[-0.01em]">{t.inviteTitle}</span>
+        </button>
+      ) : (
+        <form onSubmit={submit} className="surface-card flex flex-col gap-4 p-5">
+          <p className="text-[15px] font-semibold">{t.inviteTitle}</p>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="team-email">{t.email}</Label>
+            <Input
+              id="team-email"
+              type="email"
+              autoComplete="off"
+              required
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
           </div>
-        )}
-      </form>
+          <fieldset className="grid gap-2 sm:grid-cols-2">
+            <legend className="sr-only">{t.title}</legend>
+            {(["filler", "admin"] as const).map((option) => (
+              <label
+                key={option}
+                className={cn(
+                  "flex cursor-pointer flex-col gap-0.5 rounded-xl border px-4 py-3 transition-colors",
+                  role === option ? "border-foreground bg-card" : "border-border hover:bg-surface/60",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="team-role"
+                  value={option}
+                  checked={role === option}
+                  onChange={() => setRole(option)}
+                  className="sr-only"
+                />
+                <span className="text-[14.5px] font-semibold">{option === "filler" ? t.asFiller : t.asAdmin}</span>
+                <span className="text-[13px] text-muted-foreground">
+                  {option === "filler" ? t.asFillerHint : t.asAdminHint}
+                </span>
+              </label>
+            ))}
+          </fieldset>
+          {error && <p className="text-sm text-negative">{error}</p>}
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" disabled={pending} className="flex-1 sm:flex-none">
+              {pending ? t.inviting : t.invite}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setInviting(false);
+                setSent(null);
+                setError(null);
+              }}
+            >
+              {sent ? m.common.close : m.common.cancel}
+            </Button>
+          </div>
+
+          {sent && (
+            <div className="flex flex-col gap-2 rounded-xl bg-surface p-4">
+              <p className="text-sm font-semibold">{fmt(t.sent, { email: sent.email })}</p>
+              <p className="text-sm text-muted-foreground">{t.sendLink}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="min-w-0 select-all break-all rounded-lg bg-card px-3 py-2 text-[13px]">{sent.link}</code>
+                <Button type="button" variant="outline" size="sm" onClick={() => copyLink(sent.link)}>
+                  {copied === sent.link ? t.copied : t.copy}
+                </Button>
+              </div>
+            </div>
+          )}
+        </form>
+      )}
     </Section>
   );
 }

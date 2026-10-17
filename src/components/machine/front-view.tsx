@@ -77,8 +77,9 @@ export function FrontView({
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={slot.photoUrl} alt="" className="max-h-10 max-w-full object-contain" />
                       ) : (
+                        // A slot without a product stays empty: no dash standing in for it.
                         <span className="line-clamp-2 text-center text-[10.5px] leading-tight text-muted-foreground">
-                          {slot.productName ?? "—"}
+                          {slot.productName}
                         </span>
                       )}
                     </div>
@@ -137,7 +138,8 @@ export function FrontView({
 export function StockLegend({
   labels,
 }: {
-  labels: { full: string; half: string; low: string; empty: string; unknown: string };
+  /** Without `unknown` the legend leaves "not counted" out: for a machine where every slot is counted. */
+  labels: { full: string; half: string; low: string; empty: string; unknown?: string };
 }) {
   const items: [string, string][] = [
     ["bg-level-full", labels.full],
@@ -153,10 +155,12 @@ export function StockLegend({
           {label}
         </span>
       ))}
-      <span className="inline-flex items-center gap-1.5">
-        <span className="size-2.5 rounded-full border border-dashed border-muted-foreground" />
-        {labels.unknown}
-      </span>
+      {labels.unknown && (
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2.5 rounded-full border border-dashed border-muted-foreground" />
+          {labels.unknown}
+        </span>
+      )}
     </div>
   );
 }

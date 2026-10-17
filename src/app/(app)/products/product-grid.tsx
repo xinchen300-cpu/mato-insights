@@ -2,7 +2,7 @@
 
 import { useState, useTransition, type ComponentProps, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, ArchiveRestore, ChevronDown, Package, Plus } from "lucide-react";
+import { Archive, ArchiveRestore, ChevronDown, Package, Plus, Search } from "lucide-react";
 import { ImagePicker } from "@/components/image-picker";
 import { Avatar, RowList, initial } from "@/components/list-row";
 import { PageHeader, Section } from "@/components/page-header";
@@ -22,6 +22,8 @@ type BusinessOption = { id: string; name: string };
 
 const NO_BUSINESS = "none";
 
+const normalize = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
+
 // A form select that matches Input: same height, radius, hairline and focus ring.
 const fieldSelectClass =
   "h-11 w-full cursor-pointer appearance-none rounded-xl border border-input bg-card pl-3.5 pr-10 text-base outline-none transition-[border-color,box-shadow] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25 md:text-sm";
@@ -34,7 +36,6 @@ const pillActive = "bg-foreground text-background";
 
 export function ProductGrid({
   products,
-  slotCounts,
   businesses,
   initialBusiness = "",
   presets,
@@ -44,7 +45,6 @@ export function ProductGrid({
   notice,
 }: {
   products: Product[];
-  slotCounts: Record<string, number>;
   businesses: BusinessOption[];
   initialBusiness?: string;
   presets: ShelfLifePreset[];
@@ -60,6 +60,9 @@ export function ProductGrid({
   const [showArchived, setShowArchived] = useState(false);
   // "" is every business, NO_BUSINESS the products nobody claimed yet.
   const [business, setBusiness] = useState(initialBusiness);
+  // Finding one product in a long list is what this page is for.
+  const [query, setQuery] = useState("");
+  const q = normalize(query);
 
   const businessName = new Map(businesses.map((b) => [b.id, b.name]));
   // An operator without shops that rent slots has no use for "business" at all.
@@ -70,7 +73,8 @@ export function ProductGrid({
   const visible = products.filter(
     (p) =>
       (showArchived || !p.archived) &&
-      (business === "" || (business === NO_BUSINESS ? !p.business_id : p.business_id === business)),
+      (business === "" || (business === NO_BUSINESS ? !p.business_id : p.business_id === business)) &&
+      (!q || normalize(p.name).includes(q)),
   );
   const hasArchived = products.some((p) => p.archived);
 
@@ -101,6 +105,18 @@ export function ProductGrid({
       />
 
       {notice}
+
+      <label className="mb-3 flex h-12 items-center gap-2.5 rounded-2xl border border-input bg-card px-4 transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/25">
+        <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={m.products.search}
+          aria-label={m.products.search}
+          className="min-w-0 flex-1 bg-transparent text-[16px] outline-none [&::-webkit-search-cancel-button]:hidden"
+        />
+      </label>
 
       <div className="mb-8 flex flex-wrap items-center gap-2">
         {hasBusinesses && (
@@ -157,7 +173,7 @@ export function ProductGrid({
           <div className="grid size-12 place-items-center rounded-full bg-surface text-muted-foreground">
             <Package className="size-5" aria-hidden="true" />
           </div>
-          <p className="max-w-sm text-[15px] text-muted-foreground">{m.products.empty}</p>
+          <p className="max-w-sm text-[15px] text-muted-foreground">{q ? m.products.noResults : m.products.empty}</p>
         </div>
       ) : (
         <div className="flex flex-col gap-10">
@@ -190,7 +206,8 @@ export function ProductGrid({
                         <span className="line-clamp-2 text-[15px] font-semibold leading-snug tracking-[-0.01em]">
                           {p.name}
                         </span>
-                        {p.archived ? (
+                        {/* Name and price; only an archived product says more. */}
+                        {p.archived && (
                           <span className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted-foreground">
                             <span
                               className="size-1.5 shrink-0 rounded-full bg-muted-foreground/50"
@@ -198,13 +215,7 @@ export function ProductGrid({
                             />
                             {m.products.archived}
                           </span>
-                        ) : slotCounts[p.id] ? (
-                          <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">
-                            {slotCounts[p.id] === 1
-                              ? m.products.inSlotsOne
-                              : fmt(m.products.inSlots, { count: slotCounts[p.id] })}
-                          </span>
-                        ) : null}
+                        )}
                       </span>
                       <span
                         className={cn(

@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarClock, CircleDashed, Link2, PackageOpen, WifiOff, type LucideIcon } from "lucide-react";
+import { CalendarClock, CircleDashed, Link2, PackageOpen, TriangleAlert, WifiOff, type LucideIcon } from "lucide-react";
 import { RevenueChart } from "@/components/charts/revenue-chart";
 import { Delta } from "@/components/delta";
 import { KpiHero, MiniStat } from "@/components/kpi";
-import { StatusDot } from "@/components/machine/status-badge";
-import { Avatar, ListRow, RowList} from "@/components/list-row";
+import { Avatar, ListRow, RowList } from "@/components/list-row";
 import { InsightsList } from "@/components/insights-list";
 import { SetupGuide, nextSetupStep } from "@/components/setup-guide";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
@@ -47,6 +46,9 @@ const toneAvatar: Record<Tone, "negative" | "warning" | "neutral"> = {
   muted: "neutral",
 };
 const LOW_ROWS = 3;
+/** Payter is asked every 15 seconds; only data this old is worth a word on the page. */
+const STALE_MS = 15 * 60_000;
+const isStale = (syncedAt: string | null) => syncedAt !== null && Date.now() - Date.parse(syncedAt) > STALE_MS;
 
 export default async function OverviewPage() {
   await denyFiller();
@@ -141,8 +143,12 @@ export default async function OverviewPage() {
     month,
     weeks,
     patternWeeks,
-    machines.map((mc) => ({ name: mc.name, lastSale: lastSales.get(mc.id) ?? null })),
+    machines.map((mc) => ({ id: mc.id, name: mc.name, lastSale: lastSales.get(mc.id) ?? null })),
   );
+  // A machine gone quiet is something to go and check, so it is a to-do; the
+  // rest is good to know and sits at the foot of the page.
+  const quiet = insights.flatMap((i) => (i.kind === "quietMachine" ? [i] : []));
+  const goodToKnow = insights.filter((i) => i.kind !== "quietMachine").slice(0, 3);
 
   const lowByMachine = new Map<string, number>();
   for (const slot of stock) {
@@ -174,8 +180,15 @@ export default async function OverviewPage() {
       key: `offline-${mc.id}`,
       icon: WifiOff,
       tone: "negative" as const,
-      text: fmt(m.status.offlineAlert, { machine: mc.name, when: f.relative(mc.last_disconnected_at!) }),
+      text: fmt(m.overview.todoOffline, { machine: mc.name, when: f.relative(mc.last_disconnected_at!) }),
       href: `/machines/${mc.id}`,
+    })),
+    ...quiet.map((q) => ({
+      key: `quiet-${q.machineId}`,
+      icon: TriangleAlert,
+      tone: "warning" as const,
+      text: fmt(m.overview.todoQuiet, { machine: q.machine, days: q.days }),
+      href: `/machines/${q.machineId}`,
     })),
     ...(expiringUnits > 0 && worstMachine
       ? [
@@ -212,7 +225,7 @@ export default async function OverviewPage() {
             key: "setup",
             icon: CircleDashed,
             tone: "muted" as const,
-            text: setupStep.state ? `${setupStep.title} · ${setupStep.state}` : setupStep.title,
+            text: setupStep.short,
             href: setupStep.href,
           },
         ]
@@ -223,7 +236,7 @@ export default async function OverviewPage() {
             key: "unassigned",
             icon: Link2,
             tone: "muted" as const,
-            text: fmt(m.overview.unassigned, { count: recentUnassigned.length }),
+            text: plural(recentUnassigned.length, m.overview.unassignedOne, m.overview.unassigned),
             href: "/unassigned",
           },
         ]
@@ -236,13 +249,8 @@ export default async function OverviewPage() {
     revenue: d.revenue,
   }));
 
-  // Every terminal counts, as in the offline to-do above. Red only for one
-  // that is really offline; one never seen yet is unknown, not broken.
-  const counted = machines;
-  const onlineCount = counted.filter(
-    (mc) => terminalStatus(mc.last_connected_at, mc.last_disconnected_at) === "online",
-  ).length;
-  const fleetStatus = offline.length > 0 ? "offline" : onlineCount === counted.length ? "online" : "unknown";
+  // Only a sync that stalled gets a word under the title.
+  const stale = isStale(syncedAt);
   // Something that only began selling after the earlier period started gets
   // "new since …" instead of a percentage against a half-empty period.
   const newSince = (firstSale: string | null) =>
@@ -270,13 +278,19 @@ export default async function OverviewPage() {
       <AutoRefresh every={liveRounds.length ? 20_000 : 30_000} />
       <PageHeader
         title={m.overview.title}
-        subtitle={syncedAt ? fmt(m.overview.updated, { time: f.relative(syncedAt) }) : undefined}
+        subtitle={
+          stale && syncedAt ? (
+            <span className="font-medium text-warning">{fmt(m.overview.updated, { time: f.relative(syncedAt) })}</span>
+          ) : undefined
+        }
       />
 
+      {/* Like Bijvullen: what you look for first. The money, what needs doing,
+          what just sold, then each machine. One thing per block. */}
       <div className="flex flex-col gap-10">
         {/* A round that is out right now comes first: who, how long, where. */}
         {liveRounds.length > 0 && <LiveRounds rounds={liveRounds} refresh={false} />}
-        {/* The balance, as a bank would show it: one figure, its trend, the curve. */}
+        {/* The balance, as a bank would show it: one figure, two smaller ones, the curve. */}
         <section className="surface-card px-5 pb-4 pt-6 sm:px-8 sm:pb-6 sm:pt-8">
           <KpiHero
             label={m.overview.month}
@@ -285,34 +299,14 @@ export default async function OverviewPage() {
             detail={plural(month.totals.units, m.common.salesOne, m.common.salesOther)}
             f={f}
           />
-          <div className="mt-7 grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-4">
+          <div className="mt-7 grid grid-cols-2 gap-x-6 gap-y-6">
             <MiniStat label={m.overview.today} value={f.euro(today.totals.revenue)} compare={compareOf(today)} f={f} />
             <MiniStat label={m.overview.week} value={f.euro(week.totals.revenue)} compare={compareOf(week)} f={f} />
-            <MiniStat
-              label={m.stats.avgSale}
-              value={month.totals.units > 0 ? f.euro(month.totals.revenue / month.totals.units) : m.common.none}
-              f={f}
-            />
-            <MiniStat
-              label={m.overview.machinesOnline}
-              value={`${onlineCount} / ${counted.length}`}
-              leading={<StatusDot status={fleetStatus} />}
-              f={f}
-            />
           </div>
           <div className="-mx-2 mt-7 sm:-mx-3">
             <RevenueChart data={chartData} height={220} />
           </div>
         </section>
-
-        {/* What just sold, sliding in as it happens. */}
-        <LiveSales initial={recentSales} />
-
-        {insights.length > 0 && (
-          <div className="px-1">
-            <InsightsList insights={insights} m={m} f={f} />
-          </div>
-        )}
 
         {todos.length > 0 && (
           <Section title={m.overview.todo}>
@@ -334,6 +328,9 @@ export default async function OverviewPage() {
             </RowList>
           </Section>
         )}
+
+        {/* What just sold, sliding in as it happens. */}
+        <LiveSales initial={recentSales} />
 
         <Section title={m.overview.byMachine}>
           <RowList>
@@ -361,8 +358,9 @@ export default async function OverviewPage() {
               </li>
             ))}
           </RowList>
-          <p className="px-1 text-xs text-muted-foreground">{m.stats.deltaLegend}</p>
         </Section>
+
+        <InsightsList insights={goodToKnow} m={m} f={f} />
       </div>
     </>
   );

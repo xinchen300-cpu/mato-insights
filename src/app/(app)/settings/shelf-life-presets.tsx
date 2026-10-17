@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { deleteShelfLifePreset, saveShelfLifePreset } from "./actions";
 
 // Set a shelf life once per kind of food, instead of on every product.
-export function ShelfLifePresets({ presets }: { presets: ShelfLifePreset[] }) {
+export function ShelfLifePresets({ presets, bare = false }: { presets: ShelfLifePreset[]; bare?: boolean }) {
   const { m } = useI18n();
   const [adding, setAdding] = useState(presets.length === 0);
   const [isPending, startTransition] = useTransition();
@@ -27,7 +27,7 @@ export function ShelfLifePresets({ presets }: { presets: ShelfLifePreset[] }) {
 
   // One card: a row per kind of food, then either the way to add one or the form for it.
   return (
-    <div className="surface-card flex flex-col p-2">
+    <div className={bare ? "flex flex-col" : "surface-card flex flex-col p-2"}>
       {presets.length > 0 && (
         <ul className="flex flex-col">
           {presets.map((preset) => (

@@ -9,15 +9,15 @@ import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { EmptyState, PageHeader, Panel, Section } from "@/components/page-header";
 import { StatsGuide } from "@/components/stats-guide";
 import { buttonVariants } from "@/components/ui/button";
-import { changeRatio, fmt, plural } from "@/i18n/format";
+import { fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import Link from "next/link";
 import { getBusinesses, getMachines, getPriceMismatches, getProducts, getStatsReport } from "@/lib/data";
 import { mediaUrl } from "@/lib/media";
 import { denyFiller, requireOrgId } from "@/lib/org";
+import { cn } from "@/lib/utils";
 import {
   busiestWeekday,
-  compareCounts,
   compareMoneySince,
   compareSince,
   fillDays,
@@ -66,7 +66,6 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
   const compare = m.periods[compareLabelKey(report.period)];
   const { totals } = report;
   const avg = totals.units ? totals.revenue / totals.units : 0;
-  const prevAvg = totals.prev_units ? totals.prev_revenue / totals.prev_units : 0;
 
   const named = report.by_product.filter((p) => p.product_id);
   // Sorted here on purpose: the headline above ranks by pieces, so this panel
@@ -106,8 +105,6 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
   const exportParams = new URLSearchParams(
     Object.entries({ period, from, to, business, machine, product }).filter(([, v]) => v) as [string, string][],
   );
-
-  const { product: productLine } = summary(report, m, f, compare);
 
   const monthly = (
     <Suspense fallback={<MonthlySkeleton />}>
@@ -160,7 +157,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
           </>
         ) : (
           <>
-            {/* The one figure this page is about, what it means, then the curve. */}
+            {/* The one figure this page is about, two beside it, then the curve. */}
             <section className="surface-card px-5 pb-4 pt-6 sm:px-8 sm:pb-6 sm:pt-8">
               <KpiHero
                 label={m.stats.revenue}
@@ -175,8 +172,6 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                 f={f}
               />
 
-              {productLine && <p className="figure mt-4 max-w-2xl text-sm text-muted-foreground">{productLine}</p>}
-
               <div className="mt-7 grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-3">
                 <MiniStat
                   label={m.stats.units}
@@ -189,12 +184,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                   }}
                   f={f}
                 />
-                <MiniStat
-                  label={m.stats.avgSale}
-                  value={f.euro(avg)}
-                  detail={prevAvg > 0 ? fmt(m.stats.avgBefore, { amount: f.euro(prevAvg) }) : undefined}
-                  f={f}
-                />
+                <MiniStat label={m.stats.avgSale} value={f.euro(avg)} f={f} />
               </div>
 
               <div className="mt-7">
@@ -216,47 +206,17 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
               </div>
             </section>
 
-            <StatsGuide m={m} f={f} />
-
-            {monthly}
-
-            <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
-              <Panel
-                title={m.stats.busiestDays}
-                hint={
-                  weekdays.every((w) => w.days >= MIN_WEEKS)
-                    ? m.stats.busiestDaysHint
-                    : fmt(m.stats.busiestDaysTooShort, { weeks: MIN_WEEKS })
-                }
-              >
-                <BarList
-                  items={weekdays.map((w) => ({
-                    key: String(w.weekday),
-                    label: m.weekdaysShort[w.weekday - 1],
-                    value: w.avgRevenue,
-                    display: f.euroRound(w.avgRevenue),
-                  }))}
-                  highlightKey={highlightDay}
-                />
-              </Panel>
-              <Panel title={m.stats.busiestHours}>
-                <HourChart data={report.by_hour} />
-              </Panel>
-            </div>
-
+            {/* Said once, right above the product figures it is about. */}
             {scrambled.length > 0 && (
-              <div className="surface-card flex items-start gap-3.5 p-5 sm:p-6">
+              <div className="surface-card flex items-start gap-3.5 p-4 sm:p-5">
                 <Avatar tone="warning">
                   <TriangleAlert />
                 </Avatar>
                 <div className="min-w-0 pt-0.5">
-                  <p className="text-[16px] font-semibold tracking-[-0.015em] text-heading">{m.stats.mixedTitle}</p>
-                  <p className="mt-1 max-w-[62ch] text-sm text-muted-foreground">
-                    {fmt(m.stats.mixedBody, { machines: scrambled.join(", ") })}
-                  </p>
+                  <p className="max-w-[62ch] text-[15px] leading-snug">{fmt(m.stats.mixedBody, { machines: scrambled.join(", ") })}</p>
                   <Link
                     href="/unassigned"
-                    className="-mx-1 mt-2 inline-flex items-center gap-1 rounded-full px-1 py-1 text-sm font-semibold text-foreground underline-offset-4 hover:underline"
+                    className="-mx-1 mt-1.5 inline-flex items-center gap-1 rounded-full px-1 py-1 text-sm font-semibold text-foreground underline-offset-4 hover:underline"
                   >
                     {m.stats.mixedFix}
                     <ArrowRight className="size-4" aria-hidden="true" />
@@ -265,19 +225,17 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
               </div>
             )}
 
-            <div className="grid gap-8 sm:gap-10 lg:grid-cols-2 lg:gap-6">
+            {/* What sold best first. Slow sellers only once the period is long
+                enough to call anything slow; before that the block stays away. */}
+            <div className={cn("grid gap-8 sm:gap-10", longEnough && "lg:grid-cols-2 lg:gap-6")}>
               <Section title={m.stats.bestSellers}>
                 <ProductRanking rows={best} prevStart={report.prev_start} m={m} f={f} />
               </Section>
-              <Section title={m.stats.worstSellers} hint={longEnough ? m.stats.worstSellersHint : undefined}>
-                {longEnough ? (
+              {longEnough && (
+                <Section title={m.stats.worstSellers} hint={m.stats.worstSellersHint}>
                   <ProductRanking rows={slowest} prevStart={report.prev_start} m={m} f={f} />
-                ) : (
-                  <p className="surface-card px-5 py-5 text-sm text-muted-foreground">
-                    {fmt(m.stats.worstSellersTooShort, { days })}
-                  </p>
-                )}
-              </Section>
+                </Section>
+              )}
             </div>
 
             <Section title={m.stats.perMachine}>
@@ -306,6 +264,32 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                 ))}
               </RowList>
             </Section>
+
+            <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
+              <Panel
+                title={m.stats.busiestDays}
+                hint={
+                  weekdays.every((w) => w.days >= MIN_WEEKS)
+                    ? m.stats.busiestDaysHint
+                    : fmt(m.stats.busiestDaysTooShort, { weeks: MIN_WEEKS })
+                }
+              >
+                <BarList
+                  items={weekdays.map((w) => ({
+                    key: String(w.weekday),
+                    label: m.weekdaysShort[w.weekday - 1],
+                    value: w.avgRevenue,
+                    display: f.euroRound(w.avgRevenue),
+                  }))}
+                  highlightKey={highlightDay}
+                />
+              </Panel>
+              <Panel title={m.stats.busiestHours}>
+                <HourChart data={report.by_hour} />
+              </Panel>
+            </div>
+
+            {monthly}
 
             <Section title={m.stats.perProduct}>
               <RowList>
@@ -345,70 +329,14 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                   ))}
               </RowList>
             </Section>
+
+            {/* How to read all this, for whoever wants to: at the foot, one row until opened. */}
+            <StatsGuide m={m} f={f} />
           </>
         )}
       </div>
     </>
   );
-}
-
-function summary(
-  report: StatsReport,
-  m: Awaited<ReturnType<typeof getI18n>>["m"],
-  f: Awaited<ReturnType<typeof getI18n>>["f"],
-  compare: string,
-): { headline: string; product: string | null } {
-  const { totals } = report;
-  const revenue = f.euro(totals.revenue);
-  const ratio = changeRatio(totals.revenue, totals.prev_revenue);
-  const verdict = compareSince(totals.units, totals.prev_units, report.first_sale, report.prev_start);
-  const unitRatio = changeRatio(totals.units, totals.prev_units);
-  // The verdict counts pieces, the percentage counts euros, and the two can
-  // point opposite ways when the mix shifts. Saying "a real increase" above a
-  // minus sign is the kind of nonsense Vendly exists to avoid, so when they
-  // disagree the sentence says what actually happened instead.
-  const mixShift =
-    ratio !== null && unitRatio !== null && (verdict === "up" || verdict === "down") && ratio * unitRatio < 0;
-
-  const headline =
-    ratio === null || verdict === "new"
-      ? fmt(m.stats.summaryNoCompare, { revenue })
-      : verdict === "tooFew"
-        ? fmt(m.stats.summaryTooFew, { revenue })
-        : mixShift
-          ? fmt(verdict === "up" ? m.stats.summaryMoreForLess : m.stats.summaryLessForMore, {
-              revenue,
-              change: f.change(ratio),
-              units: f.percent(Math.abs(unitRatio!)),
-              compare,
-            })
-          : verdict === "noise"
-            ? fmt(m.stats.summaryNoise, { revenue, change: f.change(ratio), compare })
-            : fmt(verdict === "up" ? m.stats.summaryRealUp : m.stats.summaryRealDown, {
-                revenue,
-                change: f.change(ratio),
-                compare,
-              });
-
-  // "Best" only when it is clearly ahead of the runner-up.
-  const [first, second] = report.by_product
-    .filter((p) => p.product_id && p.product_name && p.units > 0)
-    .sort((a, b) => b.units - a.units);
-  let product: string | null = null;
-  if (first) {
-    if (second && compareCounts(first.units, second.units) !== "up") {
-      product = fmt(m.stats.summaryTie, { first: first.product_name!, second: second.product_name! });
-    } else {
-      const bestVerdict = compareSince(first.units, first.prev_units, first.first_sale, report.prev_start);
-      const bestRatio = changeRatio(first.units, first.prev_units);
-      product =
-        bestRatio !== null && (bestVerdict === "up" || bestVerdict === "down")
-          ? fmt(m.stats.summaryBestChange, { product: first.product_name!, change: f.change(bestRatio), compare })
-          : fmt(m.stats.summaryBest, { product: first.product_name! });
-    }
-  }
-
-  return { headline, product };
 }
 
 function ProductRanking({

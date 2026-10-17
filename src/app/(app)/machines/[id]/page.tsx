@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ClipboardList, LayoutGrid, Pencil } from "lucide-react";
-import { Avatar, RowList } from "@/components/list-row";
+import { ChevronDown, ClipboardList, LayoutGrid, Pencil } from "lucide-react";
+import { KpiHero } from "@/components/kpi";
+import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { OWNER_TONES, OwnerLegend, StockLegend, type FrontSlot } from "@/components/machine/front-view";
 import { SlotProducts } from "@/components/machine/slot-products";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
-import { DISPLAY_TIME_ZONE, fmt, weekdayIndex } from "@/i18n/format";
+import { DISPLAY_TIME_ZONE, fmt, plural, weekdayIndex } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import {
   canEditLayout,
@@ -21,10 +22,12 @@ import {
   getProducts,
   getRefillHistory,
   getSlotShelfLife,
+  getStatsReport,
 } from "@/lib/data";
 import { toFrontRows } from "@/lib/layout";
 import { mediaUrl } from "@/lib/media";
 import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
+import { compareMoneySince } from "@/lib/stats";
 import { fillLevel, levelColor } from "@/lib/stock";
 import { cn } from "@/lib/utils";
 import { assignProduct, createProductForMachine } from "../actions";
@@ -34,6 +37,8 @@ import { MachineStatus, TerminalPanel } from "./terminal-panel";
 import { AutoRefresh } from "@/components/auto-refresh";
 
 const PAYMENT_WINDOW_DAYS = 30;
+/** The latest refills on the machine's page. */
+const HISTORY_ROWS = 5;
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   await denyFiller();
@@ -53,18 +58,21 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   if (!machine) notFound();
 
   const since = new Date(Date.now() - PAYMENT_WINDOW_DAYS * 86_400_000);
-  const [slots, businesses, history, health, payments, split, products, shelfLife, editLayout, rents] = await Promise.all([
+  const [slots, businesses, history, health, payments, month, products, shelfLife, editLayout, rents] = await Promise.all([
     getMachineStock(orgId, [id]),
     getBusinesses(orgId),
     getRefillHistory(orgId, id),
     getPaymentHealth(orgId, since),
     getPaymentFeed(orgId, id),
-    getMachineSalesSplit(orgId, id, since),
+    // What the machine brought in this month; for a shop, its own slots only (data.ts).
+    getStatsReport(orgId, { period: "month", machines: [id] }),
     getProducts(orgId),
     getSlotShelfLife(orgId, id),
     canEditLayout(machine),
     rentsToBusinesses(orgId),
   ]);
+  // A shared machine shows this month per business, so the two add up to the figure above.
+  const split = machine.shared_business_id ? await getMachineSalesSplit(orgId, id, new Date(month.cur_start)) : [];
 
   // How long what is in each slot still keeps, counted in Belgian days.
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: DISPLAY_TIME_ZONE }).format(new Date());
@@ -115,6 +123,18 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   const totalStock = counted.reduce((sum, s) => sum + (s.stock ?? 0), 0);
   // Only the slots that carry a count, so the fill level matches its numerator.
   const totalCapacity = counted.reduce((sum, s) => sum + s.capacity, 0);
+  // "Not counted" belongs in the legend only while a slot with a product has no count.
+  const anyUncounted = slots.some((s) => s.product_id && s.stock === null);
+  const recentHistory = history.slice(0, HISTORY_ROWS);
+  // Money shown, pieces tested, as on the overview: a mix shift is "about the same".
+  const monthVerdict = compareMoneySince(
+    month.totals.units,
+    month.totals.prev_units,
+    month.totals.revenue,
+    month.totals.prev_revenue,
+    month.first_sale,
+    month.prev_start,
+  );
 
   return (
     <>
@@ -138,44 +158,57 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
             {machine.name}
           </span>
         }
-        subtitle={
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>
-              {[
-                machine.type ? m.machines.types[machine.type] : m.machines.typeNotSet,
-                machine.payter_serial_number && `${m.machines.terminal} ${machine.payter_serial_number}`,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </span>
-            <MachineStatus machine={machine} m={m} className="text-[14px]" />
-          </span>
-        }
+        subtitle={<MachineStatus machine={machine} m={m} className="text-[14px]" />}
         actions={
-          <>
-            {hasLayout && tracksStock && (
-              <>
-                <Link href={`/machines/${id}/refill`} className={buttonVariants()}>
-                  <ClipboardList />
-                  {m.machines.refill}
-                </Link>
-                <Link href={`/machines/${id}/refill?mode=correction`} className={buttonVariants({ variant: "outline" })}>
-                  <Pencil />
-                  {m.machines.correct}
-                </Link>
-              </>
-            )}
-            {tracksStock && editLayout && (
-              <Link href={`/machines/${id}/layout`} className={buttonVariants({ variant: "outline" })}>
-                <LayoutGrid />
-                {m.machines.layout}
-              </Link>
-            )}
-          </>
+          // One action up here; correcting and the layout sit under the slots they change.
+          hasLayout && tracksStock ? (
+            <Link href={`/machines/${id}/refill`} className={buttonVariants()}>
+              <ClipboardList />
+              {m.machines.refill}
+            </Link>
+          ) : undefined
         }
       />
 
+      {/* What this machine brings in, then what is in it, then the terminal,
+          its payments and refills. Its settings stay folded until needed. */}
       <div className="flex flex-col gap-10">
+        <section className="surface-card px-5 pb-5 pt-6 sm:px-8 sm:pb-6 sm:pt-7">
+          <KpiHero
+            size="md"
+            label={m.overview.month}
+            value={f.euro(month.totals.revenue)}
+            compare={{
+              current: month.totals.revenue,
+              previous: month.totals.prev_revenue,
+              label: m.periods.compareMonth,
+              verdict: monthVerdict,
+              notes: {
+                tooFew: m.stats.tooFewToCompare,
+                noise: m.stats.withinNoise,
+                same: m.stats.aboutSame,
+                new: month.first_sale ? fmt(m.stats.newSince, { date: f.dayMonth(month.first_sale) }) : undefined,
+              },
+            }}
+            detail={plural(month.totals.units, m.common.salesOne, m.common.salesOther)}
+            f={f}
+          />
+          {split.length > 1 && (
+            <ul className="-mx-3 mt-5 flex flex-col border-t border-border pt-3">
+              {split.map((row) => (
+                <li key={row.business_id}>
+                  <ListRow
+                    leading={<Avatar>{initial(row.business_name)}</Avatar>}
+                    title={row.business_name}
+                    subtitle={plural(row.units, m.common.salesOne, m.common.salesOther)}
+                    value={f.euro(row.revenue)}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
         {!tracksStock ? (
           <p className="rounded-2xl bg-surface px-5 py-4 text-[14px] text-muted-foreground sm:px-6">
             {m.machines.otherTypeHint}
@@ -195,12 +228,15 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
             }
           />
         ) : (
-          // The balance of a machine is what is in it: the count, big, then the machine itself.
+          // What is in it: the count, big, then the machine itself.
           <section className="surface-card px-5 pb-5 pt-6 sm:px-8 sm:pb-7 sm:pt-8">
             <h2 className="text-[14px] font-medium tracking-normal text-muted-foreground">{m.machines.stock}</h2>
             {counted.length > 0 ? (
               <>
-                <p className="mt-2 text-[40px] font-semibold leading-none tracking-[-0.04em] tabular-nums sm:text-[48px]">
+                <p
+                  className="mt-2 text-[40px] font-semibold leading-none tracking-[-0.04em] tabular-nums sm:text-[48px]"
+                  title={fmt(m.machines.inMachine, { stock: totalStock, capacity: totalCapacity })}
+                >
                   {totalStock}
                   <span className="text-[22px] font-medium tracking-[-0.02em] text-muted-foreground sm:text-[26px]">
                     {" "}
@@ -213,9 +249,6 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
                     style={{ width: `${totalCapacity > 0 ? Math.min(100, (totalStock / totalCapacity) * 100) : 0}%` }}
                   />
                 </div>
-                <p className="mt-2.5 text-[13.5px] text-muted-foreground">
-                  {fmt(m.machines.inMachine, { stock: totalStock, capacity: totalCapacity })}
-                </p>
               </>
             ) : (
               <p className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-muted-foreground">
@@ -240,64 +273,74 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
                   half: m.machines.legendHalf,
                   low: m.machines.legendLow,
                   empty: m.machines.legendEmpty,
-                  unknown: m.machines.legendUnknown,
+                  unknown: anyUncounted ? m.machines.legendUnknown : undefined,
                 }}
               />
+            </div>
+            <div className="mt-6 flex flex-wrap gap-2">
+              <Link href={`/machines/${id}/refill?mode=correction`} className={buttonVariants({ variant: "secondary" })}>
+                <Pencil />
+                {m.machines.correct}
+              </Link>
+              {editLayout && (
+                <Link href={`/machines/${id}/layout`} className={buttonVariants({ variant: "secondary" })}>
+                  <LayoutGrid />
+                  {m.machines.editLayout}
+                </Link>
+              )}
             </div>
           </section>
         )}
 
-        <TerminalPanel machine={machine} health={health.get(id)} payments={payments} split={split} m={m} f={f} />
+        <TerminalPanel machine={machine} health={health.get(id)} payments={payments} m={m} f={f} />
 
-        {tracksStock && (
+        {tracksStock && recentHistory.length > 0 && (
           <Section title={m.machines.history}>
-            {history.length === 0 ? (
-              <p className="surface-card px-5 py-4 text-[14px] text-muted-foreground">{m.machines.historyEmpty}</p>
-            ) : (
-              <RowList>
-                {history.map((event) => (
-                  <li
-                    key={`${event.occurred_at}-${event.type}`}
-                    className="flex min-h-14 items-center gap-3.5 rounded-xl px-3 py-2.5"
-                  >
-                    <Avatar>{event.type === "refill" ? <ClipboardList /> : <Pencil />}</Avatar>
-                    {/* Phones read the event under the date; wider screens put it on the right. */}
-                    <div className="min-w-0 flex-1 sm:flex sm:items-center sm:justify-between sm:gap-4">
-                      <div className="min-w-0">
-                        <p className="truncate text-[15px] font-semibold tracking-[-0.01em]">
-                          {m.weekdays[weekdayIndex(event.occurred_at)]} · {f.dateTime(event.occurred_at)}
-                        </p>
-                        {(event.filled_by || event.refill_sheet_id) && (
-                          <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
-                            {[event.filled_by, event.refill_sheet_id ? m.machines.viaSheet : null]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </p>
-                        )}
-                      </div>
-                      <p className="mt-0.5 text-[13px] text-muted-foreground sm:mt-0 sm:shrink-0 sm:text-right">
-                        {event.type === "refill"
-                          ? fmt(m.machines.historyItems, { count: event.added })
-                          : m.machines.correction}
+            <RowList>
+              {recentHistory.map((event) => (
+                <li
+                  key={`${event.occurred_at}-${event.type}`}
+                  className="flex min-h-14 items-center gap-3.5 rounded-xl px-3 py-2.5"
+                >
+                  <Avatar>{event.type === "refill" ? <ClipboardList /> : <Pencil />}</Avatar>
+                  {/* Phones read the event under the date; wider screens put it on the right. */}
+                  <div className="min-w-0 flex-1 sm:flex sm:items-center sm:justify-between sm:gap-4">
+                    <div className="min-w-0">
+                      <p className="truncate text-[15px] font-semibold tracking-[-0.01em]">
+                        {m.weekdays[weekdayIndex(event.occurred_at)]} · {f.dateTime(event.occurred_at)}
                       </p>
+                      {event.filled_by && (
+                        <p className="mt-0.5 truncate text-[13px] text-muted-foreground">{event.filled_by}</p>
+                      )}
                     </div>
-                  </li>
-                ))}
-              </RowList>
-            )}
+                    <p className="mt-0.5 text-[13px] text-muted-foreground sm:mt-0 sm:shrink-0 sm:text-right">
+                      {event.type === "refill"
+                        ? fmt(m.machines.historyItems, { count: event.added })
+                        : m.machines.correction}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </RowList>
           </Section>
         )}
 
-        {/* A shop renames a machine of its own; a shared fridge's settings are the operator's alone. */}
+        {/* A shop renames a machine of its own; a shared fridge's settings are the operator's alone.
+            Folded: it is set once and rarely looked at again. */}
         {(operator || !shared) && (
-          <Section title={m.machines.settings}>
-            <div className="surface-card mb-4 p-5 sm:p-6">
+          <details className="group surface-card">
+            <summary className="hover-surface flex min-h-16 cursor-pointer list-none items-center gap-3 rounded-[inherit] px-5 py-4 sm:px-6 [&::-webkit-details-marker]:hidden">
+              <span className="min-w-0 flex-1 text-[16px] font-semibold tracking-[-0.015em]">{m.machines.settings}</span>
+              <ChevronDown
+                className="size-5 shrink-0 text-muted-foreground transition-transform duration-150 group-open:rotate-180"
+                aria-hidden="true"
+              />
+            </summary>
+            <div className="flex flex-col gap-8 border-t border-border px-5 pb-6 pt-5 sm:px-6">
               <MachinePhotoForm machineId={machine.id} photoPath={machine.photo_path} />
-            </div>
-            <div className="surface-card p-5 sm:p-6">
               <MachineDetailsForm machine={machine} businesses={operator ? businesses : []} operator={operator} rentsToBusinesses={rents} />
             </div>
-          </Section>
+          </details>
         )}
       </div>
     </>
