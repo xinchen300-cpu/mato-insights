@@ -299,3 +299,22 @@ export async function createDish(machineId: string, name: string): Promise<Dish>
   revalidatePath("/products");
   return { id: data.id as string, name: data.name as string, photoPath: (data.photo_path as string | null) ?? null };
 }
+
+/**
+ * The order of the machines, set by dragging them on the machines page (Xin,
+ * 17-10-2026), by the operator or a filler, never a shop. It is the route: the
+ * machines page, the filler's tiles and new rounds all follow it. Only the
+ * order changes; the kilometres between stops stay as the operator set them.
+ */
+export async function saveMachineOrder(order: string[]) {
+  const orgId = await requireRefillAccess();
+  const own = new Set((await getMachines(orgId)).map((machine) => machine.id));
+  const admin = createAdminClient();
+  const { data: stored, error: readError } = await admin.from("organizations").select("refill_settings").eq("id", orgId).maybeSingle();
+  if (readError) throw new Error(readError.message);
+  const settings = cleanRoundSettings(stored?.refill_settings);
+  const route = cleanRoundSettings({ route: order }).route.filter((id) => own.has(id));
+  const { error } = await admin.from("organizations").update({ refill_settings: { ...settings, route } }).eq("id", orgId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/", "layout");
+}
