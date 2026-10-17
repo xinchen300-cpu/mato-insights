@@ -630,6 +630,7 @@ export const fr: Messages = {
   auth: {
     signIn: "Se connecter",
     signOut: "Se déconnecter",
+    confirmSignOut: "Voulez-vous vous déconnecter ?",
     welcome: "Bon retour",
     welcomeHint: "Connectez-vous à votre tableau de bord Vendly.",
     email: "E-mail",

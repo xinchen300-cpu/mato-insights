@@ -106,7 +106,9 @@ export function MobileNav({ filler = false }: { filler?: boolean }) {
               href={href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex flex-col items-center gap-1 py-2 text-[10.5px] transition-colors",
+                // Three tabs for a filler leave room for a label that reads outdoors.
+                "flex flex-col items-center gap-1 py-2 transition-colors",
+                filler ? "text-[12px]" : "text-[10.5px]",
                 active ? "font-semibold text-foreground" : "font-medium text-muted-foreground",
               )}
             >

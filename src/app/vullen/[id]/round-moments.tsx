@@ -205,7 +205,7 @@ export function RoundDone({
               <span className="flex min-w-0 flex-col">
                 <span className="text-[16px] font-semibold">{t.recordTitle}</span>
                 {reward.previousBest !== null && (
-                  <span className="text-[13.5px] text-muted-foreground">{fmt(t.recordSub, { time: time(reward.previousBest) })}</span>
+                  <span className="text-[13.5px] text-foreground/70">{fmt(t.recordSub, { time: time(reward.previousBest) })}</span>
                 )}
               </span>
             </div>

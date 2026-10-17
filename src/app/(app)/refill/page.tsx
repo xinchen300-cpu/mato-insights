@@ -75,13 +75,14 @@ export default async function RefillPage() {
       <>
         <PageHeader title={name ? fmt(m.round.hello, { name }) : m.refill.title} />
         <div className="flex flex-col gap-8">
-          {/* Every machine first, how full each is (Xin, 17-10-2026); then the round to do and what sells, without amounts. */}
+          {/* The round to do as one slim bar, so it is never scrolled away; then every machine, how full
+              each is (Xin, 17-10-2026), and what sells, without amounts. */}
+          {next && <NextRound round={next} m={m} />}
           {grid.length > 0 && (
             <Section title={m.refill.machinesTitle}>
               <MachineGrid machines={grid} m={m} />
             </Section>
           )}
-          {next && <NextRound round={next} m={m} />}
           <LiveSold initial={sold} />
           {/* Someone new sees how a round goes; after the first one, their own figures. */}
           {stats.rounds > 0 ? <FiguresCard stats={stats} /> : <HowItWorks />}
@@ -223,38 +224,23 @@ function NextRound({ round, m }: { round: OpenRound; m: Awaited<ReturnType<typeo
   const underway = Boolean(round.readyAt);
   const done = round.machines.filter((machine) => machine.done).length;
   return (
-    <section className="surface-card flex flex-col gap-4 p-5">
-      <div className="flex items-center gap-3.5">
-        <span
-          className={cn(
-            "grid size-12 shrink-0 place-items-center rounded-full",
-            underway ? "bg-positive/12 text-positive" : "bg-surface text-foreground",
-          )}
-        >
-          <ClipboardList className="size-6" aria-hidden="true" />
+    <Link
+      href={`/vullen/${round.id}`}
+      className="flex min-h-16 items-center gap-3.5 rounded-2xl bg-foreground px-4 py-3 text-background shadow-[var(--shadow-pop)] transition-transform active:scale-[0.99]"
+    >
+      <span
+        className={cn("grid size-10 shrink-0 place-items-center rounded-full", underway ? "bg-positive text-white" : "bg-background/15")}
+      >
+        <ClipboardList className="size-5" aria-hidden="true" />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="text-[17px] font-semibold tracking-[-0.01em]">{underway ? m.me.nextContinue : m.me.nextBegin}</span>
+        <span className="truncate text-[13.5px] opacity-75">
+          {fmt(round.machines.length === 1 ? m.me.nextSubOne : m.me.nextSub, { n: round.machines.length, done })}
         </span>
-        <div className="min-w-0">
-          <h2 className="text-[19px] font-semibold tracking-[-0.02em]">{underway ? m.me.nextUnderway : m.me.nextReady}</h2>
-          <p className="mt-0.5 truncate text-[13.5px] text-muted-foreground">
-            {fmt(round.machines.length === 1 ? m.me.nextSubOne : m.me.nextSub, { n: round.machines.length, done })}
-          </p>
-        </div>
-      </div>
-      {round.machines.length > 1 && (
-        <div className="flex gap-1.5" aria-hidden="true">
-          {round.machines.map((machine) => (
-            <span
-              key={machine.id}
-              className={cn("h-2 flex-1 rounded-full", machine.skipped ? "bg-warning/50" : machine.done ? "bg-positive" : "bg-surface")}
-            />
-          ))}
-        </div>
-      )}
-      <Link href={`/vullen/${round.id}`} className={cn(buttonVariants({ size: "lg" }), "h-14 w-full rounded-2xl text-base")}>
-        {underway ? m.me.nextContinue : m.me.nextBegin}
-        <ChevronRight className="size-5" />
-      </Link>
-    </section>
+      </span>
+      <ChevronRight className="size-6 shrink-0" aria-hidden="true" />
+    </Link>
   );
 }
 

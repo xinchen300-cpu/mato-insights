@@ -6,6 +6,7 @@ import { isFiller } from "@/lib/org";
 import { createClient } from "@/lib/supabase/server";
 import { HideNumbers } from "./hide-numbers";
 import { MobileNav, SidebarNav } from "./nav";
+import { SignOutForm } from "./sign-out";
 
 const railRow =
   "flex h-10 w-full items-center gap-3 rounded-xl px-3 text-[14.5px] font-medium text-muted-foreground transition-colors duration-150 hover:bg-surface/70 hover:text-foreground";
@@ -40,12 +41,12 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
             </>
           )}
           {user && (
-            <form action="/auth/signout" method="post">
+            <SignOutForm question={m.auth.confirmSignOut}>
               <button type="submit" title={user.email ?? m.auth.signOut} className={railRow}>
                 <LogOut className="size-[18px] shrink-0" strokeWidth={1.9} aria-hidden="true" />
                 <span className="truncate">{m.auth.signOut}</span>
               </button>
-            </form>
+            </SignOutForm>
           )}
         </div>
       </aside>
@@ -70,7 +71,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
               </>
             )}
             {user && (
-              <form action="/auth/signout" method="post">
+              <SignOutForm question={m.auth.confirmSignOut}>
                 <button
                   type="submit"
                   aria-label={m.auth.signOut}
@@ -79,7 +80,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
                 >
                   <LogOut className="size-[18px]" />
                 </button>
-              </form>
+              </SignOutForm>
             )}
           </div>
         </div>

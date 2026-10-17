@@ -630,6 +630,7 @@ export const nl: Messages = {
   auth: {
     signIn: "Inloggen",
     signOut: "Uitloggen",
+    confirmSignOut: "Wil je uitloggen?",
     welcome: "Welkom terug",
     welcomeHint: "Log in op je Vendly-dashboard.",
     email: "E-mail",

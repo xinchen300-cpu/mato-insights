@@ -71,6 +71,10 @@ export function MachineGrid({ machines, m, from }: { machines: GridMachine[]; m:
             <MachinePhoto path={machine.photoPath}>
               <span className="absolute left-2.5 top-2.5 grid size-6 place-items-center rounded-full bg-card/90">
                 <StatusDot status={machine.status} />
+                {/* The dot alone is colour only: its word for whoever cannot see it. */}
+                <span className="sr-only">
+                  {machine.status === "online" ? m.status.online : machine.status === "offline" ? m.status.offline : m.status.unknown}
+                </span>
               </span>
               <span
                 className={cn(
@@ -83,8 +87,16 @@ export function MachineGrid({ machines, m, from }: { machines: GridMachine[]; m:
             </MachinePhoto>
             <span className="flex flex-col gap-0.5 p-3">
               <span className="truncate text-[15px] font-semibold tracking-[-0.01em]">{machine.name}</span>
-              <span className={cn("text-[13px] leading-snug", machine.low > 0 ? "font-medium text-level-low" : "text-muted-foreground")}>
-                {machine.low > 0
+              <span
+                className={cn(
+                  "text-[13px] leading-snug",
+                  machine.status === "offline" ? "font-semibold text-negative" : machine.low > 0 ? "font-medium text-level-low-strong" : "text-muted-foreground",
+                )}
+              >
+                {/* Offline first: a machine that cannot take payments sells nothing, however full. */}
+                {machine.status === "offline"
+                  ? m.status.offline
+                  : machine.low > 0
                   ? fmt(m.overview.slotsLow, { count: machine.low })
                   : machine.noLayout
                     ? m.machines.noLayout

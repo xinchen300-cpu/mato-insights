@@ -175,7 +175,9 @@ export function FillerView({
     ) as Record<string, string>;
     closingRef.current = true;
     startTransition(async () => {
-      const result = await completeSheet(
+      let result: Awaited<ReturnType<typeof completeSheet>>;
+      try {
+        result = await completeSheet(
         token,
         adjustments,
         expiries,
@@ -188,6 +190,12 @@ export function FillerView({
           .map(([product_id, qty]) => ({ product_id, qty })),
         expiry !== null,
       );
+      } catch {
+        // No signal, or the server failed: nothing was closed, so the filler can try again.
+        closingRef.current = false;
+        setStatus("error");
+        return;
+      }
       if (result.status === "done" || result.status === "already_done") {
         try {
           localStorage.removeItem(storageKey);

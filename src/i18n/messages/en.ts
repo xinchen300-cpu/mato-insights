@@ -630,6 +630,7 @@ export const en = {
   auth: {
     signIn: "Sign in",
     signOut: "Sign out",
+    confirmSignOut: "Sign out?",
     welcome: "Welcome back",
     welcomeHint: "Sign in to your Vendly dashboard.",
     email: "Email",

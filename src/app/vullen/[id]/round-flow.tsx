@@ -169,6 +169,27 @@ export function RoundFlow({
     }
   }, [restored, initial.id, picked, touched, drafts]);
 
+  // The screen stays on while the round is on: a phone that locks between two machines costs a filler time.
+  useEffect(() => {
+    if (!readyAt || completed || !("wakeLock" in navigator)) return;
+    let lock: WakeLockSentinel | null = null;
+    const hold = () => {
+      if (document.visibilityState !== "visible") return;
+      navigator.wakeLock.request("screen").then(
+        (sentinel) => {
+          lock = sentinel;
+        },
+        () => undefined,
+      );
+    };
+    hold();
+    document.addEventListener("visibilitychange", hold);
+    return () => {
+      document.removeEventListener("visibilitychange", hold);
+      void lock?.release().catch(() => undefined);
+    };
+  }, [readyAt, completed]);
+
   const rows = useMemo(() => pickList(initial.lines), [initial.lines]);
   const totalTake = rows.reduce((sum, row) => sum + row.take, 0);
   const totalPicked = rows.reduce((sum, row) => sum + Math.min(row.take, picked[row.key] ?? 0), 0);
@@ -1183,13 +1204,13 @@ export function RoundFlow({
                       : step.state === "full"
                         ? "border-2 border-dashed border-border bg-transparent"
                         : "bg-card/70",
-                    step.state === "later" && "opacity-70",
                   )}
                 >
                   {step.machine && (
                     <MachineThumb
                       path={step.machine.photoPath}
-                      className={cn("size-12 rounded-xl", (passed || step.state === "full") && "opacity-60")}
+                      // Only the picture fades for what comes later: faded text would no longer read outdoors.
+                      className={cn("size-12 rounded-xl", (passed || step.state === "full" || step.state === "later") && "opacity-60")}
                     />
                   )}
                   <span className="flex min-w-0 flex-1 flex-col">
@@ -1732,9 +1753,9 @@ function RoundClock({ since }: { since: string }) {
 
 function Screen({ children, padded = true }: { children: React.ReactNode; padded?: boolean }) {
   return (
-    <div className="show-numbers mx-auto flex min-h-svh w-full max-w-md flex-col bg-background">
+    <main className="show-numbers mx-auto flex min-h-svh w-full max-w-md flex-col bg-background">
       <div className={cn("flex flex-1 flex-col", padded && "px-4 pb-7 pt-4")}>{children}</div>
-    </div>
+    </main>
   );
 }
 
@@ -1747,12 +1768,32 @@ function BottomBar({ children }: { children: React.ReactNode }) {
 }
 
 function Sheet({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  const panel = useRef<HTMLDivElement>(null);
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  });
+  // A keyboard or screen reader lands in the sheet, Escape closes it, and focus goes back where it was.
+  useEffect(() => {
+    const before = document.activeElement as HTMLElement | null;
+    panel.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      before?.focus?.();
+    };
+  }, []);
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-foreground/35" onClick={onClose}>
       <div
+        ref={panel}
         role="dialog"
         aria-modal="true"
-        className="flex max-h-[92svh] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-t-[28px] bg-card px-5 pb-[calc(1.75rem+env(safe-area-inset-bottom))] pt-3"
+        tabIndex={-1}
+        className="flex max-h-[92svh] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-t-[28px] bg-card px-5 pb-[calc(1.75rem+env(safe-area-inset-bottom))] pt-3 outline-none"
         onClick={(event) => event.stopPropagation()}
       >
         <span className="mx-auto h-1.5 w-10 rounded-full bg-border" aria-hidden="true" />
