@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, ClipboardList } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, ClipboardList } from "lucide-react";
 import { Avatar, RowList} from "@/components/list-row";
 import { Section } from "@/components/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -15,11 +15,34 @@ import { MachineIcon } from "@/components/machine/machine-icon";
 
 export function MachinePicker({
   machines,
+  canOrder = false,
 }: {
+  /** In the order of the route. */
   machines: { id: string; name: string; hint: string; low: boolean; note?: string }[];
+  /** The owner puts the round in order (and so sets the route); a filler follows it. */
+  canOrder?: boolean;
 }) {
   const { m } = useI18n();
   const [selected, setSelected] = useState<Set<string>>(new Set(machines.filter((mc) => mc.low).map((mc) => mc.id)));
+  // Every machine in route order; the round is the ticked ones, in this order.
+  const [order, setOrder] = useState<string[]>(() => machines.map((mc) => mc.id));
+  const chosen = order.filter((id) => selected.has(id));
+  const nameOf = new Map(machines.map((mc) => [mc.id, mc.name]));
+
+  /** One place earlier or later among the ticked machines. */
+  function move(id: string, by: -1 | 1) {
+    setOrder((current) => {
+      const picked = current.filter((x) => selected.has(x));
+      const from = picked.indexOf(id);
+      const other = picked[from + by];
+      if (from < 0 || !other) return current;
+      const next = [...current];
+      const a = next.indexOf(id);
+      const b = next.indexOf(other);
+      [next[a], next[b]] = [next[b], next[a]];
+      return next;
+    });
+  }
   const [empty, setEmpty] = useState(false);
   const [locked, setLocked] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -37,7 +60,7 @@ export function MachinePicker({
   function make() {
     setEmpty(false);
     startTransition(async () => {
-      const result = await createRefillSheet([...selected]);
+      const result = await createRefillSheet(chosen);
       if (result && "empty" in result) setEmpty(true);
       if (result && "locked" in result) setLocked(true);
     });
@@ -86,18 +109,55 @@ export function MachinePicker({
                 </span>
                 <span
                   className={cn(
-                    "grid size-7 shrink-0 place-items-center rounded-full transition-colors duration-150",
+                    "grid size-7 shrink-0 place-items-center rounded-full text-[13px] font-bold transition-colors duration-150",
                     checked ? "bg-foreground text-background" : "shadow-[inset_0_0_0_1.5px_var(--input)]",
                   )}
                   aria-hidden="true"
                 >
-                  {checked && <Check className="size-4" strokeWidth={3} />}
+                  {/* For the owner, a ticked machine shows its place in the route. */}
+                  {checked && (canOrder ? chosen.indexOf(mc.id) + 1 : <Check className="size-4" strokeWidth={3} />)}
                 </span>
               </label>
             </li>
           );
         })}
       </RowList>
+      {canOrder && chosen.length >= 2 && (
+        <div className="surface-card mt-2 flex flex-col gap-1 p-2">
+          <div className="px-3 pb-1 pt-2">
+            <p className="text-[15px] font-semibold">{m.refill.routeOrder}</p>
+            <p className="mt-0.5 text-[13px] text-muted-foreground">{m.refill.routeOrderHint}</p>
+          </div>
+          <ol className="flex flex-col">
+            {chosen.map((id, index) => (
+              <li key={id} className="flex min-h-14 items-center gap-3 rounded-xl px-3">
+                <span className="grid size-7 shrink-0 place-items-center rounded-full bg-foreground text-[13px] font-bold text-background">
+                  {index + 1}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{nameOf.get(id)}</span>
+                <button
+                  type="button"
+                  onClick={() => move(id, -1)}
+                  disabled={index === 0}
+                  aria-label={`${m.refill.moveEarlier}: ${nameOf.get(id)}`}
+                  className="grid size-10 place-items-center rounded-full bg-surface transition-transform active:scale-95 disabled:opacity-30"
+                >
+                  <ChevronUp className="size-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => move(id, 1)}
+                  disabled={index === chosen.length - 1}
+                  aria-label={`${m.refill.moveLater}: ${nameOf.get(id)}`}
+                  className="grid size-10 place-items-center rounded-full bg-surface transition-transform active:scale-95 disabled:opacity-30"
+                >
+                  <ChevronDown className="size-5" />
+                </button>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
       {empty && <p className="px-1 text-sm text-muted-foreground">{m.refill.nothingToRefill}</p>}
       <Button
         size="lg"

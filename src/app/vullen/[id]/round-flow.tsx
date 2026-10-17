@@ -1027,17 +1027,26 @@ export function RoundFlow({
     <Screen padded={false}>
       <div className="flex flex-col gap-1 px-4 pt-4">
         {header()}
-        <div className="mt-4 flex items-center gap-3.5">
+        {/* A big hello before the start; once the round is on, the name steps back for the work. */}
+        <div className={cn("flex items-center", readyAt ? "mt-3 gap-2.5" : "mt-4 gap-3.5")}>
           {who && (
             <span
-              className="grid size-12 shrink-0 place-items-center rounded-full bg-primary/15 text-[19px] font-bold text-[#8a6117]"
+              className={cn(
+                "grid shrink-0 place-items-center rounded-full bg-primary/15 font-bold text-[#8a6117]",
+                readyAt ? "size-9 text-[15px]" : "size-12 text-[19px]",
+              )}
               aria-hidden="true"
             >
               {who.trim().charAt(0).toUpperCase()}
             </span>
           )}
           <div className="min-w-0">
-            <h1 className="truncate text-[28px] font-bold leading-tight tracking-[-0.03em]">
+            <h1
+              className={cn(
+                "truncate leading-tight",
+                readyAt ? "text-[19px] font-semibold tracking-[-0.02em]" : "text-[28px] font-bold tracking-[-0.03em]",
+              )}
+            >
               {who ? fmt(t.hello, { name: who }) : t.myRound}
             </h1>
             <p className="truncate text-[13.5px] text-muted-foreground">
@@ -1281,13 +1290,13 @@ function BigClock({ since, startedLabel }: { since: string; startedLabel: string
   const mm = String(Math.floor((seconds % 3600) / 60)).padStart(2, "0");
   const ss = String(seconds % 60).padStart(2, "0");
   return (
-    <div className="mt-3 flex items-center gap-3 rounded-2xl bg-foreground px-4 py-3 text-background">
-      <Timer className="size-6 shrink-0" strokeWidth={2.2} aria-hidden="true" />
+    <div className="mt-3 flex items-center gap-2.5 rounded-2xl bg-foreground px-4 py-2.5 text-background">
+      <Timer className="size-5 shrink-0" strokeWidth={2.2} aria-hidden="true" />
       {/* Until the phone has read its own clock, the space is kept but nothing is shown: never a false 0:00:00. */}
-      <span className={cn("tabular text-[34px] font-bold leading-none tracking-[-0.03em]", now === null && "invisible")}>
+      <span className={cn("tabular text-[28px] font-bold leading-none tracking-[-0.03em]", now === null && "invisible")}>
         {`${h}:${mm}:${ss}`}
       </span>
-      <span className="ml-auto text-right text-[13px] font-medium opacity-80">{startedLabel}</span>
+      <span className="ml-auto text-right text-[12.5px] font-medium opacity-80">{startedLabel}</span>
     </div>
   );
 }

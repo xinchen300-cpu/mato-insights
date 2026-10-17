@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { Check, ChevronRight, Medal, PackageOpen, Route, TriangleAlert, Undo2 } from "lucide-react";
-import { BadgeMedal, badgeText } from "@/components/filler/badges";
 import { Avatar, ListRow, RowList } from "@/components/list-row";
 import { MachineIcon } from "@/components/machine/machine-icon";
 import { ProgressRing } from "@/components/motion/success";
@@ -14,7 +13,7 @@ import type { FillerStats } from "@/lib/filler-stats";
 import { MIN_ROUNDS } from "@/lib/stats";
 import { cn } from "@/lib/utils";
 
-// A filler's own scoreboard. It reads like a game (a level, records, medals)
+// A filler's own scoreboard. It reads a little like a game (a level, records)
 // but speaks like the rest of the app: calm, factual, and only about their own
 // work. Times appear per route and only once there are enough rounds on it for
 // "best" and "usual" to mean something; nothing is compared with a colleague.
@@ -92,37 +91,6 @@ export function FillerFigures({ stats, names }: { stats: FillerStats; names: Rec
           </RowList>
         </Section>
       )}
-
-      <Section title={t.badgesTitle}>
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {stats.badges.map((badge) => {
-            const earned = badge.earnedAt !== null;
-            const text = badgeText(m, badge.id);
-            return (
-              <li key={badge.id} className="surface-card flex flex-col items-center gap-2 px-3 py-5 text-center">
-                <BadgeMedal id={badge.id} earned={earned} />
-                <p className="mt-1 text-[14.5px] font-semibold leading-tight">{text.name}</p>
-                <p className="text-[12.5px] leading-snug text-muted-foreground">
-                  {earned ? fmt(t.badgeEarned, { date: f.date(badge.earnedAt as string) }) : text.hint}
-                </p>
-                {!earned && (
-                  <div className="mt-1 flex w-full items-center gap-2">
-                    <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface">
-                      <span
-                        className="block h-full origin-left rounded-full bg-foreground/35"
-                        style={{ transform: `scaleX(${badge.current / badge.target})` }}
-                      />
-                    </span>
-                    <span className="tabular text-[11.5px] font-semibold text-muted-foreground">
-                      {f.number(badge.current)}/{f.number(badge.target)}
-                    </span>
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </Section>
 
       <Section title={t.recentTitle}>
         <RowList>

@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Medal, TriangleAlert } from "lucide-react";
-import { BadgeMedal, badgeText } from "@/components/filler/badges";
 import { RollingNumber } from "@/components/motion/rolling-number";
 import { SuccessCheck } from "@/components/motion/success";
 import { useI18n } from "@/i18n/client";
@@ -242,16 +241,6 @@ export function RoundDone({
             </p>
           </div>
 
-          {/* The record card above already celebrates a first record; its badge would say it twice. */}
-          {reward.newBadges.filter((id) => !(id === "record" && reward.record)).map((id) => (
-            <div key={id} className="rise flex items-center gap-3.5 rounded-2xl bg-card px-4 py-3 ring-1 ring-border" style={next()}>
-              <BadgeMedal id={id} earned size="sm" />
-              <span className="flex min-w-0 flex-col">
-                <span className="text-[12.5px] font-semibold text-[#8a6117]">{t.newBadge}</span>
-                <span className="text-[15.5px] font-semibold">{badgeText(m, id).name}</span>
-              </span>
-            </div>
-          ))}
         </div>
       )}
 

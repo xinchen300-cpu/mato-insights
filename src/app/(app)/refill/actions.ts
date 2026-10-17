@@ -3,12 +3,12 @@
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { isFiller, requireOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
+import { isFiller, isOperator, requireOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
 import { getMachines } from "@/lib/data";
 import { featureAllowed } from "@/lib/billing";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { RefillLine } from "@/lib/types";
-import { cleanRoundSettings, type RoundSettings } from "@/lib/round-settings";
+import { cleanRoundSettings, mergeRoute, orderByRoute, type RoundSettings } from "@/lib/round-settings";
 
 export async function createRefillSheet(
   machineIds: string[],
@@ -26,6 +26,14 @@ export async function createRefillSheet(
   if (machineIds.some((machineId) => !own.has(machineId))) throw new Error("Not found");
   const admin = createAdminClient();
 
+  // The route: the owner puts the machines in order while making the round,
+  // and that order is kept for the next ones. A filler's round follows it.
+  const operator = await isOperator();
+  const { data: org } = await admin.from("organizations").select("refill_settings").eq("id", orgId).maybeSingle();
+  const settings = cleanRoundSettings(org?.refill_settings);
+  const chosen = [...new Set(machineIds)];
+  const order = operator ? chosen : orderByRoute(chosen, settings.route);
+
   const { data, error } = await admin.rpc("refill_plan", { target_org: orgId, machine_filter: machineIds });
   if (error) throw new Error(error.message);
   const lines = (data ?? []) as RefillLine[];
@@ -36,7 +44,7 @@ export async function createRefillSheet(
     .insert({
       org_id: orgId,
       share_token: randomBytes(18).toString("base64url"),
-      machine_ids: [...new Set(machineIds)],
+      machine_ids: order,
       lines,
       // Filled step by step, machine by machine (/vullen).
       flow_version: 2,
@@ -44,6 +52,18 @@ export async function createRefillSheet(
     .select("id")
     .single();
   if (insertError) throw new Error(insertError.message);
+
+  // Only the owner's order becomes the route, and only with their own machines on it.
+  if (operator) {
+    const route = mergeRoute(settings.route.filter((id) => own.has(id)), order);
+    if (route.join() !== settings.route.join()) {
+      const { error: routeError } = await admin
+        .from("organizations")
+        .update({ refill_settings: { ...settings, route } })
+        .eq("id", orgId);
+      if (routeError) throw new Error(routeError.message);
+    }
+  }
 
   revalidatePath("/refill");
   // The operator lands on the round to hand it out; a filler starts filling.
@@ -114,8 +134,11 @@ export async function cancelRound(sheetId: string): Promise<"cancelled" | "start
 export async function saveRoundSettings(input: RoundSettings): Promise<RoundSettings> {
   const orgId = await requireOrgId();
   await requireOperator();
-  const settings = cleanRoundSettings(input);
-  const { error } = await createAdminClient()
+  const admin = createAdminClient();
+  // The route is set where a round is made, never here: what is stored stays.
+  const { data: stored } = await admin.from("organizations").select("refill_settings").eq("id", orgId).maybeSingle();
+  const settings = { ...cleanRoundSettings(input), route: cleanRoundSettings(stored?.refill_settings).route };
+  const { error } = await admin
     .from("organizations")
     .update({ refill_settings: settings })
     .eq("id", orgId);

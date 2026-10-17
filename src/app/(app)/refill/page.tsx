@@ -6,7 +6,8 @@ import { EmptyState, PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { duration, fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getMachines, getMachineStock, getMyRounds, getOpenRounds, getRefillSheets, getShortages, getStatsReport, type OpenRound } from "@/lib/data";
+import { getMachines, getMachineStock, getMyRounds, getOpenRounds, getRefillSheets, getRoundSettings, getShortages, getStatsReport, type OpenRound } from "@/lib/data";
+import { cleanRoundSettings, orderByRoute } from "@/lib/round-settings";
 import { fillerStats } from "@/lib/filler-stats";
 import { displayName } from "@/lib/people";
 import { createClient } from "@/lib/supabase/server";
@@ -30,12 +31,13 @@ export default async function RefillPage() {
   // A filler gets their own view of the refill work: rounds and pieces, no money.
   if (await isFiller()) {
     const fillerOrg = await requireRefillAccess();
-    const [rounds, fleet, slots, mine, me] = await Promise.all([
+    const [rounds, fleet, slots, mine, me, settings] = await Promise.all([
       getOpenRounds(fillerOrg),
       getMachines(fillerOrg),
       getMachineStock(fillerOrg),
       getMyRounds(fillerOrg),
       createClient().then((client) => client.auth.getUser()),
+      getRoundSettings(fillerOrg),
     ]);
     const pieces = new Map<string, { toAdd: number; counted: number; low: number }>();
     for (const slot of slots) {
@@ -74,7 +76,8 @@ export default async function RefillPage() {
           {stats.rounds > 0 ? <FiguresCard stats={stats} /> : <HowItWorks />}
           <OpenRounds rounds={rounds.filter((round) => round.id !== next?.id)} m={m} f={f} />
           {choices.length > 0 ? (
-            <MachinePicker machines={choices} />
+            // In the owner's route order: a filler's round follows it.
+            <MachinePicker machines={orderByRoute(choices.map((c) => c.id), settings.route).map((id) => choices.find((c) => c.id === id)!)} />
           ) : (
             <EmptyState title={m.team.fillerWelcome} hint={m.team.fillerWelcomeHint} icon={<ClipboardList className="size-5" />} />
           )}
@@ -92,7 +95,7 @@ export default async function RefillPage() {
     getMachineStock(orgId),
     getRefillSheets(orgId),
     getShortages(orgId),
-    createAdminClient().from("organizations").select("cost_per_hour, cost_per_km").eq("id", orgId).maybeSingle(),
+    createAdminClient().from("organizations").select("cost_per_hour, cost_per_km, refill_settings").eq("id", orgId).maybeSingle(),
     getStatsReport(orgId, { period: "custom", ...window }),
   ]);
 
@@ -243,7 +246,13 @@ export default async function RefillPage() {
             }
           />
         ) : (
-          <MachinePicker machines={pickable} />
+          // In route order; the owner puts the round in order here, and that becomes the route.
+          <MachinePicker
+            machines={orderByRoute(pickable.map((p) => p.id), cleanRoundSettings(org?.refill_settings).route).map(
+              (id) => pickable.find((p) => p.id === id)!,
+            )}
+            canOrder={operator}
+          />
         )}
 
         <Section title={m.refill.recent}>

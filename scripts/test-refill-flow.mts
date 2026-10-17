@@ -201,7 +201,7 @@ ok("result: the route is the machines in any order", roundResult(R("y", 5, 45, {
 ok("result: a round left open overnight has no time", roundResult({ ...R("o", 5, 60), completedAt: on(6, 9) }).minutes === null);
 
 const first = roundReward([], R("f", 1, 60));
-ok("reward: a first round compares with nothing, and earns the first badge", first.verdict === "tooFew" && !first.record && first.newBadges.join() === "first");
+ok("reward: a first round compares with nothing", first.verdict === "tooFew" && !first.record && first.earlierOnRoute === 0);
 const quick = roundReward(history, R("q", 8, 50));
 ok("reward: clearly under the usual time on this route is faster and a record", quick.verdict === "faster" && quick.record && quick.previousBest === 58 && quick.usual === 60);
 const close = roundReward(history, R("c", 8, 57));
@@ -214,7 +214,7 @@ const later = roundReward([...history, R("later", 20, 40)], R("q", 8, 50));
 ok("reward: looking back, rounds that ended later do not count against it", later.record && later.earlierOnRoute === 3);
 // Two lines on each of two machines: a round of `filled` puts in four times that.
 const big = roundReward([R("b1", 1, 60, { filled: 120 }), R("b2", 2, 60, { filled: 120 })], R("b3", 3, 60, { filled: 15 }));
-ok("reward: crossing 1.000 pieces earns that badge, with the level before and after", big.newBadges.includes("items1000") && big.before.items === 960 && big.after.items === 1020 && big.after.level === 5);
+ok("reward: the level before and after the round", big.before.items === 960 && big.before.level === 4 && big.after.items === 1020 && big.after.level === 5);
 
 const stats = fillerStats([...history, R("q", 8, 50), R("w", 13, 70, { machines: ["c"] }), R("w2", 14, 66, { skip: true })], "Europe/Brussels", new Date(on(15, 12)));
 ok("stats: totals over every round", stats.rounds === 6 && stats.items === 4 * 40 + 20 + 20 && stats.visits === 10);
@@ -223,7 +223,7 @@ ok("stats: records counted, the newest one remembered", stats.records === 1 && s
 const route = stats.routes[0];
 ok("stats: per route the best, the usual and the last complete time", route.rounds === 4 && route.best === 50 && route.usual === 59 && route.last === null);
 ok("stats: a record is marked on its round, newest first", stats.recent[0].id === "w2" && stats.recent.find((r) => r.id === "q")?.record === true);
-ok("stats: the record badge is earned when the record was set", stats.badges.find((b) => b.id === "record")?.earnedAt === R("q", 8, 50).completedAt);
+ok("stats: no badges, only a level and records", !("badges" in stats) && stats.records === 1);
 
 const legs = { "start→a": { minutes: 10, count: 2 }, "b→a": { minutes: 15, count: 1 }, "b→end": { minutes: 12, count: 2 } };
 const machinesAt = { a: { minutes: 8, count: 2 }, b: { minutes: 6, count: 2 } };
@@ -234,5 +234,14 @@ ok("eta: one drive never measured is no estimate", roundEta({ remaining: ["a", "
 ok("eta: only the way back is left", roundEta({ remaining: [], from: "b", since: on(16, 8), times: { machines: machinesAt, legs }, now: t0 }) === t0 + 12 * 60_000);
 ok("frame: what is done before halfway, what is left from halfway", progressFrame(1, 4) === "done" && progressFrame(2, 4) === "left" && progressFrame(0, 1) === "done");
 const threeRecords = fillerStats([R("t1", 1, 60), R("t2", 2, 62), R("t3", 3, 58), R("t4", 4, 57), R("t5", 5, 56), R("t6", 6, 59), R("t7", 7, 55)], "Europe/Brussels", new Date(on(15, 12)));
-ok("badges: three records earn '3 records', on the round of the third", threeRecords.records === 3 && threeRecords.badges.find((b) => b.id === "records3")?.earnedAt === R("t7", 7, 55).completedAt);
-ok("badges: no badge counts rounds without a skip", !threeRecords.badges.some((b) => (b.id as string).startsWith("streak")));
+ok("records: three times the best was beaten, the newest one remembered", threeRecords.records === 3 && threeRecords.lastRecord?.at === R("t7", 7, 55).completedAt);
+
+// ── The route the owner sets (src/lib/round-settings.ts) ──
+import { mergeRoute, orderByRoute } from "../src/lib/round-settings.ts";
+const [mA, mB, mC, mD, mE, mF] = ["a", "b", "c", "d", "e", "f"].map((x) => `${x.repeat(8)}-${x.repeat(4)}-${x.repeat(4)}-${x.repeat(4)}-${x.repeat(12)}`);
+ok("route: kept clean, once each, only machine ids", cleanRoundSettings({ route: [mA, mA, "x", 3, mB.toUpperCase(), mC] }).route.join() === [mA, mB.toUpperCase(), mC].join());
+ok("route: nothing stored is no route", cleanRoundSettings(null).route.length === 0 && cleanRoundSettings({ route: "x" }).route.length === 0);
+ok("route: machines follow it, the ones not on it after, in their own order", orderByRoute([mF, mC, mA, mE], [mE, mA, mB, mC]).join() === [mE, mA, mC, mF].join());
+ok("route: a round put in order takes its machines' places", mergeRoute([mA, mB, mC, mD, mE], [mE, mB, mD]).join() === [mA, mE, mC, mB, mD].join());
+ok("route: a machine new to the route takes a place in the round's order", mergeRoute([mA, mB, mC], [mF, mA]).join() === [mF, mB, mC, mA].join());
+ok("route: an empty route becomes the round's order", mergeRoute([], [mC, mA]).join() === [mC, mA].join());

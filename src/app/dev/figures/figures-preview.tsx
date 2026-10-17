@@ -22,7 +22,7 @@ export function FiguresPreview({ fresh }: { fresh: boolean }) {
           <FiguresCard stats={stats} />
         </div>
       )}
-      <PageHeader title="Jouw cijfers" subtitle="Je rondes, je beste tijden en je badges." backHref="/dev/figures" backLabel="Bijvullen" />
+      <PageHeader title="Jouw cijfers" subtitle="Je rondes, je niveau en je beste tijden." backHref="/dev/figures" backLabel="Bijvullen" />
       <FillerFigures stats={stats} names={previewMachineNames} />
     </main>
   );

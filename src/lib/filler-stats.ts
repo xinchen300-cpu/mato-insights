@@ -115,29 +115,10 @@ export function levelFor(items: number): Level {
   return { level, items: total, from, to, progress: (total - from) / (to - from) };
 }
 
-// ── Badges ───────────────────────────────────────────────────────────────────
-
-export type BadgeId = "first" | "record" | "rounds10" | "records3" | "machines100" | "items1000" | "rounds50" | "items5000";
+// No badges: a level and one's own records are enough, more would turn the
+// work into a game (the user, 17-10-2026: "dat gaat te ver").
 
 type Tally = { rounds: number; visits: number; items: number; records: number };
-
-/**
- * In the order a new filler is likely to earn them. Nothing for rounds without
- * a skip: fillers do not skip machines, so that would only count rounds again.
- * What does vary is speed, so records (beating one's own best on a route) count.
- */
-export const BADGES: { id: BadgeId; target: number; measure: (tally: Tally) => number }[] = [
-  { id: "first", target: 1, measure: (t) => t.rounds },
-  { id: "record", target: 1, measure: (t) => t.records },
-  { id: "rounds10", target: 10, measure: (t) => t.rounds },
-  { id: "records3", target: 3, measure: (t) => t.records },
-  { id: "machines100", target: 100, measure: (t) => t.visits },
-  { id: "items1000", target: 1000, measure: (t) => t.items },
-  { id: "rounds50", target: 50, measure: (t) => t.rounds },
-  { id: "items5000", target: 5000, measure: (t) => t.items },
-];
-
-export type Badge = { id: BadgeId; target: number; current: number; earnedAt: string | null };
 
 const oldestFirst = (a: { completedAt: string }, b: { completedAt: string }) => a.completedAt.localeCompare(b.completedAt);
 
@@ -156,10 +137,9 @@ function setRecord(results: RoundResult[], index: number): boolean {
   return r.complete && r.minutes !== null && isRecord(r.minutes, timesBefore(results, index));
 }
 
-/** Everything counted over the rounds, oldest first, with the moment each badge was earned. */
-function walk(results: RoundResult[]): { tally: Tally; badges: Badge[]; records: Set<string> } {
+/** Everything counted over the rounds, oldest first, and which of them set a record. */
+function walk(results: RoundResult[]): { tally: Tally; records: Set<string> } {
   const tally: Tally = { rounds: 0, visits: 0, items: 0, records: 0 };
-  const earned = new Map<BadgeId, string>();
   const records = new Set<string>();
   results.forEach((r, index) => {
     tally.rounds += 1;
@@ -169,20 +149,8 @@ function walk(results: RoundResult[]): { tally: Tally; badges: Badge[]; records:
       tally.records += 1;
       records.add(r.id);
     }
-    for (const badge of BADGES) {
-      if (!earned.has(badge.id) && badge.measure(tally) >= badge.target) earned.set(badge.id, r.completedAt);
-    }
   });
-  return {
-    tally,
-    records,
-    badges: BADGES.map((badge) => ({
-      id: badge.id,
-      target: badge.target,
-      current: Math.min(badge.target, badge.measure(tally)),
-      earnedAt: earned.get(badge.id) ?? null,
-    })),
-  };
+  return { tally, records };
 }
 
 // ── The page with one's own figures ──────────────────────────────────────────
@@ -212,7 +180,6 @@ export type FillerStats = {
   /** This calendar week, Monday to Sunday where the business stands. */
   week: { rounds: number; visits: number; items: number };
   routes: RouteStats[];
-  badges: Badge[];
   /** The newest rounds first, each marked when it set a best time. */
   recent: (RoundResult & { record: boolean })[];
 };
@@ -227,7 +194,7 @@ function mondayOf(now: Date, timeZone: string): string {
 
 export function fillerStats(rounds: MyRound[], timeZone: string, now: Date = new Date()): FillerStats {
   const results = rounds.map(roundResult).sort(oldestFirst);
-  const { tally, badges, records } = walk(results);
+  const { tally, records } = walk(results);
 
   const monday = mondayOf(now, timeZone);
   const thisWeek = results.filter((r) => reportDay(r.completedAt, timeZone) >= monday);
@@ -266,7 +233,6 @@ export function fillerStats(rounds: MyRound[], timeZone: string, now: Date = new
       items: thisWeek.reduce((sum, r) => sum + r.items, 0),
     },
     routes: routes.sort((a, b) => b.rounds - a.rounds || b.lastAt.localeCompare(a.lastAt)),
-    badges,
     recent: [...results]
       .reverse()
       .slice(0, 12)
@@ -287,7 +253,6 @@ export type RoundReward = {
   earlierOnRoute: number;
   before: Level;
   after: Level;
-  newBadges: BadgeId[];
 };
 
 /**
@@ -314,7 +279,6 @@ export function roundReward(history: MyRound[], current: MyRound): RoundReward {
     earlierOnRoute: times.length,
     before: levelFor(before.tally.items),
     after: levelFor(after.tally.items),
-    newBadges: after.badges.filter((b) => b.earnedAt && !before.badges.find((x) => x.id === b.id)?.earnedAt).map((b) => b.id),
   };
 }
 
