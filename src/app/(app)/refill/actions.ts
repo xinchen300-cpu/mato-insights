@@ -4,11 +4,11 @@ import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSessionUser, isFiller, isOperator, requireOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
-import { getMachineStock, getMachines } from "@/lib/data";
+import { getDishes, getMachineStock, getMachines, requireRefillLayoutAccess, type Dish } from "@/lib/data";
 import { displayName } from "@/lib/people";
 import { featureAllowed } from "@/lib/billing";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { RefillLine } from "@/lib/types";
+import type { RefillLine, SlotSize } from "@/lib/types";
 import { cleanRoundSettings, legKey, mergeRoute, orderByRoute, type RoundSettings } from "@/lib/round-settings";
 
 export async function createRefillSheet(
@@ -219,4 +219,83 @@ export async function correctStock(machineId: string, entries: { selection: stri
   });
   if (error) throw new Error(error.message);
   revalidatePath("/", "layout");
+}
+
+/**
+ * A machine's layout as whoever fills it changes it from its refill page (Xin,
+ * 17-10-2026): how many slots each row has, their numbers and the product in
+ * each. Sizes and capacities stay the machine's own: a slot takes those of the
+ * slot that stood in its place, a new one those of its row. Everything is
+ * checked before anything is written, as in the builder. Sales already made
+ * keep the product they were sold as; a change counts from now on.
+ */
+export async function saveSlots(machineId: string, rows: string[][], products: Record<string, string | null>) {
+  const orgId = await requireRefillAccess();
+  const machine = await requireRefillLayoutAccess(orgId, machineId);
+  const kept = rows.map((row) => row.map((selection) => String(selection).trim())).filter((row) => row.length > 0);
+  const all = kept.flat();
+  if (kept.length === 0 || kept.length > 20 || kept.some((row) => row.length > 16)) throw new Error("invalid layout");
+  if (all.some((selection) => !/^[0-9]{1,4}$/.test(selection))) throw new Error("invalid selection");
+  if (new Set(all).size !== all.length) throw new Error("duplicate selection");
+
+  const [current, dishes] = await Promise.all([getMachineStock(orgId, [machineId]), getDishes(orgId, machineId)]);
+  // A product the machine may take, or the one a slot already has.
+  const allowed = new Set([...dishes.map((dish) => dish.id), ...current.flatMap((slot) => (slot.product_id ? [slot.product_id] : []))]);
+  const before = new Map(current.map((slot) => [slot.selection_number, slot.product_id]));
+  const links: [string, string | null][] = [];
+  for (const selection of all) {
+    const product = typeof products[selection] === "string" ? products[selection] : null;
+    if (product && !allowed.has(product)) throw new Error("Not found");
+    if (product !== (before.get(selection) ?? null)) links.push([selection, product]);
+  }
+  // A number that went away: its link is closed too, or the product would hang on a slot that is gone.
+  for (const [selection, product] of before) if (product && !all.includes(selection)) links.push([selection, null]);
+
+  const shape = (row: number, index: number): { size: SlotSize; depth: number } => {
+    const inRow = current.filter((slot) => slot.row_position === row).sort((a, b) => a.slot_position - b.slot_position);
+    const slot = inRow[index] ?? inRow.at(-1) ?? current.at(-1);
+    return slot ? { size: slot.size, depth: slot.capacity } : { size: "small", depth: 5 };
+  };
+  const admin = createAdminClient();
+  const { error } = await admin.rpc("save_machine_layout", {
+    target_org: orgId,
+    target_machine: machineId,
+    machine_type: machine.type,
+    layout: kept.map((row, r) => ({
+      slots: row.map((selection, i) => ({ selection_number: selection, ...shape(r, i), business_id: null })),
+    })),
+  });
+  if (error) throw new Error(error.message);
+  for (const [selection, product] of links) {
+    const { error: linkError } = await admin.rpc("assign_product", {
+      target_org: orgId,
+      target_machine: machineId,
+      selection,
+      product,
+    });
+    if (linkError) throw new Error(linkError.message);
+  }
+  revalidatePath("/", "layout");
+}
+
+/**
+ * A new product typed in while laying out a machine from its refill page:
+ * a name only, no price, owned the way the machine decides. A name the
+ * machine can already take gives that product instead of a second one.
+ */
+export async function createDish(machineId: string, name: string): Promise<Dish> {
+  const orgId = await requireRefillAccess();
+  const machine = await requireRefillLayoutAccess(orgId, machineId);
+  const trimmed = String(name).trim().slice(0, 80);
+  if (!trimmed) throw new Error("Name is required");
+  const known = (await getDishes(orgId, machineId)).find((dish) => dish.name.toLowerCase() === trimmed.toLowerCase());
+  if (known) return known;
+  const { data, error } = await createAdminClient()
+    .from("products")
+    .insert({ org_id: orgId, name: trimmed, price: null, business_id: machine.business_id })
+    .select("id, name, photo_path")
+    .single();
+  if (error) throw new Error(error.message);
+  revalidatePath("/products");
+  return { id: data.id as string, name: data.name as string, photoPath: (data.photo_path as string | null) ?? null };
 }

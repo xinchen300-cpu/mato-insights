@@ -1684,6 +1684,36 @@ const sharedSelections = cache(async (orgId: string): Promise<Map<string, Set<st
  * The slots of a machine the caller may change, for the screens that offer
  * it: null for all of them, else a shop's own slots on a shared machine.
  */
+/** A product as whoever fills sees it while laying out a machine: its name and photo, never a price. */
+export type Dish = { id: string; name: string; photoPath: string | null };
+
+/**
+ * Refuses unless whoever fills (the operator or a filler, never a shop) may lay
+ * out this machine from its refill page (Xin, 17-10-2026): one of the
+ * organisation's own machines, and not a shared one, whose slots belong to two
+ * businesses; that layout stays the operator's, in the builder.
+ */
+export async function requireRefillLayoutAccess(orgId: string, machineId: string): Promise<Machine> {
+  if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
+  const machine = await getMachine(orgId, machineId);
+  if (!machine || machine.shared_business_id) throw new Error("Not found");
+  return machine;
+}
+
+/**
+ * The products that may go in this machine, for whoever lays it out from its
+ * refill page: the machine's business's own, or the organisation's for a
+ * machine of no business, as a new product made from a machine is. No prices.
+ */
+export async function getDishes(orgId: string, machineId: string): Promise<Dish[]> {
+  const machine = await requireRefillLayoutAccess(orgId, machineId);
+  let query = createAdminClient().from("products").select("id, name, photo_path").eq("org_id", orgId).eq("archived", false);
+  query = machine.business_id ? query.eq("business_id", machine.business_id) : query.is("business_id", null);
+  const { data, error } = await query.order("name");
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => ({ id: row.id as string, name: row.name as string, photoPath: (row.photo_path as string | null) ?? null }));
+}
+
 export async function getOwnSelections(orgId: string, machineId: string): Promise<string[] | null> {
   await requireMachineAccess(orgId, machineId);
   const own = (await sharedSelections(orgId))?.get(machineId);

@@ -6,12 +6,13 @@ import { PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getLastSales, getMachines, getMachineStock, getOpenRounds } from "@/lib/data";
+import { getDishes, getLastSales, getMachines, getMachineStock, getOpenRounds } from "@/lib/data";
 import { requireRefillAccess } from "@/lib/org";
 import { bandBg, fillLevel, machineFill, machineTotals, needsAttention } from "@/lib/stock";
 import { terminalStatus } from "@/lib/terminal-status";
 import { cn } from "@/lib/utils";
 import { FillButton } from "./fill-button";
+import { LayoutEditor } from "./layout-editor";
 import { StockAdjust } from "./stock-adjust";
 
 export async function generateMetadata() {
@@ -37,11 +38,13 @@ export default async function FillMachinePage({
   const fromMachines = (await searchParams).from === "machines";
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const { m, f } = await getI18n();
-  const [machines, slots, lastSales, open] = await Promise.all([
+  const [machines, slots, lastSales, open, dishes] = await Promise.all([
     getMachines(orgId),
     getMachineStock(orgId, [id]),
     getLastSales(orgId),
     getOpenRounds(orgId),
+    // Null for a shared machine: its layout stays the operator's.
+    getDishes(orgId, id).catch(() => null),
   ]);
   const machine = machines.find((candidate) => candidate.id === id);
   if (!machine) notFound();
@@ -108,6 +111,9 @@ export default async function FillMachinePage({
         ) : (
           <StockAdjust machineId={id} slots={stocked} />
         )}
+
+        {/* The layout itself, simply: a product per slot, the numbers, how many slots a row has (Xin, 17-10-2026). */}
+        {dishes && slots.length > 0 && <LayoutEditor machineId={id} slots={slots} dishes={dishes} />}
       </div>
     </>
   );
