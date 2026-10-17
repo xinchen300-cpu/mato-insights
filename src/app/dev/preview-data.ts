@@ -3,7 +3,7 @@
 // few weeks of rounds behind him. Nothing here comes from or goes to a database.
 
 import type { RefillRound, RouteTimes } from "@/lib/data";
-import type { MyRound } from "@/lib/filler-stats";
+import { summarizeRound, type MyRound } from "@/lib/filler-stats";
 import type { FlowLine, StopRecord } from "@/lib/refill-flow";
 import { DEFAULT_ROUND_SETTINGS } from "@/lib/round-settings";
 
@@ -118,26 +118,28 @@ export const previewTimes: RouteTimes = {
 
 /**
  * Jonas' earlier rounds on the same route, a week apart: four of them, so the
- * round under test is a record on that route.
+ * round under test is a record on that route. Summed up the way the database
+ * sends them.
  */
 export function previewHistory(scenario: Scenario, now: number): MyRound[] {
   if (scenario === "first") return [];
   const plan = lines();
   return [62, 58, 65, 60].map((took, i) => {
     const end = now - (4 - i) * 7 * 86_400_000;
-    return {
+    return summarizeRound({
       id: `history-${i}`,
       readyAt: iso(end - minutes(took)),
       completedAt: iso(end),
       machineIds: MACHINES.map((machine) => machine.id),
       stops: Object.fromEntries(MACHINES.map((machine) => [machine.id, doneStop(machine.id, plan, end - minutes(30), end - minutes(24))])),
-    };
+    });
   });
 }
 
 /**
  * A few months of Jonas' rounds for the figures page: the long route most
- * weeks, a shorter one now and then, one with a skip, and a record.
+ * weeks, a shorter one now and then, one with a skip, and a record. Summed up
+ * the way the database sends them.
  */
 export function previewFigures(now: number): MyRound[] {
   const plan = lines();
@@ -151,7 +153,7 @@ export function previewFigures(now: number): MyRound[] {
   ];
   return weeks.map((week, i) => {
     const end = now - (weeks.length - 1 - i) * 4 * 86_400_000 - minutes(90);
-    return {
+    return summarizeRound({
       id: `figures-${i}`,
       readyAt: iso(end - minutes(week.took)),
       completedAt: iso(end),
@@ -164,7 +166,7 @@ export function previewFigures(now: number): MyRound[] {
             : doneStop(id, plan, end - minutes(30 - j * 8), end - minutes(25 - j * 8)),
         ]),
       ),
-    };
+    });
   });
 }
 

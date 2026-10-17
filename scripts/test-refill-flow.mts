@@ -142,7 +142,8 @@ ok("money: too few stays too few", compareMoneySince(10, 8, 50, 20, null, "2026-
 
 // ── A filler's own figures (src/lib/filler-stats.ts) and the time rules in stats.ts ──
 import { compareTimes, isRecord, MIN_ROUNDS } from "../src/lib/stats.ts";
-import { fillerStats, levelFor, progressFrame, roundEta, roundResult, roundReward, type MyRound } from "../src/lib/filler-stats.ts";
+import { fillerStats, levelFor, progressFrame, roundEta, roundResult, roundReward, summarizeRound, type MyRound } from "../src/lib/filler-stats.ts";
+import { isDeepStrictEqual } from "node:util";
 
 ok("times: fewer than MIN_ROUNDS earlier rounds is no comparison", MIN_ROUNDS === 3 && compareTimes(30, [60, 62]) === "tooFew");
 ok("times: inside the usual spread is usual", compareTimes(57, [60, 62, 58]) === "usual");
@@ -163,14 +164,36 @@ const done = (filled: number[], from: string, to: string, skipped = false): Stop
   lines: skipped ? [] : filled.map((n, i) => ({ selection: String(i + 1), prepared: n, filled: n, removed: [], countAfter: null, full: false })),
 });
 // One route (a, b), every week; minutes 60, 62, 58, then the round under test.
+// Summed up on the phone, the way the round that just ended is.
 const R = (id: string, day: number, minutes: number, opts: { skip?: boolean; machines?: string[]; filled?: number } = {}): MyRound => {
   const machineIds = opts.machines ?? ["a", "b"];
   const start = on(day, 8);
   const end = new Date(Date.parse(start) + minutes * 60_000).toISOString();
-  return { id, readyAt: start, completedAt: end, machineIds, stops: Object.fromEntries(machineIds.map((m, i) =>
-    [m, done([opts.filled ?? 10, opts.filled ?? 10], on(day, 8, 10 + i * 20), on(day, 8, 20 + i * 20), opts.skip === true && i === 1)])) };
+  return summarizeRound({ id, readyAt: start, completedAt: end, machineIds, stops: Object.fromEntries(machineIds.map((m, i) =>
+    [m, done([opts.filled ?? 10, opts.filled ?? 10], on(day, 8, 10 + i * 20), on(day, 8, 20 + i * 20), opts.skip === true && i === 1)])) });
 };
 const history = [R("r1", 1, 60), R("r2", 2, 62), R("r3", 3, 58)];
+
+// Earlier rounds come summed up by the database (filler_rounds), the round that
+// just ended by summarizeRound on the phone: the two have to agree.
+const D = (id: string, day: number, minutes: number, sums: { visited: number; skipped: number; items: number }, machineIds = ["a", "b"]): MyRound =>
+  ({ id, readyAt: on(day, 8), completedAt: new Date(Date.parse(on(day, 8)) + minutes * 60_000).toISOString(), machineIds, ...sums });
+const sum = (stops: Record<string, StopRecord>) => summarizeRound({ id: "s", readyAt: on(5, 8), completedAt: on(5, 9), machineIds: ["a", "b"], stops });
+ok("summary: the phone sums a round up the way the database sends it", isDeepStrictEqual(R("r1", 1, 60), D("r1", 1, 60, { visited: 2, skipped: 0, items: 40 })));
+ok("summary: a skipped machine's pieces do not count, even when it has lines",
+  isDeepStrictEqual(sum({ a: done([3, 4], on(5, 8, 10), on(5, 8, 20)), b: { ...done([5], on(5, 8, 30), on(5, 8, 40)), skipped: true } }), D("s", 5, 60, { visited: 1, skipped: 1, items: 7 })));
+ok("summary: a line below nothing counts as nothing", sum({ a: done([-3, 6], on(5, 8, 10), on(5, 8, 20)) }).items === 6);
+const open = sum({ a: { ...done([4], on(5, 8, 10), on(5, 8, 20)), completedAt: null } });
+ok("summary: a machine neither done nor skipped is no visit, but its pieces count", open.visited === 0 && open.skipped === 0 && open.items === 4);
+ok("summary: a round without stops is all zeros", isDeepStrictEqual(sum({}), D("s", 5, 60, { visited: 0, skipped: 0, items: 0 })));
+const full = { visited: 2, skipped: 0, items: 40 };
+const fromDb = [D("r1", 1, 60, full), D("r2", 2, 62, full), D("r3", 3, 58, full), D("q", 8, 50, full),
+  D("w", 13, 70, { visited: 1, skipped: 0, items: 20 }, ["c"]), D("w2", 14, 66, { visited: 1, skipped: 1, items: 20 })];
+const onPhone = [...history, R("q", 8, 50), R("w", 13, 70, { machines: ["c"] }), R("w2", 14, 66, { skip: true })];
+ok("summary: the database's rows give the same figures as rounds summed on the phone",
+  isDeepStrictEqual(fillerStats(fromDb, "Europe/Brussels", new Date(on(15, 12))), fillerStats(onPhone, "Europe/Brussels", new Date(on(15, 12)))));
+ok("summary: what a round earned is the same against the database's history",
+  isDeepStrictEqual(roundReward(fromDb.slice(0, 3), R("q", 8, 50)), roundReward(history, R("q", 8, 50))));
 
 const one = roundResult(R("x", 5, 45, { skip: true }));
 ok("result: a skipped machine is not visited, and its pieces do not count", one.visited === 1 && one.skipped === 1 && one.items === 20 && !one.complete);

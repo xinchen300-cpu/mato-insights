@@ -9,15 +9,48 @@
 import type { Average, StopRecord } from "@/lib/refill-flow";
 import { compareTimes, isRecord, reportDay, usualTime, type TimeVerdict } from "@/lib/stats";
 
-/** One finished round of the person looking. */
+/**
+ * One finished round of the person looking, summed up: the database does that
+ * for the earlier rounds (filler_rounds), summarizeRound for the one on the phone.
+ */
 export type MyRound = {
   id: string;
   readyAt: string;
   completedAt: string;
   /** The machines the round was made for. */
   machineIds: string[];
+  /** Machines done and not skipped. */
+  visited: number;
+  skipped: number;
+  /** Pieces that went into the machines that were not skipped. */
+  items: number;
+};
+
+/** A round with every stop, the way the phone holds it. */
+export type RoundWithStops = Pick<MyRound, "id" | "readyAt" | "completedAt" | "machineIds"> & {
   stops: Record<string, StopRecord>;
 };
+
+/**
+ * A round summed up the way filler_rounds in the database does it, for the
+ * round that just ended on the phone and for made-up rounds. The two must
+ * count alike, so change them together: a stop is visited when it is done and
+ * not skipped, and only stops that were not skipped add their pieces.
+ */
+export function summarizeRound(round: RoundWithStops): MyRound {
+  const stops = Object.values(round.stops ?? {});
+  return {
+    id: round.id,
+    readyAt: round.readyAt,
+    completedAt: round.completedAt,
+    machineIds: round.machineIds,
+    visited: stops.filter((stop) => stop.completedAt && !stop.skipped).length,
+    skipped: stops.filter((stop) => stop.skipped).length,
+    items: stops
+      .filter((stop) => !stop.skipped)
+      .reduce((sum, stop) => sum + stop.lines.reduce((s, line) => s + Math.max(0, line.filled), 0), 0),
+  };
+}
 
 /** What one round amounted to. */
 export type RoundResult = {
@@ -44,23 +77,17 @@ export const routeKey = (machineIds: string[]) => [...new Set(machineIds)].sort(
 
 export function roundResult(round: MyRound): RoundResult {
   const machineIds = [...new Set(round.machineIds)];
-  const stops = Object.values(round.stops ?? {});
-  const visited = stops.filter((stop) => stop.completedAt && !stop.skipped).length;
-  const skipped = stops.filter((stop) => stop.skipped).length;
-  const items = stops
-    .filter((stop) => !stop.skipped)
-    .reduce((sum, stop) => sum + stop.lines.reduce((s, line) => s + Math.max(0, line.filled), 0), 0);
   const minutes = (Date.parse(round.completedAt) - Date.parse(round.readyAt)) / 60000;
   return {
     id: round.id,
     completedAt: round.completedAt,
     minutes: minutes > 0 && minutes < MAX_ROUND_MINUTES ? minutes : null,
-    visited,
-    skipped,
-    items,
+    visited: round.visited,
+    skipped: round.skipped,
+    items: round.items,
     route: routeKey(machineIds),
     machineIds,
-    complete: machineIds.length > 0 && skipped === 0 && visited >= machineIds.length,
+    complete: machineIds.length > 0 && round.skipped === 0 && round.visited >= machineIds.length,
   };
 }
 

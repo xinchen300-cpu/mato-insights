@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { denyFillerAccess, getScope, isFiller, isOperator, requireOperator, requireRefillAccess, type Role } from "@/lib/org";
+import { denyFillerAccess, getScope, getSessionUser, isFiller, isOperator, requireOperator, requireRefillAccess, type Role } from "@/lib/org";
 import { displayName } from "@/lib/people";
 import { cleanRoundSettings, type RoundSettings } from "@/lib/round-settings";
 import { onlyMine, roundTimings, slotKey, type Average, type FlowLine, type RoundTimings, type ShopView, type StopRecord } from "@/lib/refill-flow";
@@ -360,41 +360,41 @@ export async function getRouteTimes(orgId: string): Promise<RouteTimes> {
   return { machines, legs };
 }
 
+type FillerRoundRow = {
+  id: string;
+  ready_at: string;
+  completed_at: string;
+  machine_ids: string[] | null;
+  visited: number;
+  skipped: number;
+  items: number;
+};
+
 /**
  * The finished step-by-step rounds of the person looking, for their own
  * figures: the operator or a filler, in their own organisation. Machines,
  * pieces and clocks only, no money, and nobody else's rounds. A round knows
  * its filler by the name it got at "Start ronde" (see people.ts), so this
- * matches on that same name.
+ * matches on that same name, trimmed and in any case. The database sums each
+ * round up (filler_rounds), so its stops never leave it.
  */
 export async function getMyRounds(orgId: string): Promise<MyRound[]> {
   if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
-  const {
-    data: { user },
-  } = await (await createClient()).auth.getUser();
-  const me = displayName(user)?.toLocaleLowerCase();
+  const me = displayName(await getSessionUser());
   if (!me) return [];
-  // ilike narrows it in the database; its wildcards (% _ *) could still let a
-  // look-alike name through, so the exact comparison below decides.
-  const { data } = await createAdminClient()
-    .from("refill_sheets")
-    .select("id, filled_by, ready_at, completed_at, machine_ids, stops")
-    .eq("org_id", orgId)
-    .eq("flow_version", 2)
-    .ilike("filled_by", me)
-    .not("ready_at", "is", null)
-    .not("completed_at", "is", null)
-    .order("completed_at", { ascending: false })
-    .limit(500);
-  return (data ?? [])
-    .filter((row) => (row.filled_by as string | null)?.trim().toLocaleLowerCase() === me)
-    .map((row) => ({
-      id: row.id as string,
-      readyAt: row.ready_at as string,
-      completedAt: row.completed_at as string,
-      machineIds: (row.machine_ids ?? []) as string[],
-      stops: (row.stops ?? {}) as Record<string, StopRecord>,
-    }));
+  const { data, error } = await createAdminClient().rpc("filler_rounds", { target_org: orgId, filler_name: me });
+  // The figures come second to the work: a failing query must not keep a
+  // filler from their home or from closing a round. It does go to the logs.
+  if (error) console.error("[filler_rounds]", error.message);
+  return ((data ?? []) as FillerRoundRow[]).map((row) => ({
+    id: row.id,
+    readyAt: row.ready_at,
+    completedAt: row.completed_at,
+    machineIds: row.machine_ids ?? [],
+    visited: Number(row.visited),
+    skipped: Number(row.skipped),
+    items: Number(row.items),
+  }));
 }
 
 export type FillerOverview = RoundTimings & {

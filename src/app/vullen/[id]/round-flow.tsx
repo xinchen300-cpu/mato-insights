@@ -9,7 +9,7 @@ import { RefillTips } from "@/components/refill/refill-tips";
 import { useI18n } from "@/i18n/client";
 import { duration, fmt } from "@/i18n/format";
 import type { RefillRound, RouteTimes } from "@/lib/data";
-import { roundReward, type MyRound } from "@/lib/filler-stats";
+import { roundReward, summarizeRound, type MyRound } from "@/lib/filler-stats";
 import { haptic } from "@/lib/haptics";
 import {
   allocate,
@@ -498,7 +498,7 @@ export function RoundFlow({
     // Until the earlier rounds are in, the end shows the round itself; what it earned follows.
     const reward =
       readyAt && completedAt && history
-        ? roundReward(history, { id: initial.id, readyAt, completedAt, machineIds: initial.machines.map((mc) => mc.id), stops })
+        ? roundReward(history, summarizeRound({ id: initial.id, readyAt, completedAt, machineIds: initial.machines.map((mc) => mc.id), stops }))
         : null;
     return (
       <Screen>
