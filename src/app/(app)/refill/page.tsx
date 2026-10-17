@@ -6,7 +6,7 @@ import { EmptyState, PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getMachines, getMachineStock, getMyRounds, getOpenRounds, getRefillSheets, getRoundSettings, getShortages, type OpenRound } from "@/lib/data";
+import { getLiveSold, getMachines, getMachineStock, getMyRounds, getOpenRounds, getRefillSheets, getRoundSettings, getShortages, type OpenRound } from "@/lib/data";
 import { orderByRoute } from "@/lib/round-settings";
 import { fillerStats } from "@/lib/filler-stats";
 import { displayName } from "@/lib/people";
@@ -16,7 +16,10 @@ import { LiveRounds } from "@/components/refill/live-rounds";
 import { RoundList } from "@/components/refill/round-list";
 import { RefillTabs } from "@/components/refill/refill-tabs";
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
-import { fillLevel, needsAttention } from "@/lib/stock";
+import { fillLevel, machineFill, machineTotals, needsAttention } from "@/lib/stock";
+import { terminalStatus } from "@/lib/terminal-status";
+import { LiveSold } from "@/components/filler/live-sold";
+import { MachineGrid, type GridMachine } from "@/components/filler/machine-grid";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
 import { MachinePicker } from "./machine-picker";
 
@@ -30,13 +33,14 @@ export default async function RefillPage() {
   // A filler gets their own view of the refill work: rounds and pieces, no money.
   if (await isFiller()) {
     const fillerOrg = await requireRefillAccess();
-    const [rounds, fleet, slots, mine, me, settings] = await Promise.all([
+    const [rounds, fleet, slots, mine, me, settings, sold] = await Promise.all([
       getOpenRounds(fillerOrg),
       getMachines(fillerOrg),
       getMachineStock(fillerOrg),
       getMyRounds(fillerOrg),
       createClient().then((client) => client.auth.getUser()),
       getRoundSettings(fillerOrg),
+      getLiveSold(fillerOrg),
     ]);
     const pieces = new Map<string, { toAdd: number; counted: number; low: number }>();
     for (const slot of slots) {
@@ -62,6 +66,20 @@ export default async function RefillPage() {
           note: busy.has(mc.id) ? m.refill.onOpenRound : undefined,
         };
       });
+    // Every machine as a tile, in the owner's route order: its photo, how full it is, and online or not.
+    const totals = machineTotals(slots.filter((slot) => slot.product_id).map((slot) => ({ machine_id: slot.machine_id, stock: slot.stock, capacity: slot.capacity })));
+    const grid: GridMachine[] = orderByRoute(fleet.filter((mc) => pieces.has(mc.id)).map((mc) => mc.id), settings.route).map((id) => {
+      const machine = fleet.find((mc) => mc.id === id)!;
+      const total = totals.get(id);
+      return {
+        id,
+        name: machine.name,
+        photoPath: machine.photo_path,
+        status: terminalStatus(machine.last_connected_at, machine.last_disconnected_at),
+        fill: total ? machineFill(total.stock, total.capacity, total.counted) : null,
+        low: pieces.get(id)?.low ?? 0,
+      };
+    });
     const stats = fillerStats(mine, DISPLAY_TIME_ZONE);
     const name = displayName(me.data.user);
     // The round to do now, big at the top: one already under way first, else the newest.
@@ -71,6 +89,13 @@ export default async function RefillPage() {
         <PageHeader title={name ? fmt(m.round.hello, { name }) : m.refill.title} />
         <div className="flex flex-col gap-8">
           {next && <NextRound round={next} m={m} />}
+          {/* What sells, as it happens, without amounts; then every machine to open and fill. */}
+          <LiveSold initial={sold} />
+          {grid.length > 0 && (
+            <Section title={m.refill.machinesTitle}>
+              <MachineGrid machines={grid} m={m} />
+            </Section>
+          )}
           {/* Someone new sees how a round goes; after the first one, their own figures. */}
           {stats.rounds > 0 ? <FiguresCard stats={stats} /> : <HowItWorks />}
           <OpenRounds rounds={rounds.filter((round) => round.id !== next?.id)} m={m} f={f} />

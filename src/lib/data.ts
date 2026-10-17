@@ -899,10 +899,38 @@ export type LiveSale = {
  */
 export async function getLiveSales(
   orgId: string,
+  options: { after?: string | null; limit?: number } = {},
+): Promise<LiveSale[]> {
+  await denyFillerAccess();
+  return liveSales(orgId, options);
+}
+
+/** A sale as a filler sees it: which product went out of which machine, and when. Never an amount. */
+export type SoldItem = Omit<LiveSale, "amount">;
+
+/**
+ * What just sold, for a filler: the same feed as the overview's, with the
+ * amount taken out here, on the server, so it never reaches the phone. Only
+ * for whoever fills (the operator or a filler), never a shop.
+ */
+export async function getLiveSold(orgId: string, options: { after?: string | null; limit?: number } = {}): Promise<SoldItem[]> {
+  if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
+  return (await liveSales(orgId, options)).map((sale) => ({
+    id: sale.id,
+    occurredAt: sale.occurredAt,
+    createdAt: sale.createdAt,
+    machineId: sale.machineId,
+    machineName: sale.machineName,
+    productName: sale.productName,
+    selection: sale.selection,
+  }));
+}
+
+async function liveSales(
+  orgId: string,
   { after = null, limit = 6 }: { after?: string | null; limit?: number } = {},
 ): Promise<LiveSale[]> {
-  // Both checks at once: polled from a route, where getScope is not cached.
-  const [, scope] = await Promise.all([denyFillerAccess(), getScope()]);
+  const scope = await getScope();
   if (scope.orgId !== orgId) throw new Error("Not found");
   const [machines, shared] = await Promise.all([getMachines(orgId), sharedSelections(orgId)]);
   if (machines.length === 0) return [];
