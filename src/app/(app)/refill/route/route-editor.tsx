@@ -108,8 +108,14 @@ export function RouteEditor({
                 >
                   {depot ? <Home className="size-[18px]" /> : index}
                 </span>
-                <span className={cn("min-w-0 flex-1 truncate text-[16px]", depot ? "font-medium text-muted-foreground" : "font-semibold")}>
-                  {label(stop)}
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className={cn("truncate text-[16px]", depot ? "font-medium text-muted-foreground" : "font-semibold")}>{label(stop)}</span>
+                  {/* How long a stop here takes, as earlier rounds measured it. */}
+                  {!depot && times.machines[stop] && (
+                    <span className="text-[13px] text-muted-foreground">
+                      {fmt(t.atMachine, { time: duration(Math.max(1, times.machines[stop].minutes), m.refill.runTime, m.refill.runTimeHours) })}
+                    </span>
+                  )}
                 </span>
                 {!depot && (
                   <span className="flex shrink-0 gap-1.5">
