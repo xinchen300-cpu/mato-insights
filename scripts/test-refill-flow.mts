@@ -254,3 +254,16 @@ ok("legs: one leg without a distance is no distance", routeKm([mB, mA, mC], clea
 const viaRoute = roundCost({ minutes: 60, km: null, routeKm: 35.4, machineKm: [12, 20], perHour: 25, perKm: 0.5 });
 ok("cost: without kilometres on the round, the route's distances count", viaRoute.km === 35.4 && viaRoute.kmFrom === "route" && viaRoute.total === 25 + 17.7);
 ok("cost: kilometres written on the round still come first", roundCost({ minutes: 60, km: 40, routeKm: 35.4, machineKm: [], perHour: 25, perKm: 0.5 }).kmFrom === "round");
+
+// ── Packing short, and tapping pieces in at a machine (src/lib/refill-flow.ts) ──
+import { shortages, slotTally, tapOnce, type PickRow } from "../src/lib/refill-flow.ts";
+const P = (machine: string, product: string, take: number): PickRow => ({ key: pickKey(machine, product), machineId: machine, productId: product, productName: product.toUpperCase(), photoPath: null, take });
+const packed = shortages([P("m1", "bami", 3), P("m2", "bami", 2), P("m1", "curry", 2), P("m1", "nasi", 4)], { [pickKey("m1", "bami")]: 1, [pickKey("m2", "bami")]: 2, [pickKey("m1", "nasi")]: 9 });
+ok("short: per product over the machines, most first", isDeepStrictEqual(packed.map((item) => [item.productId, item.n]), [["bami", 2], ["curry", 2]]));
+ok("short: more in the box than needed is nothing short, never less than nothing", !packed.some((item) => item.productId === "nasi"));
+ok("short: nothing short is an empty list", shortages([P("m1", "bami", 2)], { [pickKey("m1", "bami")]: 2 }).length === 0);
+ok("tap: one piece a tap, up to what was set aside", tapOnce(2, undefined) === 1 && tapOnce(2, 1) === 2 && tapOnce(2, 2) === null && tapOnce(0, undefined) === null);
+ok("slot: not touched is not done; half is not done; all is done", !slotTally(2, undefined).done && !slotTally(2, 1).done && slotTally(2, 2).done);
+ok("slot: a typed number is final, also below the plan", isDeepStrictEqual(slotTally(2, 1, true), { n: 1, aim: 1, done: true }) && slotTally(2, 3, true).done);
+ok("slot: nothing set aside is done before it starts", slotTally(0, undefined).done && slotTally(0, undefined).aim === 0);
+ok("slot: typed without a number is not typed", !slotTally(2, undefined, true).done);

@@ -21,15 +21,17 @@ export function MachineDetailsForm({
   machine,
   businesses,
   operator,
+  rentsToBusinesses,
 }: {
   machine: Machine;
   businesses: Business[];
   /** A shop renames its machine; everything else on it is the operator's. */
   operator: boolean;
+  /** An automatenshop says which business a machine is for; a zaak's machines are simply its own. */
+  rentsToBusinesses: boolean;
 }) {
   const { m } = useI18n();
   const router = useRouter();
-  const [shared, setShared] = useState(Boolean(machine.shared_business_id));
   const [name, setName] = useState(machine.name);
   const [type, setType] = useState<MachineType | "">(machine.type ?? "");
   const [businessId, setBusinessId] = useState(machine.business_id ?? "");
@@ -40,8 +42,9 @@ export function MachineDetailsForm({
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [isPending, startTransition] = useTransition();
 
-  // A shared machine needs two different businesses before it can be saved.
-  const sharedIncomplete = shared && (!businessId || !sharedBusinessId || businessId === sharedBusinessId);
+  // A second business makes the machine shared, and needs a first, different one.
+  const shared = Boolean(sharedBusinessId);
+  const sharedIncomplete = shared && (!businessId || businessId === sharedBusinessId);
 
   function save() {
     setStatus("idle");
@@ -50,9 +53,14 @@ export function MachineDetailsForm({
         await updateMachineDetails(machine.id, {
           name,
           type: type || null,
-          businessId: businessId && businessId !== NEW_BUSINESS ? businessId : null,
-          newBusinessName: businessId === NEW_BUSINESS ? newBusiness : undefined,
-          sharedBusinessId: shared && sharedBusinessId ? sharedBusinessId : null,
+          // A zaak sends nothing about businesses, so nothing stored is wiped.
+          ...(rentsToBusinesses
+            ? {
+                businessId: businessId && businessId !== NEW_BUSINESS ? businessId : null,
+                newBusinessName: businessId === NEW_BUSINESS ? newBusiness : undefined,
+                sharedBusinessId: sharedBusinessId || null,
+              }
+            : {}),
           dataSince: dataSince || null,
           kmRoundTrip: km.trim() === "" ? null : Number(km.replace(",", ".")),
         });
@@ -89,81 +97,53 @@ export function MachineDetailsForm({
 
   return (
     <div className="grid gap-x-4 gap-y-6 sm:grid-cols-2">
-      <fieldset className="grid gap-2 sm:col-span-2">
-        <legend className="mb-3 text-[15px] font-semibold tracking-[-0.01em]">{m.machines.ownership}</legend>
-        <div className="grid gap-2.5 sm:grid-cols-2">
-          {[false, true].map((option) => (
-            <label
-              key={String(option)}
-              className={cn(
-                "flex cursor-pointer flex-col gap-1 rounded-xl border p-4 transition-[background-color,border-color,box-shadow] duration-150 has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/25",
-                shared === option ? "border-foreground/80 bg-surface" : "border-input bg-card hover:bg-surface/60",
-              )}
+      {rentsToBusinesses && (
+        <>
+          <div className="grid gap-2">
+            <Label htmlFor="machine-business">{m.machines.business}</Label>
+            <select
+              id="machine-business"
+              value={businessId}
+              onChange={(e) => setBusinessId(e.target.value)}
+              className={selectClass}
             >
-              <span className="flex items-center gap-2.5 text-[14.5px] font-semibold">
-                <input
-                  type="radio"
-                  name="ownership"
-                  checked={shared === option}
-                  onChange={() => setShared(option)}
-                  className="size-4 shrink-0 accent-[var(--primary)]"
-                />
-                {option ? m.machines.ownershipShared : m.machines.ownershipFull}
-              </span>
-              <span className="pl-[26px] text-[13px] leading-snug text-muted-foreground">
-                {option ? m.machines.ownershipSharedHint : m.machines.ownershipFullHint}
-              </span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-
-      <div className="grid gap-2">
-        <Label htmlFor="machine-business">{shared ? m.machines.businessFirst : m.machines.business}</Label>
-        <select
-          id="machine-business"
-          value={businessId}
-          onChange={(e) => setBusinessId(e.target.value)}
-          className={selectClass}
-        >
-          <option value="">{m.machines.noBusiness}</option>
-          {businesses.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-          <option value={NEW_BUSINESS}>{m.machines.newBusiness}</option>
-        </select>
-      </div>
-      {shared ? (
-        <div className="grid gap-2">
-          <Label htmlFor="machine-shared-business">{m.machines.businessSecond}</Label>
-          <select
-            id="machine-shared-business"
-            value={sharedBusinessId}
-            onChange={(e) => setSharedBusinessId(e.target.value)}
-            className={selectClass}
-          >
-            <option value="">{m.machines.noBusiness}</option>
-            {businesses
-              .filter((b) => b.id !== businessId)
-              .map((b) => (
+              <option value="">{m.machines.noBusiness}</option>
+              {businesses.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name}
                 </option>
               ))}
-          </select>
-        </div>
-      ) : (
-        <div className="hidden sm:block" />
+              <option value={NEW_BUSINESS}>{m.machines.newBusiness}</option>
+            </select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="machine-shared-business">{m.machines.businessSecond}</Label>
+            <select
+              id="machine-shared-business"
+              value={sharedBusinessId}
+              onChange={(e) => setSharedBusinessId(e.target.value)}
+              className={selectClass}
+            >
+              <option value="">{m.machines.noSecondBusiness}</option>
+              {businesses
+                .filter((b) => b.id !== businessId)
+                .map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+            </select>
+            <p className={hintClass}>{m.machines.secondBusinessHint}</p>
+          </div>
+          {businessId === NEW_BUSINESS && (
+            <div className="grid gap-2 sm:col-span-2">
+              <Label htmlFor="new-business">{m.machines.newBusinessName}</Label>
+              <Input id="new-business" value={newBusiness} onChange={(e) => setNewBusiness(e.target.value)} autoFocus />
+            </div>
+          )}
+          {shared && <p className={cn(hintClass, "-mt-2 sm:col-span-2")}>{m.machines.sharedSlotsHint}</p>}
+        </>
       )}
-      {businessId === NEW_BUSINESS && (
-        <div className="grid gap-2 sm:col-span-2">
-          <Label htmlFor="new-business">{m.machines.newBusinessName}</Label>
-          <Input id="new-business" value={newBusiness} onChange={(e) => setNewBusiness(e.target.value)} autoFocus />
-        </div>
-      )}
-      {shared && <p className={cn(hintClass, "-mt-2 sm:col-span-2")}>{m.machines.sharedSlotsHint}</p>}
 
       <div className="grid gap-2">
         <Label htmlFor="machine-name">{m.machines.name}</Label>

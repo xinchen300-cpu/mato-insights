@@ -256,20 +256,19 @@ export function RoundDone({
   );
 }
 
-/** At a machine: how many of its slots are ticked off, as a bar that turns green when all are. */
-export function SlotProgress({ done, total }: { done: number; total: number }) {
+/** Pieces in at this machine of the pieces that go in; "all" once every slot is done. */
+export function SlotProgress({ done, total, all }: { done: number; total: number; all: boolean }) {
   const { m } = useI18n();
-  const all = total > 0 && done >= total;
   return (
     <div className="mt-2 flex items-center gap-3">
       <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-surface" aria-hidden="true">
         <span
           className={cn("bar-grow block h-full rounded-full", all ? "bg-positive" : "bg-foreground")}
-          style={{ transform: `scaleX(${total ? done / total : 0})` }}
+          style={{ transform: `scaleX(${all ? 1 : total ? done / total : 0})` }}
         />
       </span>
       <span className={cn("tabular shrink-0 text-[14px] font-semibold", all && "text-positive")}>
-        {all ? m.round.allTicked : fmt(m.round.slotsProgress, { n: done, total })}
+        {all ? m.round.allIn : fmt(m.round.piecesProgress, { n: done, total })}
       </span>
     </div>
   );

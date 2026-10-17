@@ -140,3 +140,16 @@ export async function forgetDevice(endpoint: string) {
   await denyFillerAccess();
   await createAdminClient().from("push_subscriptions").delete().eq("endpoint", endpoint).eq("org_id", orgId);
 }
+
+/** Zaak or automatenshop: whether this organisation rents machines or slots to businesses. */
+export async function saveRentsToBusinesses(rents: boolean): Promise<void> {
+  await requireOperator();
+  const orgId = await getCurrentOrgId();
+  if (!orgId) throw new Error("Not found");
+  const { error } = await createAdminClient()
+    .from("organizations")
+    .update({ rents_to_businesses: rents === true })
+    .eq("id", orgId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/", "layout");
+}

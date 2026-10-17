@@ -38,13 +38,15 @@ export async function createRefillSheet(
   if (error) throw new Error(error.message);
   const lines = (data ?? []) as RefillLine[];
   if (lines.length === 0) return { empty: true };
+  // A machine with nothing to fill stays off the round: nobody drives to a full machine.
+  const planned = new Set(lines.map((line) => line.machine_id));
 
   const { data: sheet, error: insertError } = await admin
     .from("refill_sheets")
     .insert({
       org_id: orgId,
       share_token: randomBytes(18).toString("base64url"),
-      machine_ids: order,
+      machine_ids: order.filter((id) => planned.has(id)),
       lines,
       // Filled step by step, machine by machine (/vullen).
       flow_version: 2,

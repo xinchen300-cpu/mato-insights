@@ -91,6 +91,36 @@ export function pickList(lines: FlowLine[]): PickRow[] {
   return [...rows.values()].filter((row) => row.take > 0);
 }
 
+/** What the box is short of after packing, per product over all machines, most first. */
+export function shortages(rows: PickRow[], picked: Record<string, number>): { productId: string; name: string; n: number }[] {
+  const byProduct = new Map<string, { productId: string; name: string; n: number }>();
+  for (const row of rows) {
+    const n = row.take - Math.min(row.take, Math.max(0, Math.floor(picked[row.key] ?? 0)));
+    if (n <= 0) continue;
+    const entry = byProduct.get(row.productId) ?? { productId: row.productId, name: row.productName, n: 0 };
+    entry.n += n;
+    byProduct.set(row.productId, entry);
+  }
+  return [...byProduct.values()].sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
+}
+
+/**
+ * One slot at a machine, tapped once for every piece that goes in. It aims at
+ * what was set aside for it, or at the number typed in its sheet, which is
+ * final. A slot with nothing set aside is done before it starts.
+ */
+export function slotTally(prepared: number, filled: number | undefined, typed = false): { n: number; aim: number; done: boolean } {
+  const n = Math.max(0, filled ?? 0);
+  if (typed && filled !== undefined) return { n, aim: n, done: true };
+  return { n, aim: prepared, done: n >= prepared };
+}
+
+/** A tap on a slot: one piece more, up to what was set aside. Null when it is full already. */
+export function tapOnce(prepared: number, filled: number | undefined): number | null {
+  const n = Math.max(0, filled ?? 0);
+  return n < prepared ? n + 1 : null;
+}
+
 /**
  * Spread what was actually picked over the slots that asked for it. The
  * emptiest slots first (and the ones Vendly cannot see into count as empty),

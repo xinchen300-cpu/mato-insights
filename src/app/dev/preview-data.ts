@@ -16,6 +16,8 @@ const MACHINES = [
   { id: "m-gits", name: "Gits Kerkplein" },
 ];
 const PRODUCTS = ["Bami goreng", "Nasi goreng", "Loempia", "Kip zoetzuur", "Babi pangang", "Mihoen"];
+/** Chosen for the round while it stood full: on the route, nothing to do there. */
+const FULL = { id: "m-esen", name: "Esen Dorp" };
 
 const minutes = (n: number) => n * 60_000;
 const iso = (at: number) => new Date(at).toISOString();
@@ -77,23 +79,35 @@ export function previewRound(scenario: Scenario, now: number): RefillRound {
     startedAt: readyAt === null ? null : iso(readyAt),
     readyAt: readyAt === null ? null : iso(readyAt),
     completedAt: finished ? iso(now) : null,
-    machines: MACHINES.map((machine, i) => ({
+    machines: [...MACHINES.slice(0, 2), FULL, ...MACHINES.slice(2)].map((machine, i) => ({
       ...machine,
       photoPath: null,
-      status: i === 2 ? "offline" : "online",
+      status: i === 3 ? "offline" : "online",
       lastSale: iso(now - minutes(25 + i * 40)),
     })),
     lines: plan,
-    slots: plan.map((line) => ({
-      machineId: line.machineId,
-      selection: line.selection,
-      row: line.row,
-      slot: line.slot,
-      productId: line.productId,
-      productName: line.productName,
-      capacity: line.capacity,
-      stock: line.stock,
-    })),
+    slots: [
+      ...plan.map((line) => ({
+        machineId: line.machineId,
+        selection: line.selection,
+        row: line.row,
+        slot: line.slot,
+        productId: line.productId,
+        productName: line.productName,
+        capacity: line.capacity,
+        stock: line.stock,
+      })),
+      ...PRODUCTS.slice(0, 3).map((name, i) => ({
+        machineId: FULL.id,
+        selection: String(11 + i),
+        row: 1,
+        slot: 1 + i,
+        productId: `p-${i}`,
+        productName: name,
+        capacity: 4,
+        stock: 4,
+      })),
+    ],
     picked: scenario === "pick" ? {} : picked,
     stops,
     settings: { ...DEFAULT_ROUND_SETTINGS, checks: ["Ruit gepoetst"] },

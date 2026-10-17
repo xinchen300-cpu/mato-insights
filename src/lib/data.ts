@@ -447,6 +447,22 @@ export async function getFillerOverview(orgId: string): Promise<FillerOverview> 
   };
 }
 
+/**
+ * An automatenshop rents machines or slots to businesses (zaken), each seeing
+ * only its own sales; a zaak runs its own machines and never needs any of
+ * that. Chosen in Settings. Anyone of the organisation may know which it is.
+ */
+export async function rentsToBusinesses(orgId: string): Promise<boolean> {
+  if ((await getScope()).orgId !== orgId) throw new Error("Not found");
+  const { data, error } = await createAdminClient()
+    .from("organizations")
+    .select("rents_to_businesses")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return Boolean(data?.rents_to_businesses);
+}
+
 /** What an hour and a kilometre of refilling cost this operator, as set in Settings. */
 export async function getRunRates(orgId: string): Promise<{ perHour: number; perKm: number }> {
   await requireOperator();

@@ -12,6 +12,7 @@ import {
   canEditLayout,
   getOwnSelections,
   getBusinesses,
+  rentsToBusinesses,
   getMachine,
   getMachineStock,
   getMachineSalesSplit,
@@ -52,7 +53,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   if (!machine) notFound();
 
   const since = new Date(Date.now() - PAYMENT_WINDOW_DAYS * 86_400_000);
-  const [slots, businesses, history, health, payments, split, products, shelfLife, editLayout] = await Promise.all([
+  const [slots, businesses, history, health, payments, split, products, shelfLife, editLayout, rents] = await Promise.all([
     getMachineStock(orgId, [id]),
     getBusinesses(orgId),
     getRefillHistory(orgId, id),
@@ -62,6 +63,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
     getProducts(orgId),
     getSlotShelfLife(orgId, id),
     canEditLayout(machine),
+    rentsToBusinesses(orgId),
   ]);
 
   // How long what is in each slot still keeps, counted in Belgian days.
@@ -293,7 +295,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
               <MachinePhotoForm machineId={machine.id} photoPath={machine.photo_path} />
             </div>
             <div className="surface-card p-5 sm:p-6">
-              <MachineDetailsForm machine={machine} businesses={operator ? businesses : []} operator={operator} />
+              <MachineDetailsForm machine={machine} businesses={operator ? businesses : []} operator={operator} rentsToBusinesses={rents} />
             </div>
           </Section>
         )}

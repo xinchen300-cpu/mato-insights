@@ -42,10 +42,11 @@ export async function updateMachineDetails(
   input: {
     name: string;
     type: MachineType | null;
-    businessId: string | null;
+    /** Left out by a zaak, which has no businesses: then what is stored stays. */
+    businessId?: string | null;
     newBusinessName?: string;
     /** The second business of a shared machine; null for a machine of one business. */
-    sharedBusinessId: string | null;
+    sharedBusinessId?: string | null;
     dataSince: string | null;
   kmRoundTrip: number | null;
   },
@@ -70,6 +71,8 @@ export async function updateMachineDetails(
     revalidatePath("/", "layout");
     return;
   }
+  // Who it is for is only changed when the form says so: a zaak never sends it.
+  const assigns = input.businessId !== undefined || input.sharedBusinessId !== undefined || Boolean(input.newBusinessName?.trim());
   // The businesses named must be this organisation's own.
   const named = [input.businessId, input.sharedBusinessId].filter((id): id is string => Boolean(id));
   if (named.length) {
@@ -81,7 +84,7 @@ export async function updateMachineDetails(
     if (error) throw new Error(error.message);
     if ((count ?? 0) !== new Set(named).size) throw new Error("Not found");
   }
-  let businessId = input.businessId;
+  let businessId = input.businessId ?? null;
   if (input.newBusinessName?.trim()) {
     const { data, error } = await admin
       .from("businesses")
@@ -93,15 +96,14 @@ export async function updateMachineDetails(
   }
 
   const sharedBusinessId = input.sharedBusinessId && input.sharedBusinessId !== businessId ? input.sharedBusinessId : null;
-  if (input.sharedBusinessId && !sharedBusinessId) throw new Error("A shared machine needs two different businesses");
+  if (input.sharedBusinessId && (!sharedBusinessId || !businessId)) throw new Error("A shared machine needs two different businesses");
 
   const { error } = await admin
     .from("machines")
     .update({
       name,
       type: input.type,
-      business_id: businessId,
-      shared_business_id: sharedBusinessId,
+      ...(assigns ? { business_id: businessId, shared_business_id: sharedBusinessId } : {}),
       data_since: input.dataSince,
       km_round_trip: input.kmRoundTrip,
     })

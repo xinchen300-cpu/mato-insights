@@ -6,7 +6,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { canEditLayout, getBusinesses, getLastSales, getMachines, getMachineStock } from "@/lib/data";
+import { canEditLayout, getBusinesses, getLastSales, getMachines, getMachineStock, rentsToBusinesses } from "@/lib/data";
 import { denyFiller, requireOrgId } from "@/lib/org";
 import { bandBg, fillLevel, machineFill, needsAttention } from "@/lib/stock";
 import { terminalStatus } from "@/lib/terminal-status";
@@ -21,11 +21,12 @@ export default async function MachinesPage() {
   await denyFiller();
   const { m, f } = await getI18n();
   const orgId = await requireOrgId();
-  const [machines, stock, lastSales, businesses] = await Promise.all([
+  const [machines, stock, lastSales, businesses, rents] = await Promise.all([
     getMachines(orgId),
     getMachineStock(orgId),
     getLastSales(orgId),
     getBusinesses(orgId),
+    rentsToBusinesses(orgId),
   ]);
   // Whether each machine's layout is the caller's to draw: not a shared one, for a shop.
   const drawable = await Promise.all(machines.map(canEditLayout));
@@ -69,10 +70,13 @@ export default async function MachinesPage() {
       <PageHeader
         title={m.machines.title}
         actions={
-          <Link href="/businesses" className={buttonVariants({ variant: "outline" })}>
-            <Store />
-            {m.nav.businesses}
-          </Link>
+          // Businesses are an automatenshop's: a zaak runs its own machines.
+          rents ? (
+            <Link href="/businesses" className={buttonVariants({ variant: "outline" })}>
+              <Store />
+              {m.nav.businesses}
+            </Link>
+          ) : undefined
         }
       />
 

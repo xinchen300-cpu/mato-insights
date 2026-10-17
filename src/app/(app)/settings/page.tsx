@@ -28,6 +28,7 @@ import { ShelfLifePresets } from "./shelf-life-presets";
 import { SubscriptionPanel } from "./subscription-panel";
 import { SyncNowButton } from "./sync-now-button";
 import { TeamPanel } from "./team-panel";
+import { AccountKind } from "./account-kind";
 import { LanguageToggle } from "@/components/shell/language-toggle";
 
 export async function generateMetadata() {
@@ -50,7 +51,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     ? await Promise.all([
         admin
           .from("organizations")
-          .select("is_vendor, is_demo, cost_per_hour, cost_per_km, first_charge_on")
+          .select("is_vendor, is_demo, cost_per_hour, cost_per_km, first_charge_on, rents_to_businesses")
           .eq("id", orgId)
           .maybeSingle(),
         admin.from("payter_credentials").select("last_synced_at").eq("org_id", orgId).maybeSingle(),
@@ -104,6 +105,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             machines={linked}
             returnedFromPayment={(await searchParams).betaald === "1"}
           />
+        )}
+
+        {operator && orgId && (
+          <Section title={m.settings.kindTitle}>
+            <AccountKind rents={Boolean(org?.rents_to_businesses)} />
+          </Section>
         )}
 
         {operator && vendor?.is_vendor && (
@@ -239,49 +246,52 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </Section>
         )}
 
-        <Section
-          title={m.businesses.title}
-          actions={
-            <Link href="/businesses" className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "-mr-2 shrink-0")}>
-              {m.settings.allBusinesses}
-            </Link>
-          }
-        >
-          {businesses.length === 0 ? (
-            <p className="surface-card px-5 py-4 text-[14px] text-muted-foreground">{m.businesses.empty}</p>
-          ) : (
-            <RowList>
-              {businesses.map((b) => {
-                const count = machineIds.get(b.id)?.size ?? 0;
-                return (
-                  <li key={b.id}>
-                    <ListRow
-                      href={`/businesses/${b.id}`}
-                      leading={
-                        b.logo_path ? (
-                          <Avatar className="bg-card ring-1 ring-border">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={mediaUrl(b.logo_path)!} alt="" className="size-7 object-contain" />
-                          </Avatar>
-                        ) : (
-                          <Avatar>{initial(b.name)}</Avatar>
-                        )
-                      }
-                      title={b.name}
-                      subtitle={
-                        <>
-                          {plural(count, m.businesses.machinesOne, m.businesses.machinesOther)}
-                          {b.started_on && ` · ${fmt(m.businesses.since, { date: f.date(b.started_on) })}`}
-                        </>
-                      }
-                      chevron
-                    />
-                  </li>
-                );
-              })}
-            </RowList>
-          )}
-        </Section>
+        {/* Businesses are an automatenshop's; a zaak runs its own machines. */}
+        {Boolean(org?.rents_to_businesses) && (
+          <Section
+            title={m.businesses.title}
+            actions={
+              <Link href="/businesses" className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "-mr-2 shrink-0")}>
+                {m.settings.allBusinesses}
+              </Link>
+            }
+          >
+            {businesses.length === 0 ? (
+              <p className="surface-card px-5 py-4 text-[14px] text-muted-foreground">{m.businesses.empty}</p>
+            ) : (
+              <RowList>
+                {businesses.map((b) => {
+                  const count = machineIds.get(b.id)?.size ?? 0;
+                  return (
+                    <li key={b.id}>
+                      <ListRow
+                        href={`/businesses/${b.id}`}
+                        leading={
+                          b.logo_path ? (
+                            <Avatar className="bg-card ring-1 ring-border">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={mediaUrl(b.logo_path)!} alt="" className="size-7 object-contain" />
+                            </Avatar>
+                          ) : (
+                            <Avatar>{initial(b.name)}</Avatar>
+                          )
+                        }
+                        title={b.name}
+                        subtitle={
+                          <>
+                            {plural(count, m.businesses.machinesOne, m.businesses.machinesOther)}
+                            {b.started_on && ` · ${fmt(m.businesses.since, { date: f.date(b.started_on) })}`}
+                          </>
+                        }
+                        chevron
+                      />
+                    </li>
+                  );
+                })}
+              </RowList>
+            )}
+          </Section>
+        )}
 
         <Section title={m.settings.notifyTitle} hint={m.settings.notifyHint}>
           <div className="surface-card p-2">

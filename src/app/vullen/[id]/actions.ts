@@ -329,8 +329,10 @@ export async function completeRound(
   choices: { productId: string; source: "leftover" | "removed"; reason: string | null; disposition: string }[],
 ): Promise<void> {
   const { orgId, round } = await openRound(sheetId);
-  // Closing is the last step: after the start, with every machine done or skipped.
-  if (!round.readyAt || round.machines.some((machine) => !round.stops[machine.id]?.completedAt)) {
+  // Closing is the last step: after the start, with every machine done or
+  // skipped. A machine with nothing planned stood full and was passed by.
+  const withWork = new Set(round.lines.map((line) => line.machineId));
+  if (!round.readyAt || round.machines.some((machine) => withWork.has(machine.id) && !round.stops[machine.id]?.completedAt)) {
     throw new Error("Round not finished");
   }
   const rows = returnsFor(round.lines, round.slots, round.picked, round.stops).map((row) => {
