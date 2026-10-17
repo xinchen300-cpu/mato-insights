@@ -16,10 +16,9 @@ import { LiveRounds } from "@/components/refill/live-rounds";
 import { RoundList } from "@/components/refill/round-list";
 import { RefillTabs } from "@/components/refill/refill-tabs";
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
-import { fillLevel, machineFill, machineTotals, needsAttention } from "@/lib/stock";
-import { terminalStatus } from "@/lib/terminal-status";
+import { fillLevel, needsAttention } from "@/lib/stock";
 import { LiveSold } from "@/components/filler/live-sold";
-import { MachineGrid, type GridMachine } from "@/components/filler/machine-grid";
+import { MachineGrid, gridMachines } from "@/components/filler/machine-grid";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
 import { MachinePicker } from "./machine-picker";
 
@@ -67,19 +66,7 @@ export default async function RefillPage() {
         };
       });
     // Every machine as a tile, in the owner's route order: its photo, how full it is, and online or not.
-    const totals = machineTotals(slots.filter((slot) => slot.product_id).map((slot) => ({ machine_id: slot.machine_id, stock: slot.stock, capacity: slot.capacity })));
-    const grid: GridMachine[] = orderByRoute(fleet.filter((mc) => pieces.has(mc.id)).map((mc) => mc.id), settings.route).map((id) => {
-      const machine = fleet.find((mc) => mc.id === id)!;
-      const total = totals.get(id);
-      return {
-        id,
-        name: machine.name,
-        photoPath: machine.photo_path,
-        status: terminalStatus(machine.last_connected_at, machine.last_disconnected_at),
-        fill: total ? machineFill(total.stock, total.capacity, total.counted) : null,
-        low: pieces.get(id)?.low ?? 0,
-      };
-    });
+    const grid = gridMachines(fleet, slots, settings.route);
     const stats = fillerStats(mine, DISPLAY_TIME_ZONE);
     const name = displayName(me.data.user);
     // The round to do now, big at the top: one already under way first, else the newest.

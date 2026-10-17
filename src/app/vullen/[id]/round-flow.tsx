@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ChevronLeft, ChevronRight, MessageSquareText, Timer, TriangleAlert, Truck } from "lucide-react";
-import { VendlyWordmark } from "@/components/brand/vendly-mark";
+import Link from "next/link";
 import { FrontView, type FrontSlot } from "@/components/machine/front-view";
 import { RefillTips } from "@/components/refill/refill-tips";
 import { useI18n } from "@/i18n/client";
@@ -488,8 +488,15 @@ export function RoundFlow({
           <ChevronLeft className="size-5" />
           {t.backToRound}
         </button>
+      ) : countdown === null ? (
+        // Out of the round, back to the app: the round keeps where it was and is there to pick up again.
+        // Not while a machine waits out its three seconds: leaving then would never send it.
+        <Link href="/refill" className="-ml-2 flex h-11 items-center gap-1 rounded-full px-2 text-[15px] font-semibold">
+          <ChevronLeft className="size-5" />
+          {m.nav.refill}
+        </Link>
       ) : (
-        <VendlyWordmark className="h-[24px] w-auto text-[#2a2520]" />
+        <span />
       )}
       {error ? (
         <span className="text-[13px] font-semibold text-negative">{error}</span>

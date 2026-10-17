@@ -6,19 +6,38 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getBusinesses, getLastSales, getMachines, getMachineStock, rentsToBusinesses } from "@/lib/data";
-import { denyFiller, requireOrgId } from "@/lib/org";
+import { getBusinesses, getLastSales, getMachines, getMachineStock, getRoundSettings, rentsToBusinesses } from "@/lib/data";
+import { isFiller, requireOrgId, requireRefillAccess } from "@/lib/org";
 import { bandBg, fillLevel, machineFill, needsAttention } from "@/lib/stock";
 import { terminalStatus } from "@/lib/terminal-status";
 import { MachinePhoto } from "@/components/machine/machine-photo";
+import { MachineGrid, gridMachines } from "@/components/filler/machine-grid";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
   return { title: m.machines.title };
 }
 
+/**
+ * A filler's machines: the same tiles as on their refill page, in the owner's
+ * route order. No businesses and no sales; a tap opens the machine to fill.
+ */
+async function FillerMachines({ orgId }: { orgId: string }) {
+  const { m } = await getI18n();
+  const [fleet, slots, settings] = await Promise.all([getMachines(orgId), getMachineStock(orgId), getRoundSettings(orgId)]);
+  return (
+    <>
+      <PageHeader title={m.machines.title} />
+      <MachineGrid machines={gridMachines(fleet, slots, settings.route)} m={m} from="machines" />
+    </>
+  );
+}
+
 export default async function MachinesPage() {
-  await denyFiller();
+  if (await isFiller()) {
+    const fillerOrg = await requireRefillAccess();
+    return <FillerMachines orgId={fillerOrg} />;
+  }
   const { m, f } = await getI18n();
   const orgId = await requireOrgId();
   const [machines, stock, lastSales, businesses, rents] = await Promise.all([

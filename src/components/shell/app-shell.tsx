@@ -15,7 +15,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
   const {
     data: { user },
   } = await (await createClient()).auth.getUser();
-  // A filler sees the refill work only: no overview, no settings, no figures to hide.
+  // A filler sees the machines and the refill work only: no overview, no settings, no figures to hide.
   const filler = await isFiller();
   const home = filler ? "/refill" : "/";
 

@@ -26,9 +26,17 @@ export async function generateMetadata() {
  * and the button to fill it. Products and pieces only: no prices, no sales
  * figures, no money (the stock comes without prices for a filler).
  */
-export default async function FillMachinePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function FillMachinePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string | string[] }>;
+}) {
   const orgId = await requireRefillAccess();
   const { id } = await params;
+  // Opened from the machines page: back goes there, else to the refill page.
+  const fromMachines = (await searchParams).from === "machines";
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const { m, f } = await getI18n();
   const [machines, slots, lastSales, open] = await Promise.all([
@@ -51,7 +59,11 @@ export default async function FillMachinePage({ params }: { params: Promise<{ id
 
   return (
     <>
-      <PageHeader backHref="/refill" backLabel={m.refill.title} title={machine.name} />
+      <PageHeader
+        backHref={fromMachines ? "/machines" : "/refill"}
+        backLabel={fromMachines ? m.machines.title : m.refill.title}
+        title={machine.name}
+      />
       <div className="flex flex-col gap-8">
         <div className="grid gap-4 sm:grid-cols-[260px_1fr] sm:items-center">
           <MachinePhoto path={machine.photo_path} className="rounded-2xl" />

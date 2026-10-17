@@ -3,8 +3,10 @@ import { MachinePhoto } from "@/components/machine/machine-photo";
 import { StatusDot } from "@/components/machine/status-badge";
 import { fmt } from "@/i18n/format";
 import type { Messages } from "@/i18n/messages";
-import { bandBg, type FillBand } from "@/lib/stock";
-import type { TerminalStatus } from "@/lib/terminal-status";
+import { orderByRoute } from "@/lib/round-settings";
+import { bandBg, fillLevel, machineFill, machineTotals, needsAttention, type FillBand } from "@/lib/stock";
+import { terminalStatus, type TerminalStatus } from "@/lib/terminal-status";
+import type { Machine, SlotStock } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export type GridMachine = {
@@ -18,14 +20,39 @@ export type GridMachine = {
   low: number;
 };
 
-/** Every machine as a tile for whoever fills: its photo, how full it is, whether it is online. A tap opens it. */
-export function MachineGrid({ machines, m }: { machines: GridMachine[]; m: Messages }) {
+/** The tiles: every machine with a product in a slot, in the owner's route order. */
+export function gridMachines(fleet: Machine[], slots: SlotStock[], route: string[]): GridMachine[] {
+  const stocked = slots.filter((slot) => slot.product_id);
+  const totals = machineTotals(stocked.map((slot) => ({ machine_id: slot.machine_id, stock: slot.stock, capacity: slot.capacity })));
+  const low = new Map<string, number>();
+  for (const slot of stocked) {
+    if (needsAttention(fillLevel(slot.stock, slot.capacity))) low.set(slot.machine_id, (low.get(slot.machine_id) ?? 0) + 1);
+  }
+  return orderByRoute(fleet.filter((mc) => totals.has(mc.id)).map((mc) => mc.id), route).map((id) => {
+    const machine = fleet.find((mc) => mc.id === id)!;
+    const total = totals.get(id);
+    return {
+      id,
+      name: machine.name,
+      photoPath: machine.photo_path,
+      status: terminalStatus(machine.last_connected_at, machine.last_disconnected_at),
+      fill: total ? machineFill(total.stock, total.capacity, total.counted) : null,
+      low: low.get(id) ?? 0,
+    };
+  });
+}
+
+/**
+ * Every machine as a tile for whoever fills: its photo, how full it is, whether it is online. A tap opens it;
+ * `from` tells the machine page which page to go back to.
+ */
+export function MachineGrid({ machines, m, from }: { machines: GridMachine[]; m: Messages; from?: "machines" }) {
   return (
     <ul className="stagger grid grid-cols-2 gap-3 lg:grid-cols-3">
       {machines.map((machine) => (
         <li key={machine.id}>
           <Link
-            href={`/refill/machines/${machine.id}`}
+            href={from ? `/refill/machines/${machine.id}?from=${from}` : `/refill/machines/${machine.id}`}
             className="surface-card hover-surface flex h-full flex-col overflow-hidden transition-transform duration-150 active:scale-[0.99]"
           >
             <MachinePhoto path={machine.photoPath}>
