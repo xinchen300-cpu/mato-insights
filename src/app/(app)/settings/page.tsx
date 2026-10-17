@@ -15,7 +15,7 @@ import {
   getTeam,
 } from "@/lib/data";
 import { mediaUrl } from "@/lib/media";
-import { getBilling, linkedMachineCount, paymentsEnabled } from "@/lib/billing";
+import { getBilling, paymentsEnabled } from "@/lib/billing";
 import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -39,14 +39,20 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   await denyFiller();
   const { m, f } = await getI18n();
   const orgId = await getCurrentOrgId();
+  const operator = await isOperator();
   const admin = createAdminClient();
 
-  const { data: vendor } = orgId
-    ? await admin.from("organizations").select("is_vendor, is_demo").eq("id", orgId).maybeSingle()
-    : { data: null };
-
-  const [{ data: credentials }, { data: syncLogs }, templates, businesses, machines, presets, { data: org }] = orgId
+  // Everything in one go, each loader with its own checks: one row of the
+  // organisation for all its settings, and for the operator the subscription
+  // and who is in the team (the operator's to see and change). The vendor has
+  // no subscription; it is read alongside and simply not shown.
+  const [{ data: org }, { data: credentials }, { data: syncLogs }, templates, businesses, machines, presets, ownBilling, team] = orgId
     ? await Promise.all([
+        admin
+          .from("organizations")
+          .select("is_vendor, is_demo, cost_per_hour, cost_per_km, first_charge_on")
+          .eq("id", orgId)
+          .maybeSingle(),
         admin.from("payter_credentials").select("last_synced_at").eq("org_id", orgId).maybeSingle(),
         admin
           .from("sync_logs")
@@ -58,25 +64,23 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         getBusinesses(orgId),
         getMachines(orgId),
         getShelfLifePresets(orgId),
-        admin.from("organizations").select("cost_per_hour, cost_per_km").eq("id", orgId).maybeSingle(),
+        operator ? getBilling(orgId) : Promise.resolve(null),
+        operator ? getTeam(orgId) : Promise.resolve(null),
       ])
-    : [{ data: null }, { data: [] }, [], [], [], [], { data: null }];
+    : [{ data: null }, { data: null }, { data: [] }, [], [], [], [], null, null];
+  const vendor = org;
   const machineIds = businessMachineIds(machines);
 
   const ownTemplates = templates.filter((t) => t.org_id);
 
   // The subscription is the operator's business, and the vendor has none.
-  const operator = await isOperator();
-  const billing = orgId && !vendor?.is_vendor && operator ? await getBilling(orgId) : null;
-  const { data: chargeRow } = billing && orgId
-    ? await admin.from("organizations").select("first_charge_on").eq("id", orgId).maybeSingle()
-    : { data: null };
-  const linked = billing && orgId ? await linkedMachineCount(orgId) : 0;
+  const billing = orgId && !vendor?.is_vendor && operator ? ownBilling : null;
+  const chargeRow = billing ? org : null;
+  // The machines that count for the package: an operator's own list is exactly
+  // those (in this organisation, not left out of the sync).
+  const linked = billing ? machines.length : 0;
 
   const payterConnected = Boolean(credentials || vendor?.is_demo);
-
-  // Who is in this organisation: the operator's to see and change.
-  const team = operator && orgId ? await getTeam(orgId) : null;
   const {
     data: { user },
   } = await (await createClient()).auth.getUser();

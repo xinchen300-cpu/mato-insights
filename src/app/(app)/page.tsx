@@ -266,7 +266,8 @@ export default async function OverviewPage() {
   return (
     <>
       {/* New sales arrive within a minute; the page shows them without a reload. */}
-      <AutoRefresh />
+      {/* One timer for the page: quicker while a round is out, so the filler is seen moving on. */}
+      <AutoRefresh every={liveRounds.length ? 20_000 : 30_000} />
       <PageHeader
         title={m.overview.title}
         subtitle={syncedAt ? fmt(m.overview.updated, { time: f.relative(syncedAt) }) : undefined}
@@ -274,7 +275,7 @@ export default async function OverviewPage() {
 
       <div className="flex flex-col gap-10">
         {/* A round that is out right now comes first: who, how long, where. */}
-        {liveRounds.length > 0 && <LiveRounds rounds={liveRounds} />}
+        {liveRounds.length > 0 && <LiveRounds rounds={liveRounds} refresh={false} />}
         {/* The balance, as a bank would show it: one figure, its trend, the curve. */}
         <section className="surface-card px-5 pb-4 pt-6 sm:px-8 sm:pb-6 sm:pt-8">
           <KpiHero

@@ -18,10 +18,13 @@ import { cn } from "@/lib/utils";
 export function LiveRounds({
   rounds,
   link = "detail",
+  refresh = true,
 }: {
   rounds: OpenRound[];
   /** Where a card leads: the round's page, or straight into filling it. */
   link?: "detail" | "fill";
+  /** Off where the page already refreshes itself, so it does not reload twice. */
+  refresh?: boolean;
 }) {
   const { m, f } = useI18n();
   const t = m.refill;
@@ -29,10 +32,10 @@ export function LiveRounds({
   const live = rounds.some((round) => round.readyAt);
 
   useEffect(() => {
-    if (!live) return;
+    if (!live || !refresh) return;
     const every = setInterval(() => router.refresh(), 20_000);
     return () => clearInterval(every);
-  }, [live, router]);
+  }, [live, refresh, router]);
 
   if (rounds.length === 0) return null;
   return (

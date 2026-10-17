@@ -772,17 +772,26 @@ export async function getPayments(
   await requireMachineAccess(orgId, machineId);
   const { businessId } = await getScope();
   const admin = createAdminClient();
-  const [{ data: machine, error: machineError }, { data: assignments }, { data: slots, error: slotsError }] = await Promise.all([
-    admin.from("machines").select("business_id, shared_business_id").eq("id", machineId).eq("org_id", orgId).maybeSingle(),
-    admin
-      .from("selection_assignments")
-      .select("selection_number, valid_from, valid_to, products(name)")
-      .eq("org_id", orgId)
-      .eq("machine_id", machineId),
-    admin.from("slots").select("selection_number, business_id").eq("org_id", orgId).eq("machine_id", machineId),
-  ]);
-  // Who owns which slot decides what a shop sees: an unread answer must not open the whole machine.
-  if (machineError || slotsError) throw new Error((machineError ?? slotsError)!.message);
+
+  // Who owns which slot only matters to a shop: on a shared fridge she sees her
+  // own slots' payments. Anyone else sees the machine whole, and waits for none of it.
+  let own: string[] | null = null;
+  if (businessId) {
+    const [{ data: machine, error: machineError }, { data: slots, error: slotsError }] = await Promise.all([
+      admin.from("machines").select("business_id, shared_business_id").eq("id", machineId).eq("org_id", orgId).maybeSingle(),
+      admin.from("slots").select("selection_number, business_id").eq("org_id", orgId).eq("machine_id", machineId),
+    ]);
+    // Who owns which slot decides what a shop sees: an unread answer must not open the whole machine.
+    if (machineError || slotsError) throw new Error((machineError ?? slotsError)!.message);
+    if (machine?.shared_business_id) {
+      const owners = [machine.business_id, machine.shared_business_id];
+      own = (slots ?? [])
+        .filter((slot) =>
+          owners.includes(slot.business_id) ? slot.business_id === businessId : machine.business_id === businessId,
+        )
+        .map((slot) => slot.selection_number as string);
+    }
+  }
 
   let query = admin
     .from("transactions")
@@ -790,16 +799,16 @@ export async function getPayments(
     .eq("org_id", orgId)
     .eq("machine_id", machineId)
     .not("disposition", "is", null);
-  if (businessId && machine?.shared_business_id) {
-    const owners = [machine.business_id, machine.shared_business_id];
-    const own = (slots ?? [])
-      .filter((slot) =>
-        owners.includes(slot.business_id) ? slot.business_id === businessId : machine.business_id === businessId,
-      )
-      .map((slot) => slot.selection_number as string);
-    query = query.in("item_ref", own.length ? own : [NOTHING]);
-  }
-  const { data, error } = await query.order("occurred_at", { ascending: false }).range(offset, offset + limit);
+  if (own) query = query.in("item_ref", own.length ? own : [NOTHING]);
+  // The payments and the names of what was in each slot, side by side.
+  const [{ data: assignments }, { data, error }] = await Promise.all([
+    admin
+      .from("selection_assignments")
+      .select("selection_number, valid_from, valid_to, products(name)")
+      .eq("org_id", orgId)
+      .eq("machine_id", machineId),
+    query.order("occurred_at", { ascending: false }).range(offset, offset + limit),
+  ]);
   if (error) throw new Error(error.message);
 
   const named = (assignments ?? []).map((a) => ({
