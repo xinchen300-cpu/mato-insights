@@ -521,10 +521,9 @@ export function RoundFlow({
         header={header(() => setView("home"))}
         visited={Object.values(stops).filter((stop) => !stop.skipped).length}
         skipped={Object.values(stops).filter((stop) => stop.skipped).length}
-        askKm={initial.settings.askKm}
-        onFinish={(choices, km) =>
+        onFinish={(choices) =>
           run(
-            () => api.completeRound(initial.id, choices, km !== null && Number.isFinite(km) ? km : null),
+            () => api.completeRound(initial.id, choices),
             () => {
               setCompleted(true);
               setCompletedAt(new Date().toISOString());
@@ -1345,23 +1344,17 @@ function ReturnsScreen({
   onFinish,
   visited,
   skipped,
-  askKm,
 }: {
   rows: ReturnRow[];
   busy: boolean;
   header: React.ReactNode;
-  askKm: boolean;
-  onFinish: (
-    choices: { productId: string; source: "leftover" | "removed"; reason: string | null; disposition: string }[],
-    km: number | null,
-  ) => void;
+  onFinish: (choices: { productId: string; source: "leftover" | "removed"; reason: string | null; disposition: string }[]) => void;
   visited: number;
   skipped: number;
 }) {
   const { m } = useI18n();
   const t = m.round;
   const [choice, setChoice] = useState<Record<string, Disposition>>({});
-  const [km, setKm] = useState("");
   const keyOf = (row: ReturnRow) => `${row.productId}|${row.source}|${row.reason ?? ""}`;
   const label: Record<Disposition, string> = {
     stock: t.dispStock,
@@ -1430,21 +1423,6 @@ function ReturnsScreen({
             {list(removed)}
           </>
         )}
-        {askKm && (
-          <label className="surface-card mt-2 flex items-center gap-3 px-4 py-3">
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="text-[15px] font-semibold">{m.refill.kmLabel}</span>
-              <span className="text-[13px] text-muted-foreground">{t.kmOptional}</span>
-            </span>
-            <input
-              inputMode="decimal"
-              value={km}
-              onChange={(event) => setKm(event.target.value)}
-              placeholder="km"
-              className="tabular h-12 w-24 rounded-xl bg-surface px-3 text-right text-[17px] font-semibold"
-            />
-          </label>
-        )}
       </div>
       <BottomBar>
         <button
@@ -1459,7 +1437,6 @@ function ReturnsScreen({
                 reason: row.reason,
                 disposition: choice[keyOf(row)] ?? row.disposition,
               })),
-              km.trim() === "" ? null : Number(km.replace(/\s/g, "").replace(",", ".")),
             )
           }
         >

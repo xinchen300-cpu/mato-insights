@@ -1,14 +1,15 @@
 import { redirect } from "next/navigation";
 import { Timer, Truck } from "lucide-react";
 import { MiniStat } from "@/components/kpi";
-import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
+import { PersonPhoto } from "@/components/filler/person-photo";
+import { Avatar, ListRow, RowList } from "@/components/list-row";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
-import { LiveRounds } from "@/components/refill/live-rounds";
 import { RefillTabs } from "@/components/refill/refill-tabs";
 import { duration, fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getFillerOverview, getOpenRounds } from "@/lib/data";
 import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
+import { mediaUrl } from "@/lib/media";
 import type { Average, FillerTimes } from "@/lib/refill-flow";
 import { MachineIcon } from "@/components/machine/machine-icon";
 
@@ -55,6 +56,13 @@ export default async function FillersPage() {
       })),
   ];
 
+  // Who is out on a round right now, under the name the round got.
+  const staffOf = new Map(overview.staff.map((person) => [key(person.name), person]));
+  const busyOf = (name: string | null) => {
+    const round = live.find((open) => open.readyAt && key(open.filledBy) === key(name));
+    return round ? { at: round.machines.find((machine) => !machine.done)?.name ?? null } : null;
+  };
+
   const name = (id: string) => (id === "start" ? t.start : id === "end" ? t.end : (overview.machineNames[id] ?? null));
   const machines = Object.entries(overview.machines)
     .filter(([id]) => overview.machineNames[id])
@@ -81,17 +89,17 @@ export default async function FillersPage() {
       <PageHeader title={m.refill.title} subtitle={t.subtitle} actions={<RefillTabs active="fillers" m={m} />} />
 
       <div className="flex flex-col gap-10">
-        <LiveRounds rounds={live} />
-
         {people.length > 0 && (
           <Section title={t.peopleTitle} hint={t.peopleHint}>
             <div className="grid gap-3 lg:grid-cols-2">
               {people.map((person) => (
                 <article key={key(person.name)} className="surface-card flex flex-col gap-5 p-5 sm:p-6">
                   <div className="flex items-center gap-3.5">
-                    <Avatar tone="gold" className="size-12 text-[17px]">
-                      {initial(person.name ?? "?")}
-                    </Avatar>
+                    <PersonPhoto
+                      userId={staffOf.get(key(person.name))?.userId ?? null}
+                      name={person.name ?? "?"}
+                      url={mediaUrl(staffOf.get(key(person.name))?.photoPath)}
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[17px] font-semibold tracking-[-0.02em]">
                         {person.name ?? t.unknown}
@@ -104,6 +112,15 @@ export default async function FillersPage() {
                           ? t.noRounds
                           : [plural(person.rounds, t.roundsOne, t.rounds), fmt(t.lastRound, { date: f.dayMonth(person.lastAt) })].join(" · ")}
                       </p>
+                      {(() => {
+                        const busy = busyOf(person.name);
+                        return busy ? (
+                          <p className="mt-1 flex items-center gap-1.5 text-[13px] font-semibold text-positive">
+                            <span className="size-2 rounded-full bg-positive" aria-hidden="true" />
+                            {busy.at ? fmt(t.busyAt, { machine: busy.at }) : t.busyNow}
+                          </p>
+                        ) : null;
+                      })()}
                     </div>
                   </div>
                   {person.rounds > 0 && (

@@ -9,7 +9,8 @@ import { buttonVariants } from "@/components/ui/button";
 import { duration, fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { LiveRounds } from "@/components/refill/live-rounds";
-import { getMachines, getOpenRounds, getRefillSheet, getRunRates, getRunSummary, type OpenRound } from "@/lib/data";
+import { getMachines, getOpenRounds, getRefillSheet, getRoundSettings, getRunRates, getRunSummary, type OpenRound } from "@/lib/data";
+import { routeKm } from "@/lib/round-settings";
 import type { Machine, RunSummaryRow } from "@/lib/types";
 import { linesToFill } from "@/lib/refill";
 import { roundActual, roundCost } from "@/lib/refill-flow";
@@ -51,11 +52,13 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
   // something to report; a round out right now gets the same live card as on
   // the overview; the stops need names, and the cost each machine's distance
   // there and back; the cost itself is the operator's, for a closed round.
-  const [summary, open, fleet, rates] = await Promise.all([
+  const [summary, open, fleet, rates, settings] = await Promise.all([
     sheet.completed_at ? getRunSummary(orgId, sheet.id) : Promise.resolve<RunSummaryRow[]>([]),
     canFill && sheet.started_at && !sheet.completed_at ? getOpenRounds(orgId) : Promise.resolve<OpenRound[]>([]),
     step || (operator && sheet.completed_at) ? getMachines(orgId) : Promise.resolve<Machine[]>([]),
     operator && sheet.completed_at && timed ? getRunRates(orgId) : Promise.resolve(null),
+    // The route's distances: what the round drove, added up, for its cost.
+    operator && sheet.completed_at ? getRoundSettings(orgId) : Promise.resolve(null),
   ]);
   const live = open.filter((r) => r.id === sheet.id);
   const machineName = new Map(fleet.map((machine) => [machine.id, machine.name]));
@@ -97,6 +100,8 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
       ? roundCost({
           minutes,
           km,
+          // Its own stops in the order driven, the skipped ones left out.
+          routeKm: settings ? routeKm(sheet.machine_ids.filter((id) => !sheet.stops?.[id]?.skipped), settings.legs) : null,
           machineKm: sheet.machine_ids
             .filter((id) => !sheet.stops?.[id]?.skipped)
             .map((id) => fleet.find((machine) => machine.id === id)?.km_round_trip ?? null),
@@ -106,7 +111,13 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
   const costCalc =
     cost && rates
       ? fmt(
-          cost.kmFrom === "round" ? m.refill.costCalc : cost.kmFrom === "machine" ? m.refill.costCalcMachine : m.refill.costCalcNoKm,
+          cost.kmFrom === "round"
+            ? m.refill.costCalc
+            : cost.kmFrom === "route"
+              ? m.refill.costCalcRoute
+              : cost.kmFrom === "machine"
+                ? m.refill.costCalcMachine
+                : m.refill.costCalcNoKm,
           {
             time: duration(cost.minutes, m.refill.runTime, m.refill.runTimeHours),
             perHour: f.euro(rates.perHour),
@@ -295,7 +306,7 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
                     <dt className="min-w-0 text-sm text-muted-foreground">{m.refill.kmLabel}</dt>
                     <dd className="ml-auto shrink-0">
                       {operator && sheet.completed_at ? (
-                        <RunKm sheetId={sheet.id} km={km} estimate={cost?.kmFrom === "machine" ? cost.km : null} />
+                        <RunKm sheetId={sheet.id} km={km} estimate={cost?.kmFrom === "machine" || cost?.kmFrom === "route" ? cost.km : null} />
                       ) : (
                         <span className="tabular text-[15px] font-semibold">{fmt(m.refill.runKm, { km: f.number(km ?? 0) })}</span>
                       )}

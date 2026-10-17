@@ -129,9 +129,9 @@ ok("cost: without kilometres the drive is unknown, not zero", unknown.drive === 
 
 // How the operator wants rounds to go: whatever is stored, made safe.
 ok("settings: nothing stored is the defaults", JSON.stringify(cleanRoundSettings(null)) === JSON.stringify(DEFAULT_ROUND_SETTINGS));
-const custom = cleanRoundSettings({ checks: ["  Ruit  gepoetst ", "ruit gepoetst", "", 3, "x".repeat(90)], message: "  Koelbox terug  ", askKm: false, notify: { eachMachine: true }, extra: 1 });
+const custom = cleanRoundSettings({ checks: ["  Ruit  gepoetst ", "ruit gepoetst", "", 3, "x".repeat(90)], message: "  Koelbox terug  ", allowSkip: false, notify: { eachMachine: true }, extra: 1 });
 ok("settings: checks trimmed, kept once, capped", custom.checks.length === 2 && custom.checks[0] === "Ruit gepoetst" && custom.checks[1].length === 60);
-ok("settings: message trimmed, flags kept, the rest default", custom.message === "Koelbox terug" && custom.askKm === false && custom.allowSkip === true && custom.notify.eachMachine && custom.notify.start && custom.notify.finish);
+ok("settings: message trimmed, flags kept, the rest default", custom.message === "Koelbox terug" && custom.allowSkip === false && !("askKm" in custom) && custom.notify.eachMachine && custom.notify.start && custom.notify.finish);
 ok("settings: at most eight checks", cleanRoundSettings({ checks: Array.from({ length: 12 }, (_, i) => `check ${i}`) }).checks.length === 8);
 
 // Money shown, pieces tested: only a change both agree on is real.
@@ -245,3 +245,12 @@ ok("route: machines follow it, the ones not on it after, in their own order", or
 ok("route: a round put in order takes its machines' places", mergeRoute([mA, mB, mC, mD, mE], [mE, mB, mD]).join() === [mA, mE, mC, mB, mD].join());
 ok("route: a machine new to the route takes a place in the round's order", mergeRoute([mA, mB, mC], [mF, mA]).join() === [mF, mB, mC, mA].join());
 ok("route: an empty route becomes the round's order", mergeRoute([], [mC, mA]).join() === [mC, mA].join());
+import { legKey, routeKm } from "../src/lib/round-settings.ts";
+ok("legs: one key for a pair, whichever way round; start and end are the depot", legKey(mA, mB) === legKey(mB, mA) && legKey("start", mA) === legKey(mA, "end") && legKey("start", mA).split("|").sort().join() === [mA, "depot"].sort().join());
+const cleanLegs = cleanRoundSettings({ legs: { [legKey("start", mA)]: 12.44, [legKey(mA, mB)]: 8, [legKey(mB, "end")]: 15, bad: 3, [`${mA}|${mA}`]: 2, [legKey(mA, mC)]: -1, [legKey(mB, mC)]: 2000 } }).legs;
+ok("legs: kept clean, to one decimal, nonsense dropped", Object.keys(cleanLegs).length === 3 && cleanLegs[legKey("start", mA)] === 12.4);
+ok("legs: a round from the depot, past each machine, and back", routeKm([mA, mB], cleanLegs) === 35.4);
+ok("legs: one leg without a distance is no distance", routeKm([mB, mA, mC], cleanLegs) === null && routeKm([], cleanLegs) === null);
+const viaRoute = roundCost({ minutes: 60, km: null, routeKm: 35.4, machineKm: [12, 20], perHour: 25, perKm: 0.5 });
+ok("cost: without kilometres on the round, the route's distances count", viaRoute.km === 35.4 && viaRoute.kmFrom === "route" && viaRoute.total === 25 + 17.7);
+ok("cost: kilometres written on the round still come first", roundCost({ minutes: 60, km: 40, routeKm: 35.4, machineKm: [], perHour: 25, perKm: 0.5 }).kmFrom === "round");

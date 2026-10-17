@@ -186,12 +186,6 @@ export function WorkflowStudio({
 
           <div className="flex flex-col divide-y divide-border">
             <Toggle
-              label={t.askKm}
-              hint={t.askKmHint}
-              on={settings.askKm}
-              onChange={(askKm) => change({ askKm }, "back")}
-            />
-            <Toggle
               label={t.allowSkip}
               hint={t.allowSkipHint}
               on={settings.allowSkip}
@@ -520,15 +514,6 @@ function FillerScreen({ step, settings, names }: { step: Step; settings: RoundSe
             <span className="rounded-lg bg-surface px-1.5 py-1 text-[10.5px] font-semibold">{i === 0 ? r.dispStock : r.dispWaste}</span>
           </div>
         ))}
-        {settings.askKm && (
-          <div className="flex items-center gap-2 rounded-xl bg-card px-2.5 py-2 ring-1 ring-border animate-in fade-in">
-            <span className="min-w-0 flex-1">
-              <span className="block font-semibold">{m.refill.kmLabel}</span>
-              <span className="block text-[10.5px] text-muted-foreground">{r.kmOptional}</span>
-            </span>
-            <span className="tabular rounded-lg bg-surface px-2 py-1 font-bold">38</span>
-          </div>
-        )}
         <MiniButton>{r.finish}</MiniButton>
       </>
     );

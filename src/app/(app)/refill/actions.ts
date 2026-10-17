@@ -8,7 +8,7 @@ import { getMachines } from "@/lib/data";
 import { featureAllowed } from "@/lib/billing";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { RefillLine } from "@/lib/types";
-import { cleanRoundSettings, mergeRoute, orderByRoute, type RoundSettings } from "@/lib/round-settings";
+import { cleanRoundSettings, legKey, mergeRoute, orderByRoute, type RoundSettings } from "@/lib/round-settings";
 
 export async function createRefillSheet(
   machineIds: string[],
@@ -135,9 +135,11 @@ export async function saveRoundSettings(input: RoundSettings): Promise<RoundSett
   const orgId = await requireOrgId();
   await requireOperator();
   const admin = createAdminClient();
-  // The route is set where a round is made, never here: what is stored stays.
+  // The route and its distances are set on the Route tab and when a round is
+  // made, never here: what is stored stays.
   const { data: stored } = await admin.from("organizations").select("refill_settings").eq("id", orgId).maybeSingle();
-  const settings = { ...cleanRoundSettings(input), route: cleanRoundSettings(stored?.refill_settings).route };
+  const kept = cleanRoundSettings(stored?.refill_settings);
+  const settings = { ...cleanRoundSettings(input), route: kept.route, legs: kept.legs };
   const { error } = await admin
     .from("organizations")
     .update({ refill_settings: settings })
@@ -147,3 +149,34 @@ export async function saveRoundSettings(input: RoundSettings): Promise<RoundSett
   return settings;
 }
 
+
+/**
+ * The route from the Route tab: the order the owner wants the machines in, and
+ * the kilometres of each leg shown there (null clears one). Only this
+ * organisation's own machines; distances of pairs not shown are kept, so a
+ * stop moved back into place finds its distance again.
+ */
+export async function saveRoute(route: string[], legs: Record<string, number | null>): Promise<void> {
+  const orgId = await requireOrgId();
+  await requireOperator();
+  const own = new Set((await getMachines(orgId)).map((machine) => machine.id));
+  const admin = createAdminClient();
+  const { data: stored } = await admin.from("organizations").select("refill_settings").eq("id", orgId).maybeSingle();
+  const settings = cleanRoundSettings(stored?.refill_settings);
+
+  const ownLeg = (key: string) => key.split("|").every((end) => end === "depot" || own.has(end));
+  const sent = Object.entries(legs).filter(([key]) => ownLeg(key));
+  const cleared = new Set(sent.filter(([, km]) => km === null).map(([key]) => legKey(...(key.split("|") as [string, string]))));
+  const given = cleanRoundSettings({ legs: Object.fromEntries(sent.filter(([, km]) => km !== null)) }).legs;
+  const next = {
+    ...settings,
+    route: cleanRoundSettings({ route }).route.filter((id) => own.has(id)),
+    legs: Object.fromEntries(
+      Object.entries({ ...settings.legs, ...given }).filter(([key]) => ownLeg(key) && !cleared.has(key)),
+    ),
+  };
+  const { error } = await admin.from("organizations").update({ refill_settings: next }).eq("id", orgId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/refill/route");
+  revalidatePath("/refill");
+}

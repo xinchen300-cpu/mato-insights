@@ -1,6 +1,5 @@
 import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 import { denyFillerAccess, getScope, getSessionUser, isFiller, isOperator, requireOperator, requireRefillAccess, type Role } from "@/lib/org";
 import { displayName } from "@/lib/people";
 import { cleanRoundSettings, type RoundSettings } from "@/lib/round-settings";
@@ -401,6 +400,11 @@ export type FillerOverview = RoundTimings & {
   machineNames: Record<string, string>;
   /** The team's fillers, also before their first round, under the name a round gets. */
   team: { name: string; email: string | null }[];
+  /**
+   * Everyone who runs or fills rounds here (owner, manager, filler), under that
+   * same name, with the account to put a photo on and the photo, if any.
+   */
+  staff: { userId: string; name: string; photoPath: string | null }[];
   /** The person looking, under that same name, to mark them. */
   me: string | null;
 };
@@ -413,23 +417,33 @@ export async function getFillerOverview(orgId: string): Promise<FillerOverview> 
   await requireOperator();
   if ((await getScope()).orgId !== orgId) throw new Error("Not found");
   const admin = createAdminClient();
-  const [timings, { data: machines }, { data: fillers }, me] = await Promise.all([
+  const [timings, { data: machines }, { data: members }, me] = await Promise.all([
     timedRounds(orgId),
     admin.from("machines").select("id, name").eq("org_id", orgId),
-    admin.from("memberships").select("user_id").eq("org_id", orgId).eq("role", "filler"),
-    createClient().then((client) => client.auth.getUser()),
+    // The organisation's own people, never a shop's account.
+    admin.from("memberships").select("user_id, role").eq("org_id", orgId).is("business_id", null),
+    getSessionUser(),
   ]);
-  const team = await Promise.all(
-    (fillers ?? []).map(async (row) => {
+  const people = await Promise.all(
+    (members ?? []).map(async (row) => {
       const { data } = await admin.auth.admin.getUserById(row.user_id as string);
-      return { name: displayName(data.user) ?? "—", email: data.user?.email ?? null };
+      // The photo sits in app_metadata: only the server writes there, never the person.
+      const photo = data.user?.app_metadata?.photo_path;
+      return {
+        userId: row.user_id as string,
+        role: row.role as Role,
+        name: displayName(data.user) ?? "—",
+        email: data.user?.email ?? null,
+        photoPath: typeof photo === "string" ? photo : null,
+      };
     }),
   );
   return {
     ...timings,
     machineNames: Object.fromEntries((machines ?? []).map((row) => [row.id as string, row.name as string])),
-    team,
-    me: displayName(me.data.user),
+    team: people.filter((person) => person.role === "filler").map(({ name, email }) => ({ name, email })),
+    staff: people.map(({ userId, name, photoPath }) => ({ userId, name, photoPath })),
+    me: displayName(me),
   };
 }
 

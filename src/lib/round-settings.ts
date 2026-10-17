@@ -4,8 +4,6 @@ export type RoundSettings = {
   checks: string[];
   /** A short message at the top of every round. */
   message: string | null;
-  /** Ask the kilometres when closing the round: the drive in what it cost. */
-  askKm: boolean;
   /** May a machine be skipped ("Overslaan")? */
   allowSkip: boolean;
   /** When the operator's phone hears about a round. */
@@ -15,21 +13,30 @@ export type RoundSettings = {
    * a round is made, and every next round follows it.
    */
   route: string[];
+  /**
+   * Kilometres between two stops, the same both ways, keyed by legKey: from
+   * the depot to a machine, or between two machines. What a round drove is
+   * added up from these, never asked of the filler.
+   */
+  legs: Record<string, number>;
 };
 
 export const MAX_CHECKS = 8;
 export const MAX_CHECK_LENGTH = 60;
 export const MAX_MESSAGE_LENGTH = 280;
 export const MAX_ROUTE = 200;
+export const MAX_LEGS = 500;
+/** Where a round leaves from and comes back to. */
+export const DEPOT = "depot";
 const MACHINE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const DEFAULT_ROUND_SETTINGS: RoundSettings = {
   checks: [],
   message: null,
-  askKm: true,
   allowSkip: true,
   notify: { start: true, eachMachine: false, finish: true },
   route: [],
+  legs: {},
 };
 
 /**
@@ -56,7 +63,6 @@ export function cleanRoundSettings(raw: unknown): RoundSettings {
   return {
     checks,
     message: message || null,
-    askKm: flag(value.askKm, DEFAULT_ROUND_SETTINGS.askKm),
     allowSkip: flag(value.allowSkip, DEFAULT_ROUND_SETTINGS.allowSkip),
     notify: {
       start: flag(notify.start, DEFAULT_ROUND_SETTINGS.notify.start),
@@ -64,7 +70,48 @@ export function cleanRoundSettings(raw: unknown): RoundSettings {
       finish: flag(notify.finish, DEFAULT_ROUND_SETTINGS.notify.finish),
     },
     route: [...new Set((Array.isArray(value.route) ? value.route : []).filter((id): id is string => typeof id === "string" && MACHINE_ID.test(id)))].slice(0, MAX_ROUTE),
+    legs: cleanLegs(value.legs),
   };
+}
+
+/** One key per pair of stops, whichever way round: the depot or a machine on either end. */
+export function legKey(from: string, to: string): string {
+  const a = from === "start" || from === "end" ? DEPOT : from;
+  const b = to === "start" || to === "end" ? DEPOT : to;
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+const isStop = (end: string) => end === DEPOT || MACHINE_ID.test(end);
+
+/** Distances as stored or sent, made safe: known pairs only, 0.1 to 1000 km, to one decimal. */
+function cleanLegs(raw: unknown): Record<string, number> {
+  const legs: Record<string, number> = {};
+  if (!raw || typeof raw !== "object") return legs;
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const ends = key.split("|");
+    const km = typeof value === "number" ? Math.round(value * 10) / 10 : NaN;
+    if (ends.length !== 2 || ends[0] === ends[1] || !ends.every(isStop) || !(km > 0 && km <= 1000)) continue;
+    legs[legKey(ends[0], ends[1])] = km;
+    if (Object.keys(legs).length === MAX_LEGS) break;
+  }
+  return legs;
+}
+
+/**
+ * The kilometres of a round driven in this order: from the depot, past every
+ * machine, and back. Null when one of those legs has no distance yet: a sum
+ * with a hole in it is no distance.
+ */
+export function routeKm(order: string[], legs: Record<string, number>): number | null {
+  if (order.length === 0) return null;
+  const stops = [DEPOT, ...order, DEPOT];
+  let total = 0;
+  for (let i = 1; i < stops.length; i++) {
+    const km = legs[legKey(stops[i - 1], stops[i])];
+    if (km === undefined) return null;
+    total += km;
+  }
+  return Math.round(total * 10) / 10;
 }
 
 /**

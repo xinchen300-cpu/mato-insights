@@ -44,7 +44,6 @@ export function FillerView({
   const [short, setShort] = useState<Record<string, number>>({});
   const [expiry, setExpiry] = useState<"none" | "found" | null>(null);
   const [expiryMissing, setExpiryMissing] = useState(false);
-  const [km, setKm] = useState("");
   const [isPending, startTransition] = useTransition();
   // The list is not frozen: it is what the machines need right now.
   const [lines, setLines] = useState(initialLines);
@@ -182,7 +181,8 @@ export function FillerView({
         expiries,
         filler,
         {},
-        km.trim() === "" ? null : Number(km.replace(",", ".")),
+        // The kilometres come from the route the owner set, not from the filler's memory.
+        null,
         Object.entries(short)
           .filter(([, qty]) => qty > 0)
           .map(([product_id, qty]) => ({ product_id, qty })),
@@ -474,17 +474,6 @@ export function FillerView({
         <RefillTips tips={CHECK_KEYS.map((key) => m.refill.checklist[key])} />
 
         <div className="surface-card mt-2 flex flex-col gap-6 p-5">
-          <label className="block">
-            <span className="text-[15px] font-semibold">{m.refill.kmLabel}</span>
-            <input
-              value={km}
-              onChange={(e) => setKm(e.target.value.replace(/[^0-9.,]/g, ""))}
-              inputMode="decimal"
-              className="tabular mt-2 block h-12 w-36 rounded-xl border border-input bg-card px-4 text-base outline-none transition-[border-color,box-shadow] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25"
-            />
-            <span className="mt-1.5 block text-[13px] text-muted-foreground">{m.refill.kmHint}</span>
-          </label>
-
           <label className="block">
             <span className="text-[15px] font-semibold">{m.refill.filler}</span>
             <input
