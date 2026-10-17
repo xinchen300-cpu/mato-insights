@@ -883,30 +883,30 @@ export function RoundFlow({
         </BottomBar>
 
         {unchecked !== null && (
+          // One plain question about the slots not tapped full, and answers that say what will count.
           <Sheet onClose={() => setUnchecked(null)}>
-            <h2 className="text-[22px] font-bold tracking-[-0.02em]">
-              {fmt(unchecked === 1 ? t.uncheckedTitleOne : t.uncheckedTitle, { n: unchecked })}
-            </h2>
-            <ul className="flex flex-col gap-1.5 text-[15.5px]">
+            <h2 className="text-[24px] font-bold tracking-[-0.02em]">{open.length === 1 ? t.inQuestionOne : t.inQuestion}</h2>
+            <ul className="flex flex-col gap-2 rounded-2xl bg-surface/70 p-3 text-[15.5px]">
               {open.map((line) => (
-                <li key={line.selection} className="flex items-center gap-2">
-                  <span className="min-w-8 rounded-lg bg-surface px-1.5 py-0.5 text-center font-mono text-[12.5px] font-semibold">
+                <li key={line.selection} className="flex items-center gap-2.5">
+                  <span className="min-w-8 rounded-lg bg-card px-1.5 py-0.5 text-center font-mono text-[12.5px] font-semibold">
                     {line.selection}
                   </span>
                   <span className="min-w-0 flex-1 truncate font-semibold">{line.productName}</span>
-                  <span className="tabular shrink-0 font-semibold text-muted-foreground">{`${tallyOf(line).n}/${prepOf(line)}`}</span>
+                  <span className="tabular shrink-0 text-[14px] text-muted-foreground">
+                    {fmt(t.tappedOf, { n: tallyOf(line).n, total: prepOf(line) })}
+                  </span>
                 </li>
               ))}
             </ul>
-            <p className="text-[15.5px] text-muted-foreground">{t.uncheckedHint}</p>
             <button type="button" className={primary} onClick={() => requestFinish(current.id, "planned")}>
-              {t.allFilledAnyway}
+              {t.yesAllIn}
             </button>
             <button type="button" className={outline} onClick={() => requestFinish(current.id, "empty")}>
-              {t.notFilled}
+              {open.some((line) => tallyOf(line).n > 0) ? t.noOnlyTapped : open.length === 1 ? t.noNotInOne : t.noNotIn}
             </button>
             <button type="button" className={ghost} onClick={() => setUnchecked(null)}>
-              {t.back}
+              {t.backToTap}
             </button>
           </Sheet>
         )}
