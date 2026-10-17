@@ -7,8 +7,8 @@ import { summarizeRound, type MyRound } from "@/lib/filler-stats";
 import type { FlowLine, StopRecord } from "@/lib/refill-flow";
 import { DEFAULT_ROUND_SETTINGS } from "@/lib/round-settings";
 
-export type Scenario = "pick" | "run" | "done" | "first";
-export const SCENARIOS: Scenario[] = ["pick", "run", "done", "first"];
+export type Scenario = "pick" | "run" | "back" | "done" | "first";
+export const SCENARIOS: Scenario[] = ["pick", "run", "back", "done", "first"];
 
 const MACHINES = [
   { id: "m-kortemark", name: "Kortemark Hoeve" },
@@ -73,13 +73,21 @@ export function previewRound(scenario: Scenario, now: number): RefillRound {
   const stops: Record<string, StopRecord> =
     scenario === "run"
       ? { [MACHINES[0].id]: doneStop(MACHINES[0].id, plan, now - minutes(19), now - minutes(13)) }
-      : finished
+      : finished || scenario === "back"
         ? Object.fromEntries(
             MACHINES.map((machine, i) => [machine.id, doneStop(machine.id, plan, now - minutes(40 - i * 13), now - minutes(34 - i * 13))]),
           )
         : {};
+  // Bringing back: two Bami goreng and a Loempia did not fit, and one Loempia was past its date.
+  if (scenario === "back") {
+    const first = stops[MACHINES[0].id];
+    first.lines = first.lines.map((line) =>
+      line.selection === "11" ? { ...line, filled: Math.max(0, line.filled - 2) } : line.selection === "13" ? { ...line, filled: Math.max(0, line.filled - 1), removed: [{ reason: "expired", qty: 1 }] } : line,
+    );
+  }
   return {
     id: `preview-${scenario}`,
+    number: 14,
     flowVersion: 2,
     createdAt: iso(now - minutes(90)),
     startedAt: readyAt === null ? null : iso(readyAt),

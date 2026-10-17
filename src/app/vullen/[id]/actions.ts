@@ -5,14 +5,13 @@ import { after } from "next/server";
 import { getRefillRound, type RefillRound } from "@/lib/data";
 import { getSessionUser, requireRefillAccess } from "@/lib/org";
 import {
-  DISPOSITIONS,
   REMOVAL_REASONS,
   allocate,
   levelAfter,
   pickList,
   returnsFor,
   slotKey,
-  type Disposition,
+  splitReturn,
   type RemovalReason,
   type StopLine,
   type StopRecord,
@@ -326,7 +325,8 @@ async function finishStop(
  */
 export async function completeRound(
   sheetId: string,
-  choices: { productId: string; source: "leftover" | "removed"; reason: string | null; disposition: string }[],
+  /** Where each product that came back went; one product can be split over several places. */
+  choices: { productId: string; source: "leftover" | "removed"; reason: string | null; disposition: string; qty?: number }[],
 ): Promise<void> {
   const { orgId, round } = await openRound(sheetId);
   // Closing is the last step: after the start, with every machine done or
@@ -335,15 +335,14 @@ export async function completeRound(
   if (!round.readyAt || round.machines.some((machine) => withWork.has(machine.id) && !round.stops[machine.id]?.completedAt)) {
     throw new Error("Round not finished");
   }
-  const rows = returnsFor(round.lines, round.slots, round.picked, round.stops).map((row) => {
-    const choice = choices.find(
-      (c) => c.productId === row.productId && c.source === row.source && (c.reason ?? null) === (row.reason ?? null),
-    );
-    const disposition = DISPOSITIONS.includes(choice?.disposition as Disposition)
-      ? (choice!.disposition as Disposition)
-      : row.disposition;
-    return { ...row, disposition };
-  });
+  // The quantities come from the round; the phone only says where they went.
+  const asked = Array.isArray(choices) ? choices : [];
+  const rows = returnsFor(round.lines, round.slots, round.picked, round.stops).flatMap((row) =>
+    splitReturn(
+      row,
+      asked.filter((c) => c?.productId === row.productId && c.source === row.source && (c.reason ?? null) === (row.reason ?? null)),
+    ),
+  );
 
   // Waste reports read the expired count from the round's lines. Something past
   // its date can come out of a slot the round did not fill: that slot gets a

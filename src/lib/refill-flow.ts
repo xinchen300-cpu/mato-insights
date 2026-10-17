@@ -277,6 +277,32 @@ export function onlyMine(sheet: RefillSheet, view: ShopView): RefillSheet {
   };
 }
 
+/**
+ * Where one product that came back went, as the filler split it: 2 eend
+ * zoetzuur, 1 to Too Good To Go and the rest thrown away. The quantity is the
+ * round's own, never the phone's: the parts are taken in order up to it, and
+ * what is left over goes where Vendly would have sent it. A choice without a
+ * number (a phone from before splitting) takes everything.
+ */
+export function splitReturn(row: ReturnRow, choices: { disposition: string; qty?: number | null }[]): ReturnRow[] {
+  const valid = choices.filter((c) => DISPOSITIONS.includes(c.disposition as Disposition));
+  if (valid.length === 0) return row.qty > 0 ? [row] : [];
+  const whole = valid.find((c) => c.qty === undefined || c.qty === null);
+  if (whole) return row.qty > 0 ? [{ ...row, disposition: whole.disposition as Disposition }] : [];
+  const went = new Map<Disposition, number>();
+  let left = row.qty;
+  for (const choice of valid) {
+    const qty = Number(choice.qty);
+    if (!Number.isInteger(qty) || qty <= 0) continue;
+    const take = Math.min(qty, left);
+    if (take <= 0) break;
+    went.set(choice.disposition as Disposition, (went.get(choice.disposition as Disposition) ?? 0) + take);
+    left -= take;
+  }
+  if (left > 0) went.set(row.disposition, (went.get(row.disposition) ?? 0) + left);
+  return [...went].filter(([, qty]) => qty > 0).map(([disposition, qty]) => ({ ...row, disposition, qty }));
+}
+
 /** One product's line in the report of a finished round. */
 export type ItemReport = {
   productId: string;
@@ -349,6 +375,20 @@ export function itemReport(
     if (item.qty > 0) row(item.productId, nameOf(item.productId)).short += item.qty;
   }
   return [...rows.values()].sort((a, b) => b.filled - a.filled || a.name.localeCompare(b.name));
+}
+
+/** A round in figures: out of the fridge, into the machines, where what came back went, and short. */
+export type RoundFigures = { taken: number; filled: number; went: Record<Disposition, number>; short: number };
+
+export function roundFigures(items: ItemReport[]): RoundFigures {
+  const figures: RoundFigures = { taken: 0, filled: 0, went: { stock: 0, waste: 0, promo: 0, staff: 0, other: 0 }, short: 0 };
+  for (const item of items) {
+    figures.taken += item.taken;
+    figures.filled += item.filled;
+    figures.short += item.short;
+    for (const where of DISPOSITIONS) figures.went[where] += item.went[where] ?? 0;
+  }
+  return figures;
 }
 
 /** A finished step-by-step round, as far as its clock goes. */

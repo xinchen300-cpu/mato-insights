@@ -152,6 +152,8 @@ export type RoundSlot = {
 
 export type RefillRound = {
   id: string;
+  /** "Ronde 12": its number within the organisation. */
+  number: number;
   flowVersion: number;
   createdAt: string;
   startedAt: string | null;
@@ -191,7 +193,7 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
   const admin = createAdminClient();
   const { data: sheet } = await admin
     .from("refill_sheets")
-    .select("id, flow_version, created_at, started_at, ready_at, completed_at, machine_ids, chosen_machine_ids, lines, box, stops, notes")
+    .select("id, number, flow_version, created_at, started_at, ready_at, completed_at, machine_ids, chosen_machine_ids, lines, box, stops, notes")
     .eq("id", sheetId)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -244,6 +246,7 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
 
   return {
     id: sheet.id as string,
+    number: Number(sheet.number),
     flowVersion: Number(sheet.flow_version ?? 1),
     createdAt: sheet.created_at as string,
     startedAt: (sheet.started_at as string | null) ?? null,
@@ -1344,15 +1347,16 @@ export async function getLayoutTemplates(orgId: string): Promise<LayoutTemplate[
   return (data ?? []) as LayoutTemplate[];
 }
 
-export async function getRefillSheets(orgId: string): Promise<RefillSheet[]> {
+export async function getRefillSheets(orgId: string, page: { limit: number; offset: number } = { limit: 10, offset: 0 }): Promise<RefillSheet[]> {
   await denyFillerAccess();
   const mine = await ownMachineIds(orgId);
-  const { data } = await createAdminClient()
+  const query = createAdminClient()
     .from("refill_sheets")
-    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box, flow_version, stops, returns")
+    .select("id, number, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box, flow_version, stops, returns")
     .eq("org_id", orgId)
-    .order("created_at", { ascending: false })
-    .limit(mine ? 60 : 10);
+    .order("created_at", { ascending: false });
+  // A shop's list is cut from the operator's, so it goes no further back than its latest ten.
+  const { data } = await (mine ? query.limit(60) : query.range(page.offset, page.offset + page.limit - 1));
   const sheets = (data ?? []) as RefillSheet[];
   // A run belongs to whoever owns the machines it visited.
   if (!mine) return sheets;
@@ -1369,7 +1373,7 @@ export async function getRefillSheet(orgId: string, id: string): Promise<RefillS
   const mine = await ownMachineIds(orgId);
   const { data } = await createAdminClient()
     .from("refill_sheets")
-    .select("id, share_token, machine_ids, chosen_machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box, flow_version, stops, returns")
+    .select("id, number, share_token, machine_ids, chosen_machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box, flow_version, stops, returns")
     .eq("org_id", orgId)
     .eq("id", id)
     .maybeSingle();
@@ -1386,7 +1390,7 @@ export async function getRefillSheetByToken(token: string): Promise<RefillSheet 
   if (!/^[A-Za-z0-9_-]{20,}$/.test(token)) return null;
   const { data } = await createAdminClient()
     .from("refill_sheets")
-    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box, flow_version, stops, returns")
+    .select("id, number, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box, flow_version, stops, returns")
     .eq("share_token", token)
     // A step-by-step round (flow 2) is filled in Vendly itself, never through a link.
     .eq("flow_version", 1)

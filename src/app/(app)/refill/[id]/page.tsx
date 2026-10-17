@@ -13,7 +13,8 @@ import { getMachines, getOpenRounds, getRefillSheet, getRoundSettings, getRunRat
 import { routeKm } from "@/lib/round-settings";
 import type { Machine, RunSummaryRow } from "@/lib/types";
 import { linesToFill } from "@/lib/refill";
-import { roundActual, roundCost, roundOrder } from "@/lib/refill-flow";
+import { roundActual, roundCost, roundFigures, roundOrder } from "@/lib/refill-flow";
+import { RoundFigures } from "@/components/refill/round-figures";
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
 import { cn } from "@/lib/utils";
 import { CancelRound } from "./cancel-round";
@@ -74,7 +75,6 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
   const finished = real !== null;
   const items = real?.items ?? [];
   const actual: SheetActual | undefined = real?.actual;
-  const filledTotal = items.reduce((sum, item) => sum + item.filled, 0);
 
   // The cool box is keyed by product id; the lines know the names.
   const nameOf = new Map(sheet.lines.map((l) => [l.product_id, l.product_name]));
@@ -133,7 +133,7 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
         backHref="/refill"
         backLabel={m.refill.title}
         eyebrow={fmt(m.refill.createdAt, { date: f.dateTime(sheet.created_at) })}
-        title={m.refill.sheetTitle}
+        title={sheet.number ? fmt(m.refill.roundNumber, { n: sheet.number }) : m.refill.sheetTitle}
         actions={
           <>
             <Link href={`/print/refill/${sheet.id}`} target="_blank" className={buttonVariants({ variant: "outline" })}>
@@ -148,13 +148,16 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
         }
       />
 
-      {/* The one figure of a sheet: how much goes into the machines. */}
+      {/* A finished round in figures: along, in, and where the rest went. Before that, the one figure of a sheet: how much goes in. */}
       <div className="-mt-2 mb-10 flex flex-col px-1 sm:-mt-4">
-        <KpiHero
-          label={finished ? m.refill.filledCol : m.refill.total}
-          value={fmt(m.refill.items, { count: finished ? filledTotal : total })}
-          f={f}
-        />
+        {finished ? (
+          <div className="mb-4 flex flex-col gap-3">
+            <h2 className="text-[18px] font-semibold tracking-[-0.02em]">{m.refill.figuresTitle}</h2>
+            <RoundFigures figures={roundFigures(items)} m={m} />
+          </div>
+        ) : (
+          <KpiHero label={m.refill.total} value={fmt(m.refill.items, { count: total })} f={f} />
+        )}
         {sheet.completed_at && (
           <p className="flex items-center gap-2 text-[15px] font-medium text-positive">
             <CircleCheck className="size-[18px]" />

@@ -255,7 +255,17 @@ export default async function RefillPage() {
           />
         )}
 
-        <Section title={m.refill.recent}>
+        <Section
+          title={m.refill.recent}
+          actions={
+            operator && sheets.length > 0 ? (
+              <Link href="/refill/history" className="inline-flex shrink-0 items-center gap-1 text-[14px] font-semibold text-muted-foreground hover:text-foreground">
+                {m.refill.allRounds}
+                <ChevronRight className="size-4" aria-hidden="true" />
+              </Link>
+            ) : undefined
+          }
+        >
           {sheets.length === 0 ? (
             <p className="px-1 text-sm text-muted-foreground">{m.refill.recentEmpty}</p>
           ) : (
@@ -292,8 +302,9 @@ export default async function RefillPage() {
                           </Avatar>
                         )
                       }
-                      title={f.dateTime(sheet.created_at)}
+                      title={sheet.number ? fmt(m.refill.roundNumber, { n: sheet.number }) : f.dateTime(sheet.created_at)}
                       subtitle={[
+                        sheet.number ? f.dateTime(sheet.created_at) : null,
                         sheet.machine_ids.map((id) => machineName.get(id)).filter(Boolean).join(", "),
                         sheet.filled_by,
                       ]

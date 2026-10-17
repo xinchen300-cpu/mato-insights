@@ -282,3 +282,23 @@ import { cheapestWith, planAllows, planById } from "../src/lib/plans.ts";
 ok("plans: a zaak rents nothing to businesses, an automatenshop does", !planAllows(planById("zaak"), "shareWithShops") && planAllows(planById("automatenshop"), "shareWithShops"));
 ok("plans: the lock note points at Automatenshop", cheapestWith("shareWithShops").id === "automatenshop");
 ok("plans: an account from before packages keeps everything", planAllows(null, "shareWithShops"));
+
+// ── Splitting what came back, and a round in figures (src/lib/refill-flow.ts) ──
+import { roundFigures, splitReturn, type ReturnRow } from "../src/lib/refill-flow.ts";
+const eend: ReturnRow = { productId: "eend", productName: "Eend zoetzuur", source: "leftover", reason: null, disposition: "stock", qty: 2 };
+const parts = (rows: ReturnRow[]) => rows.map((r) => `${r.disposition}:${r.qty}`).join(",");
+ok("split: 1 Too Good To Go, the rest thrown away", parts(splitReturn(eend, [{ disposition: "promo", qty: 1 }, { disposition: "waste", qty: 1 }])) === "promo:1,waste:1");
+ok("split: a phone from before splitting sends all of it to one place", parts(splitReturn(eend, [{ disposition: "waste" }])) === "waste:2");
+ok("split: nothing chosen keeps Vendly's choice", parts(splitReturn(eend, [])) === "stock:2" && parts(splitReturn(eend, [{ disposition: "nonsense", qty: 2 }])) === "stock:2");
+ok("split: more than came back is cut to what came back", parts(splitReturn(eend, [{ disposition: "promo", qty: 5 }])) === "promo:2");
+ok("split: less than came back, the rest goes where Vendly would send it", parts(splitReturn({ ...eend, qty: 3 }, [{ disposition: "promo", qty: 1 }])) === "promo:1,stock:2");
+ok("split: odd numbers count as nothing", parts(splitReturn(eend, [{ disposition: "promo", qty: -1 }, { disposition: "waste", qty: 1.5 }])) === "stock:2");
+ok("split: the same place twice adds up", parts(splitReturn(eend, [{ disposition: "waste", qty: 1 }, { disposition: "waste", qty: 1 }])) === "waste:2");
+const figures = roundFigures(itemReport(
+  [{ machine_id: "m1", selection_number: "11", product_id: "eend", product_name: "Eend zoetzuur" }],
+  { "m1:eend": 5 },
+  { m1: { checkedAt: null, completedAt: "x", skipped: false, technical: false, note: null, lines: [{ selection: "11", prepared: 3, filled: 3, removed: [], countAfter: null, full: false }] } },
+  splitReturn(eend, [{ disposition: "promo", qty: 1 }, { disposition: "waste", qty: 1 }]),
+  [{ productId: "eend", qty: 1 }],
+));
+ok("figures: taken, filled, Too Good To Go, thrown away and short", figures.taken === 5 && figures.filled === 3 && figures.went.promo === 1 && figures.went.waste === 1 && figures.went.stock === 0 && figures.short === 1);

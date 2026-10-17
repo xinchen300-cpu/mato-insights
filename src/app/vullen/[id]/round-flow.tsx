@@ -1105,6 +1105,7 @@ export function RoundFlow({
             </h1>
             <p className="truncate text-[13.5px] text-muted-foreground">
               {fmt(visits.length === 1 ? t.roundOfOne : t.roundOf, {
+                number: initial.number,
                 date: f.dayMonth(initial.createdAt),
                 count: visits.length,
               })}
@@ -1443,14 +1444,18 @@ function ReturnsScreen({
   rows: ReturnRow[];
   busy: boolean;
   header: React.ReactNode;
-  onFinish: (choices: { productId: string; source: "leftover" | "removed"; reason: string | null; disposition: string }[]) => void;
+  onFinish: (choices: { productId: string; source: "leftover" | "removed"; reason: string | null; disposition: string; qty: number }[]) => void;
   visited: number;
   skipped: number;
 }) {
   const { m } = useI18n();
   const t = m.round;
-  const [choice, setChoice] = useState<Record<string, Disposition>>({});
+  // Per product, how many go where: everything to one place, or split (1 Too Good To Go, the rest away).
+  const [parts, setParts] = useState<Record<string, Partial<Record<Disposition, number>>>>({});
+  const [splitting, setSplitting] = useState<ReturnRow | null>(null);
   const keyOf = (row: ReturnRow) => `${row.productId}|${row.source}|${row.reason ?? ""}`;
+  const partsOf = (row: ReturnRow): [Disposition, number][] =>
+    (Object.entries(parts[keyOf(row)] ?? { [row.disposition]: row.qty }) as [Disposition, number][]).filter(([, qty]) => qty > 0);
   const label: Record<Disposition, string> = {
     stock: t.dispStock,
     waste: t.dispWaste,
@@ -1469,27 +1474,59 @@ function ReturnsScreen({
 
   const list = (items: ReturnRow[]) => (
     <ul className="surface-card flex flex-col px-3 py-1">
-      {items.map((row) => (
-        <li key={keyOf(row)} className="flex min-h-16 items-center gap-3 border-b border-border/60 last:border-0">
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-[15px] font-semibold">{row.productName}</span>
-            {row.reason && <span className="text-[13px] text-muted-foreground">{reasonLabel[row.reason]}</span>}
-          </span>
-          <span className="tabular w-6 text-right text-[17px] font-bold">{row.qty}</span>
-          <select
-            aria-label={row.productName}
-            className="h-10 max-w-[44%] rounded-xl bg-surface px-2 text-[13.5px] font-semibold"
-            value={choice[keyOf(row)] ?? row.disposition}
-            onChange={(event) => setChoice((all) => ({ ...all, [keyOf(row)]: event.target.value as Disposition }))}
-          >
-            {(Object.keys(label) as Disposition[]).map((option) => (
-              <option key={option} value={option}>
-                {label[option]}
-              </option>
-            ))}
-          </select>
-        </li>
-      ))}
+      {items.map((row) => {
+        const where = partsOf(row);
+        const split = where.length > 1;
+        return (
+          <li key={keyOf(row)} className="flex flex-col gap-2 border-b border-border/60 py-3 last:border-0">
+            <div className="flex items-center gap-3">
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-[15.5px] font-semibold">{row.productName}</span>
+                {row.reason && <span className="text-[13px] text-muted-foreground">{reasonLabel[row.reason]}</span>}
+              </span>
+              <span className="tabular shrink-0 text-[17px] font-bold">{fmt(t.splitPieces, { n: row.qty })}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {split ? (
+                // Split over several places: the parts, and a tap to change them.
+                <button
+                  type="button"
+                  onClick={() => setSplitting(row)}
+                  className="flex min-h-10 min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-surface px-3 py-2 text-left text-[13.5px] font-semibold"
+                >
+                  {where.map(([to, qty]) => (
+                    <span key={to} className="tabular">
+                      {qty} {label[to]}
+                    </span>
+                  ))}
+                </button>
+              ) : (
+                <select
+                  aria-label={row.productName}
+                  className="h-10 min-w-0 flex-1 rounded-xl bg-surface px-2 text-[13.5px] font-semibold"
+                  value={where[0]?.[0] ?? row.disposition}
+                  onChange={(event) => setParts((all) => ({ ...all, [keyOf(row)]: { [event.target.value]: row.qty } }))}
+                >
+                  {(Object.keys(label) as Disposition[]).map((option) => (
+                    <option key={option} value={option}>
+                      {label[option]}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {row.qty > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setSplitting(row)}
+                  className="h-10 shrink-0 rounded-xl px-3 text-[13.5px] font-semibold ring-1 ring-border transition-transform active:scale-95"
+                >
+                  {t.split}
+                </button>
+              )}
+            </div>
+          </li>
+        );
+      })}
     </ul>
   );
 
@@ -1526,19 +1563,133 @@ function ReturnsScreen({
           disabled={busy}
           onClick={() =>
             onFinish(
-              rows.map((row) => ({
-                productId: row.productId,
-                source: row.source,
-                reason: row.reason,
-                disposition: choice[keyOf(row)] ?? row.disposition,
-              })),
+              rows.flatMap((row) =>
+                partsOf(row).map(([disposition, qty]) => ({ productId: row.productId, source: row.source, reason: row.reason, disposition, qty })),
+              ),
             )
           }
         >
           {busy ? t.sending : t.finish}
         </button>
       </BottomBar>
+      {splitting && (
+        <SplitSheet
+          row={splitting}
+          start={Object.fromEntries(partsOf(splitting))}
+          label={label}
+          onClose={() => setSplitting(null)}
+          onSave={(next) => {
+            setParts((all) => ({ ...all, [keyOf(splitting)]: next }));
+            setSplitting(null);
+          }}
+        />
+      )}
     </Screen>
+  );
+}
+
+/**
+ * One product that came back, split over places: a number for each, and the
+ * rest to the place chosen at the bottom. The pieces always add up, so there
+ * is nothing to get wrong: a plus takes one from the rest, a minus gives it back.
+ */
+function SplitSheet({
+  row,
+  start,
+  label,
+  onClose,
+  onSave,
+}: {
+  row: ReturnRow;
+  start: Partial<Record<Disposition, number>>;
+  label: Record<Disposition, string>;
+  onClose: () => void;
+  onSave: (parts: Partial<Record<Disposition, number>>) => void;
+}) {
+  const { m } = useI18n();
+  const t = m.round;
+  // The rest goes where most of it went until now; its own number is whatever is left.
+  const firstRest = (Object.entries(start) as [Disposition, number][]).sort((a, b) => b[1] - a[1])[0]?.[0] ?? row.disposition;
+  const [rest, setRest] = useState<Disposition>(firstRest);
+  const [count, setCount] = useState<Record<Disposition, number>>(() => ({
+    stock: 0,
+    waste: 0,
+    promo: 0,
+    staff: 0,
+    other: 0,
+    ...start,
+    [firstRest]: 0,
+  }));
+  // Too Good To Go and the bin first: that is what a split is usually about.
+  const order: Disposition[] = ["promo", "waste", "stock", "staff", "other"];
+  const others = order.filter((where) => where !== rest);
+  const given = others.reduce((sum, where) => sum + count[where], 0);
+  const left = row.qty - given;
+
+  return (
+    <Sheet onClose={onClose}>
+      <h2 className="text-[22px] font-bold tracking-[-0.02em]">{row.productName}</h2>
+      <p className="-mt-2 text-[15px] text-muted-foreground">{fmt(t.splitHint, { n: row.qty })}</p>
+      <ul className="flex flex-col">
+        {others.map((where) => (
+          <li key={where} className="flex min-h-14 items-center gap-3 border-b border-border/60 last:border-0">
+            <span className="min-w-0 flex-1 text-[15.5px] font-semibold">{label[where]}</span>
+            <button
+              type="button"
+              aria-label={`${t.less}: ${label[where]}`}
+              className={cn(stepper, "size-11 text-2xl")}
+              disabled={count[where] === 0}
+              onClick={() => setCount((all) => ({ ...all, [where]: all[where] - 1 }))}
+            >
+              −
+            </button>
+            <span className="tabular w-8 text-center text-[22px] font-bold">{count[where]}</span>
+            <button
+              type="button"
+              aria-label={`${t.more}: ${label[where]}`}
+              className={cn(stepper, "size-11 text-2xl")}
+              disabled={left === 0}
+              onClick={() => setCount((all) => ({ ...all, [where]: all[where] + 1 }))}
+            >
+              +
+            </button>
+          </li>
+        ))}
+      </ul>
+      <div className="flex items-center gap-3 rounded-2xl bg-surface px-4 py-3">
+        <span className="text-[15px] font-semibold">{t.splitRest}</span>
+        <select
+          aria-label={t.splitRest}
+          value={rest}
+          onChange={(event) => {
+            const next = event.target.value as Disposition;
+            // What was counted for the new place becomes part of the rest, and the old rest starts at 0.
+            setCount((all) => ({ ...all, [next]: 0, [rest]: 0 }));
+            setRest(next);
+          }}
+          className="h-10 min-w-0 flex-1 rounded-xl bg-card px-2 text-[14px] font-semibold"
+        >
+          {order.map((where) => (
+            <option key={where} value={where}>
+              {label[where]}
+            </option>
+          ))}
+        </select>
+        <span className="tabular w-8 shrink-0 text-right text-[22px] font-bold">{left}</span>
+      </div>
+      <button
+        type="button"
+        className={primary}
+        onClick={() =>
+          onSave({
+            ...Object.fromEntries(others.filter((where) => count[where] > 0).map((where) => [where, count[where]])),
+            ...(left > 0 ? { [rest]: left } : {}),
+          })
+        }
+      >
+        {t.save}
+      </button>
+    </Sheet>
   );
 }
 

@@ -141,6 +141,8 @@ export type RefillLine = {
 
 export type RefillSheet = {
   id: string;
+  /** "Ronde 12": its number within the organisation, from 1. Absent where it is not read. */
+  number?: number;
   share_token: string;
   /** The machines the round goes to: the ones with something to fill. */
   machine_ids: string[];

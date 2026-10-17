@@ -63,24 +63,10 @@ export function RoundReport({ items, heading }: { items: ItemReport[]; heading: 
 
   if (items.length === 0) return <p className="text-sm text-muted-foreground">{t.reportEmpty}</p>;
 
-  const total = (pick: (item: ItemReport) => number) => items.reduce((sum, item) => sum + pick(item), 0);
-  const totals = [
-    { label: t.reportFilled, value: total((i) => i.filled) },
-    { label: t.reportBack, value: total((i) => i.back) },
-    { label: t.reportExpired, value: total((i) => i.out.expired) },
-    { label: t.reportShort, value: total((i) => i.short) },
-  ].filter((entry, index) => index === 0 || entry.value > 0);
-
+  // The totals stand above, as figures; here product by product, and the copy to paste.
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-x-5 gap-y-1">
-          {totals.map((entry) => (
-            <span key={entry.label} className="text-[14.5px] text-muted-foreground">
-              <b className="tabular text-[17px] text-foreground">{entry.value}</b> {entry.label}
-            </span>
-          ))}
-        </div>
+      <div className="flex justify-end">
         <Button variant="secondary" size="sm" onClick={copy} className="shrink-0">
           {copied ? <Check /> : <Copy />}
           {copied ? t.reportCopied : t.reportCopy}
