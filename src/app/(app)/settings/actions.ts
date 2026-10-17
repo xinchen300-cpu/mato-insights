@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { featureAllowed } from "@/lib/billing";
 import { checkPayterLogin } from "@/lib/payter-login";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { denyFillerAccess, getCurrentBusinessId, getCurrentOrgId, requireOperator } from "@/lib/org";
@@ -146,6 +147,8 @@ export async function saveRentsToBusinesses(rents: boolean): Promise<void> {
   await requireOperator();
   const orgId = await getCurrentOrgId();
   if (!orgId) throw new Error("Not found");
+  // Renting to businesses is a package's to give (Automatenshop); switching it off never is.
+  if (rents === true && !(await featureAllowed(orgId, "shareWithShops"))) throw new Error("Not in this package");
   const { error } = await createAdminClient()
     .from("organizations")
     .update({ rents_to_businesses: rents === true })

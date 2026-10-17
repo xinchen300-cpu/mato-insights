@@ -6,6 +6,8 @@
  * Prijzen, grenzen en wat erin zit staan hier en nergens anders. Verander een
  * getal hieronder en de wizard, het abonnementsblok en de mails volgen.
  * Beslist met Xin op 04-10-2026: Solo € 19, Zaak € 49, Automatenshop € 99.
+ * Verhuren aan zaken (een automaat opsplitsen, zaken laten meekijken) zit
+ * sinds 17-10-2026 alleen in Automatenshop: een zaak verhuurt niets.
  * ───────────────────────────────────────────────────────────────────────────
  *
  * One rule that keeps this app from turning into Televend: a package never
@@ -16,6 +18,7 @@
  */
 export type PlanId = "solo" | "zaak" | "automatenshop";
 
+/** shareWithShops: renting machines or slots to businesses, who look along at their own sales. */
 export type Feature = "refill" | "shareWithShops" | "phoneSupport" | "rentalStatement";
 
 export type Plan = {
@@ -38,7 +41,7 @@ export const PLANS: Plan[] = [
     pricePerMonth: 49,
     maxMachines: 5,
     aiQuestions: 150,
-    features: ["refill", "shareWithShops"],
+    features: ["refill"],
     featured: true,
   },
   {

@@ -276,3 +276,9 @@ ok("order: a machine on the round but not chosen comes after, once", roundOrder(
 const fullAtShop = onlyMine({ ...shared, chosen_machine_ids: ["fridge", "full-theirs", "other"] } as RefillSheet, view);
 ok("shop: a full machine of another business stays out of its run", fullAtShop.chosen_machine_ids?.join() === "fridge");
 ok("shop: a run read without the chosen list gets none", !("chosen_machine_ids" in onlyMine(shared, view)));
+
+// ── Renting to businesses is Automatenshop's (src/lib/plans.ts) ──
+import { cheapestWith, planAllows, planById } from "../src/lib/plans.ts";
+ok("plans: a zaak rents nothing to businesses, an automatenshop does", !planAllows(planById("zaak"), "shareWithShops") && planAllows(planById("automatenshop"), "shareWithShops"));
+ok("plans: the lock note points at Automatenshop", cheapestWith("shareWithShops").id === "automatenshop");
+ok("plans: an account from before packages keeps everything", planAllows(null, "shareWithShops"));

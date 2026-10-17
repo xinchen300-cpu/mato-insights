@@ -812,7 +812,7 @@ export const en = {
     featureBasics: "Sales, slots and alerts",
     featureEvening: "Evening summary on your phone",
     featureRefill: "Refill runs and trip costs",
-    featureShare: "Let businesses renting slots see their figures",
+    featureShare: "Split machines and rent them to businesses",
     featurePhone: "Phone support",
     featureAllOf: "Everything in {plan}",
     soonAi: "Coming soon: {count} questions a month about your own figures",

@@ -15,7 +15,7 @@ import {
   getTeam,
 } from "@/lib/data";
 import { mediaUrl } from "@/lib/media";
-import { getBilling, paymentsEnabled } from "@/lib/billing";
+import { billingAllows, getBilling, paymentsEnabled } from "@/lib/billing";
 import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -81,6 +81,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   // those (in this organisation, not left out of the sync).
   const linked = billing ? machines.length : 0;
 
+  // Renting machines or slots to businesses is in Automatenshop only: without
+  // it the choice is not offered, unless the account rents already (then it
+  // can still be switched off).
+  const rents = Boolean(org?.rents_to_businesses);
+  const canRent = Boolean(ownBilling && billingAllows(ownBilling, Boolean(org?.is_demo), "shareWithShops"));
+
   const payterConnected = Boolean(credentials || vendor?.is_demo);
   const {
     data: { user },
@@ -107,9 +113,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           />
         )}
 
-        {operator && orgId && (
+        {operator && orgId && (canRent || rents) && (
           <Section title={m.settings.kindTitle}>
-            <AccountKind rents={Boolean(org?.rents_to_businesses)} />
+            <AccountKind rents={rents} />
           </Section>
         )}
 
@@ -247,7 +253,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         )}
 
         {/* Businesses are an automatenshop's; a zaak runs its own machines. */}
-        {Boolean(org?.rents_to_businesses) && (
+        {rents && (
           <Section
             title={m.businesses.title}
             actions={

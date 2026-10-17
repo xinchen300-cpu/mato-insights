@@ -85,10 +85,13 @@ export async function getBilling(orgId: string): Promise<Billing> {
 export async function featureAllowed(orgId: string, feature: Feature): Promise<boolean> {
   const billing = await getBilling(orgId);
   if (billing.isVendor) return true;
-  // A demo shows everything the app can do.
   const { data: org } = await createAdminClient().from("organizations").select("is_demo").eq("id", orgId).maybeSingle();
-  if (org?.is_demo) return true;
-  return planAllows(billing.plan, feature);
+  return billingAllows(billing, Boolean(org?.is_demo), feature);
+}
+
+/** The same answer from what a page already read: the vendor and a demo (which shows everything the app can do) have it all. */
+export function billingAllows(billing: Pick<Billing, "isVendor" | "plan">, isDemo: boolean, feature: Feature): boolean {
+  return billing.isVendor || isDemo || planAllows(billing.plan, feature);
 }
 
 /** Machines the operator has claimed: the number a package is measured against. */

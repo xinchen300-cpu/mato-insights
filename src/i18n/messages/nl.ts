@@ -812,7 +812,7 @@ export const nl: Messages = {
     featureBasics: "Omzet, vakken en alarmen",
     featureEvening: "Avondbericht op je gsm",
     featureRefill: "Bijvulrondes en ritkosten",
-    featureShare: "Zaken die vakken huren laten meekijken",
+    featureShare: "Automaten opsplitsen en verhuren aan zaken",
     featurePhone: "Telefonische hulp",
     featureAllOf: "Alles van {plan}",
     soonAi: "Binnenkort: {count} vragen per maand aan je eigen cijfers",

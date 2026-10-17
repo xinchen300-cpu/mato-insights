@@ -812,7 +812,7 @@ export const fr: Messages = {
     featureBasics: "Ventes, cases et alertes",
     featureEvening: "Résumé du soir sur votre GSM",
     featureRefill: "Tournées de remplissage et coût des trajets",
-    featureShare: "Montrer leurs chiffres aux commerces qui louent des cases",
+    featureShare: "Partager des distributeurs et les louer à des commerces",
     featurePhone: "Aide par téléphone",
     featureAllOf: "Tout ce qu'offre {plan}",
     soonAi: "Bientôt : {count} questions par mois sur vos propres chiffres",
