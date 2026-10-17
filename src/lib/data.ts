@@ -926,6 +926,60 @@ export async function getLiveSold(orgId: string, options: { after?: string | nul
   }));
 }
 
+/** What sold over the last 30 days and when, as a filler sees it: pieces only, never an amount. */
+export type SoldReport = {
+  from: string;
+  to: string;
+  /** Linked products that sold, most pieces first. */
+  products: { productId: string; name: string | null; photoPath: string | null; units: number }[];
+  hours: { hour: number; units: number }[];
+  /**
+   * Machines where one slot takes several prices: several products go through
+   * one number there, so what sold per product is not certain (see getPriceMismatches).
+   */
+  mixed: string[];
+};
+
+/**
+ * The best sellers and busiest hours for whoever fills (the operator or a
+ * filler, never a shop): the statistics' own report, with every amount taken
+ * out here, on the server, so none reaches the phone.
+ */
+export async function getSoldReport(orgId: string): Promise<SoldReport> {
+  if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
+  const admin = createAdminClient();
+  const [report, mismatches] = await Promise.all([
+    admin.rpc("stats_report", {
+      target_org: orgId,
+      period: "last30",
+      custom_from: null,
+      custom_to: null,
+      machine_filter: null,
+      business_filter: null,
+      product_filter: null,
+    }),
+    admin.rpc("price_mismatch", { target_org: orgId, days_back: 90 }),
+  ]);
+  if (report.error) throw new Error(report.error.message);
+  if (mismatches.error) throw new Error(mismatches.error.message);
+  const data = report.data as StatsReport;
+  return {
+    from: data.cur_start,
+    to: data.cur_end,
+    // By pieces, as the statistics rank them; the revenue that breaks a tie there is not for this screen.
+    products: data.by_product
+      .filter((row) => row.product_id && row.units > 0)
+      .sort((a, b) => b.units - a.units)
+      .map((row) => ({ productId: row.product_id!, name: row.product_name, photoPath: row.photo_path, units: row.units })),
+    hours: data.by_hour.map((row) => ({ hour: row.hour, units: row.units })),
+    mixed: [
+      ...new Set(
+        ((mismatches.data ?? []) as PriceMismatch[]).filter((row) => Number(row.spread) > 0).map((row) => row.machine_name),
+      ),
+    ],
+  };
+}
+
 async function liveSales(
   orgId: string,
   { after = null, limit = 6 }: { after?: string | null; limit?: number } = {},

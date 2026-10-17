@@ -20,7 +20,8 @@ export async function generateMetadata() {
 
 /**
  * A filler's machines: the same tiles as on their refill page, in the owner's
- * route order. No businesses and no sales; a tap opens the machine to fill.
+ * route order, and also those still waiting for a layout. No businesses and no
+ * sales; a tap opens the machine to fill.
  */
 async function FillerMachines({ orgId }: { orgId: string }) {
   const { m } = await getI18n();
@@ -28,7 +29,7 @@ async function FillerMachines({ orgId }: { orgId: string }) {
   return (
     <>
       <PageHeader title={m.machines.title} />
-      <MachineGrid machines={gridMachines(fleet, slots, settings.route)} m={m} from="machines" />
+      <MachineGrid machines={gridMachines(fleet, slots, settings.route, { withoutLayout: true })} m={m} from="machines" />
     </>
   );
 }

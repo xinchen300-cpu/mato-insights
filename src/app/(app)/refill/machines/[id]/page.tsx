@@ -15,6 +15,7 @@ import { bandBg, fillLevel, machineFill, machineTotals, needsAttention } from "@
 import { terminalStatus } from "@/lib/terminal-status";
 import { cn } from "@/lib/utils";
 import { FillButton } from "./fill-button";
+import { StockAdjust } from "./stock-adjust";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -96,7 +97,8 @@ export default async function FillMachinePage({
                 {m.refill.toRound}
               </Link>
             ) : (
-              <FillButton machineId={id} />
+              // A machine without a layout has nothing to fill yet.
+              stocked.length > 0 && <FillButton machineId={id} />
             )}
           </div>
         </div>
@@ -119,6 +121,13 @@ export default async function FillMachinePage({
             </div>
           )}
         </Section>
+
+        {/* Set a count right on the spot, product by product. */}
+        {stocked.length > 0 && (
+          <Section title={fmt(m.stock.correctTitle, { machine: machine.name })} hint={m.stock.correctHint}>
+            <StockAdjust machineId={id} slots={stocked} />
+          </Section>
+        )}
       </div>
     </>
   );

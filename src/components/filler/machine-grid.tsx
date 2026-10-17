@@ -18,17 +18,29 @@ export type GridMachine = {
   fill: { percent: number; band: FillBand } | null;
   /** Slots nearly or completely empty. */
   low: number;
+  /** No layout yet, so nothing to count or fill in it. */
+  noLayout?: boolean;
 };
 
-/** The tiles: every machine with a product in a slot, in the owner's route order. */
-export function gridMachines(fleet: Machine[], slots: SlotStock[], route: string[]): GridMachine[] {
+/**
+ * The tiles: every machine with a product in a slot, in the owner's route order.
+ * With `withoutLayout`, also the machines still waiting for a layout (not the
+ * "other" kind, which never gets one), so a filler sees the whole fleet.
+ */
+export function gridMachines(
+  fleet: Machine[],
+  slots: SlotStock[],
+  route: string[],
+  { withoutLayout = false }: { withoutLayout?: boolean } = {},
+): GridMachine[] {
   const stocked = slots.filter((slot) => slot.product_id);
   const totals = machineTotals(stocked.map((slot) => ({ machine_id: slot.machine_id, stock: slot.stock, capacity: slot.capacity })));
   const low = new Map<string, number>();
   for (const slot of stocked) {
     if (needsAttention(fillLevel(slot.stock, slot.capacity))) low.set(slot.machine_id, (low.get(slot.machine_id) ?? 0) + 1);
   }
-  return orderByRoute(fleet.filter((mc) => totals.has(mc.id)).map((mc) => mc.id), route).map((id) => {
+  const shown = fleet.filter((mc) => totals.has(mc.id) || (withoutLayout && mc.type !== "other"));
+  return orderByRoute(shown.map((mc) => mc.id), route).map((id) => {
     const machine = fleet.find((mc) => mc.id === id)!;
     const total = totals.get(id);
     return {
@@ -38,6 +50,7 @@ export function gridMachines(fleet: Machine[], slots: SlotStock[], route: string
       status: terminalStatus(machine.last_connected_at, machine.last_disconnected_at),
       fill: total ? machineFill(total.stock, total.capacity, total.counted) : null,
       low: low.get(id) ?? 0,
+      noLayout: !total,
     };
   });
 }
@@ -71,7 +84,13 @@ export function MachineGrid({ machines, m, from }: { machines: GridMachine[]; m:
             <span className="flex flex-col gap-0.5 p-3">
               <span className="truncate text-[15px] font-semibold tracking-[-0.01em]">{machine.name}</span>
               <span className={cn("text-[13px] leading-snug", machine.low > 0 ? "font-medium text-level-low" : "text-muted-foreground")}>
-                {machine.low > 0 ? fmt(m.overview.slotsLow, { count: machine.low }) : machine.fill ? m.refill.machineOk : m.overview.stockUnknown}
+                {machine.low > 0
+                  ? fmt(m.overview.slotsLow, { count: machine.low })
+                  : machine.noLayout
+                    ? m.machines.noLayout
+                    : machine.fill
+                      ? m.refill.machineOk
+                      : m.overview.stockUnknown}
               </span>
             </span>
           </Link>

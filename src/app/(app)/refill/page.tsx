@@ -75,14 +75,14 @@ export default async function RefillPage() {
       <>
         <PageHeader title={name ? fmt(m.round.hello, { name }) : m.refill.title} />
         <div className="flex flex-col gap-8">
-          {next && <NextRound round={next} m={m} />}
-          {/* What sells, as it happens, without amounts; then every machine to open and fill. */}
-          <LiveSold initial={sold} />
+          {/* Every machine first, how full each is (Xin, 17-10-2026); then the round to do and what sells, without amounts. */}
           {grid.length > 0 && (
             <Section title={m.refill.machinesTitle}>
               <MachineGrid machines={grid} m={m} />
             </Section>
           )}
+          {next && <NextRound round={next} m={m} />}
+          <LiveSold initial={sold} />
           {/* Someone new sees how a round goes; after the first one, their own figures. */}
           {stats.rounds > 0 ? <FiguresCard stats={stats} /> : <HowItWorks />}
           <OpenRounds rounds={rounds.filter((round) => round.id !== next?.id)} m={m} f={f} />

@@ -38,6 +38,7 @@ export const en = {
     products: "Products",
     refill: "Refill",
     statistics: "Statistics",
+    sales: "Sales",
     settings: "Settings",
     unassigned: "Unassigned",
     businesses: "Businesses",

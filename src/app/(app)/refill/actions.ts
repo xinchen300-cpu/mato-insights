@@ -3,8 +3,9 @@
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { isFiller, isOperator, requireOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
-import { getMachines } from "@/lib/data";
+import { getSessionUser, isFiller, isOperator, requireOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
+import { getMachineStock, getMachines } from "@/lib/data";
+import { displayName } from "@/lib/people";
 import { featureAllowed } from "@/lib/billing";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { RefillLine } from "@/lib/types";
@@ -183,4 +184,39 @@ export async function saveRoute(route: string[], legs: Record<string, number | n
   if (error) throw new Error(error.message);
   revalidatePath("/refill/route");
   revalidatePath("/refill");
+}
+
+/**
+ * What is in a machine's slots, corrected by whoever fills it with a plus or a
+ * minus (Xin, 17-10-2026): the operator or a filler, never a shop. Products and
+ * capacities come from the machine itself, never from the phone; a selection
+ * without a product, or a count beyond what fits, is dropped. Saved as a
+ * correction, so no new expiry batch is made: filling goes through a round.
+ */
+export async function correctStock(machineId: string, entries: { selection: string; level: number }[]) {
+  const orgId = await requireRefillAccess();
+  if (!/^[0-9a-f-]{36}$/i.test(machineId)) throw new Error("Not found");
+  // Empty for a machine of another organisation, or one without a layout.
+  const slots = new Map(
+    (await getMachineStock(orgId, [machineId])).filter((slot) => slot.product_id).map((slot) => [slot.selection_number, slot]),
+  );
+  if (slots.size === 0) throw new Error("Not found");
+  // One count per selection: the same one twice would write two corrections.
+  const clean = [...new Map(entries.map((entry) => [entry.selection, entry.level])).entries()].flatMap(([selection, level]) => {
+    const slot = slots.get(selection);
+    return slot && Number.isInteger(level) && level >= 0 && level <= slot.capacity
+      ? [{ selection, level_after: level, expires_on: null }]
+      : [];
+  });
+  if (clean.length === 0) return;
+  const { error } = await createAdminClient().rpc("record_stock", {
+    target_org: orgId,
+    target_machine: machineId,
+    event_type: "correction",
+    entries: clean,
+    filler_name: (displayName(await getSessionUser()) ?? "").slice(0, 80),
+    check_state: {},
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/", "layout");
 }

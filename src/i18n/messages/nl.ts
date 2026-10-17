@@ -38,6 +38,7 @@ export const nl: Messages = {
     products: "Producten",
     refill: "Bijvullen",
     statistics: "Statistieken",
+    sales: "Verkoop",
     settings: "Instellingen",
     unassigned: "Niet gekoppeld",
     businesses: "Zaken",

@@ -31,12 +31,14 @@ const items: NavItem[] = [
 ];
 
 /**
- * What a filler may open: the machines and the refill work. Their machines
- * open in the refill pages, so those count as the machines tab.
+ * What a filler may open: the machines, the refill work and what sells, in
+ * pieces. Their machines open in the refill pages, so those count as the
+ * machines tab.
  */
 const fillerItems: NavItem[] = [
   { href: "/machines", label: "machines", icon: MachineIcon, also: "/refill/machines" },
   { href: "/refill", label: "refill", icon: ClipboardList },
+  { href: "/statistics", label: "sales", icon: ChartColumn },
 ];
 
 function matchLength(pathname: string, path: string) {
@@ -95,7 +97,7 @@ export function MobileNav({ filler = false }: { filler?: boolean }) {
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
-      <div className={cn("mx-auto grid max-w-xl px-2", filler ? "grid-cols-2" : "grid-cols-5")}>
+      <div className={cn("mx-auto grid max-w-xl px-2", filler ? "grid-cols-3" : "grid-cols-5")}>
         {list.map(({ href, label, icon: Icon }) => {
           const active = href === current;
           return (

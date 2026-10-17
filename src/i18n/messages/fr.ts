@@ -38,6 +38,7 @@ export const fr: Messages = {
     products: "Produits",
     refill: "Remplir",
     statistics: "Statistiques",
+    sales: "Ventes",
     settings: "Réglages",
     unassigned: "Non liées",
     businesses: "Commerces",
