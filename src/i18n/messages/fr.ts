@@ -372,6 +372,7 @@ export const fr: Messages = {
     stopDone: "Terminé",
     stopSkipped: "Passé",
     stopOpen: "À faire",
+    stopFull: "Était plein",
     stopsTitle: "Arrêts de la tournée",
     filler: "Qui remplit ?",
     fillerHint: "Ainsi l'historique du distributeur indique qui est passé.",

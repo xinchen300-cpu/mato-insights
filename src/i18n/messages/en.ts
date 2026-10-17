@@ -372,6 +372,7 @@ export const en = {
     stopDone: "Done",
     stopSkipped: "Skipped",
     stopOpen: "To do",
+    stopFull: "Was full",
     stopsTitle: "Stops on the round",
     filler: "Who is filling?",
     fillerHint: "So the machine's history shows who was there.",

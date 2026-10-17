@@ -405,8 +405,8 @@ export function RoundFlow({
 
   const isDone = (machineId: string) => Boolean(stops[machineId]?.completedAt) || pendingId === machineId;
   // A machine with nothing planned stood full when the round was made: it
-  // keeps its place on the route with a word, but nobody drives there. Rounds
-  // made since 17-10-2026 leave such a machine off altogether.
+  // keeps its place on the route with a word, but nobody drives there. Since
+  // 17-10-2026 it is only on the route; before, it was among the machines.
   const withWork = useMemo(() => new Set(initial.lines.map((line) => line.machineId)), [initial.lines]);
   const isFull = (machineId: string) => !withWork.has(machineId) && !isDone(machineId);
   const visits = initial.machines.filter((mc) => !isFull(mc.id));
@@ -1009,7 +1009,7 @@ export function RoundFlow({
       state: readyAt ? "done" : "now",
       onOpen: readyAt ? undefined : () => setView("pick"),
     },
-    ...initial.machines.map((machine) => {
+    ...initial.route.map((machine) => {
       if (isFull(machine.id)) {
         return { key: machine.id, title: machine.name, sub: t.fullStop, state: "full" as const, machine: { photoPath: machine.photoPath, id: machine.id } };
       }
@@ -1192,7 +1192,8 @@ export function RoundFlow({
                       {step.sub}
                     </span>
                   </span>
-                  {step.machine && !passed && <FillPill fill={fillOf(step.machine.id)} compact />}
+                  {/* Not for a full one: it was full when the round was made, and sales since would contradict the word. */}
+                  {step.machine && !passed && step.state !== "full" && <FillPill fill={fillOf(step.machine.id)} compact />}
                   {step.aside ? (
                     <span className="shrink-0 text-[13px] font-semibold text-muted-foreground">{step.aside}</span>
                   ) : step.state === "now" && !step.machine ? (

@@ -91,6 +91,15 @@ export function pickList(lines: FlowLine[]): PickRow[] {
   return [...rows.values()].filter((row) => row.take > 0);
 }
 
+/**
+ * A round's machines in their order: every one chosen for it, also one that
+ * stood full when the round was made (it has no lines and is passed by), then
+ * any other on it. Rounds made before 17-10-2026 kept no choice: just theirs.
+ */
+export function roundOrder(chosen: string[], machineIds: string[]): string[] {
+  return [...new Set([...chosen, ...machineIds])];
+}
+
 /** What the box is short of after packing, per product over all machines, most first. */
 export function shortages(rows: PickRow[], picked: Record<string, number>): { productId: string; name: string; n: number }[] {
   const byProduct = new Map<string, { productId: string; name: string; n: number }>();
@@ -245,6 +254,8 @@ export function onlyMine(sheet: RefillSheet, view: ShopView): RefillSheet {
     // about the co-tenant's machine.
     notes: null,
     machine_ids: sheet.machine_ids.filter((id) => view.machines.includes(id)),
+    // A machine that stood full is still another business's machine.
+    ...(sheet.chosen_machine_ids ? { chosen_machine_ids: sheet.chosen_machine_ids.filter((id) => view.machines.includes(id)) } : {}),
     lines,
     // Flow 2 keeps progress per machine and the box per machine and product.
     stops: Object.fromEntries(

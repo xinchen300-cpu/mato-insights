@@ -372,6 +372,7 @@ export const nl: Messages = {
     stopDone: "Klaar",
     stopSkipped: "Overgeslagen",
     stopOpen: "Nog te doen",
+    stopFull: "Stond vol",
     stopsTitle: "Stops van de ronde",
     filler: "Wie vult bij?",
     fillerHint: "Zo weet je bij de geschiedenis van de automaat wie er geweest is.",

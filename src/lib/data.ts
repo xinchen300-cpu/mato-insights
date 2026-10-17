@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { denyFillerAccess, getScope, getSessionUser, isFiller, isOperator, requireOperator, requireRefillAccess, type Role } from "@/lib/org";
 import { displayName } from "@/lib/people";
 import { cleanRoundSettings, type RoundSettings } from "@/lib/round-settings";
-import { onlyMine, roundTimings, slotKey, type Average, type FlowLine, type RoundTimings, type ShopView, type StopRecord } from "@/lib/refill-flow";
+import { onlyMine, roundOrder, roundTimings, slotKey, type Average, type FlowLine, type RoundTimings, type ShopView, type StopRecord } from "@/lib/refill-flow";
 import type { MyRound } from "@/lib/filler-stats";
 import { terminalStatus, type TerminalStatus } from "@/lib/terminal-status";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
@@ -157,8 +157,13 @@ export type RefillRound = {
   startedAt: string | null;
   readyAt: string | null;
   completedAt: string | null;
-  /** In the order of the round. */
+  /** The machines to visit, in the order of the round. */
   machines: RoundMachine[];
+  /**
+   * Every machine chosen for the round, in its order: the ones to visit, and
+   * one that stood full when it was made, shown with a word and passed by.
+   */
+  route: RoundMachine[];
   lines: FlowLine[];
   slots: RoundSlot[];
   picked: Record<string, number>;
@@ -186,25 +191,37 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
   const admin = createAdminClient();
   const { data: sheet } = await admin
     .from("refill_sheets")
-    .select("id, flow_version, created_at, started_at, ready_at, completed_at, machine_ids, lines, box, stops, notes")
+    .select("id, flow_version, created_at, started_at, ready_at, completed_at, machine_ids, chosen_machine_ids, lines, box, stops, notes")
     .eq("id", sheetId)
     .eq("org_id", orgId)
     .maybeSingle();
   if (!sheet) return null;
 
   const machineIds = (sheet.machine_ids ?? []) as string[];
+  // The full ones too: their place on the route and how full they are now.
+  const order = roundOrder((sheet.chosen_machine_ids ?? []) as string[], machineIds);
   const [{ data: machineRows }, stock, lastSales, { data: org }] = await Promise.all([
     admin
       .from("machines")
       .select("id, name, photo_path, last_connected_at, last_disconnected_at")
       .eq("org_id", orgId)
-      .in("id", machineIds.length ? machineIds : [NOTHING]),
-    getMachineStock(orgId, machineIds.length ? machineIds : [NOTHING]),
+      .in("id", order.length ? order : [NOTHING]),
+    getMachineStock(orgId, order.length ? order : [NOTHING]),
     getLastSales(orgId),
     admin.from("organizations").select("refill_settings").eq("id", orgId).maybeSingle(),
   ]);
   const byId = new Map((machineRows ?? []).map((row) => [row.id as string, row]));
   const live = new Map(stock.map((slot) => [slotKey(slot.machine_id, slot.selection_number), slot]));
+  const roundMachine = (id: string): RoundMachine => {
+    const row = byId.get(id)!;
+    return {
+      id,
+      name: row.name as string,
+      status: terminalStatus(row.last_connected_at as string | null, row.last_disconnected_at as string | null),
+      lastSale: lastSales.get(id) ?? null,
+      photoPath: (row.photo_path as string | null) ?? null,
+    };
+  };
 
   const lines: FlowLine[] = ((sheet.lines ?? []) as RefillLine[])
     .filter((line) => byId.has(line.machine_id))
@@ -232,18 +249,8 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
     startedAt: (sheet.started_at as string | null) ?? null,
     readyAt: (sheet.ready_at as string | null) ?? null,
     completedAt: (sheet.completed_at as string | null) ?? null,
-    machines: machineIds
-      .filter((id) => byId.has(id))
-      .map((id) => {
-        const row = byId.get(id)!;
-        return {
-          id,
-          name: row.name as string,
-          status: terminalStatus(row.last_connected_at as string | null, row.last_disconnected_at as string | null),
-          lastSale: lastSales.get(id) ?? null,
-          photoPath: (row.photo_path as string | null) ?? null,
-        };
-      }),
+    machines: machineIds.filter((id) => byId.has(id)).map(roundMachine),
+    route: order.filter((id) => byId.has(id)).map(roundMachine),
     lines,
     slots: stock
       .filter((slot) => slot.product_id)
@@ -1362,7 +1369,7 @@ export async function getRefillSheet(orgId: string, id: string): Promise<RefillS
   const mine = await ownMachineIds(orgId);
   const { data } = await createAdminClient()
     .from("refill_sheets")
-    .select("id, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box, flow_version, stops, returns")
+    .select("id, share_token, machine_ids, chosen_machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box, flow_version, stops, returns")
     .eq("org_id", orgId)
     .eq("id", id)
     .maybeSingle();

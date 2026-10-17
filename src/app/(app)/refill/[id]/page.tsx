@@ -13,7 +13,7 @@ import { getMachines, getOpenRounds, getRefillSheet, getRoundSettings, getRunRat
 import { routeKm } from "@/lib/round-settings";
 import type { Machine, RunSummaryRow } from "@/lib/types";
 import { linesToFill } from "@/lib/refill";
-import { roundActual, roundCost } from "@/lib/refill-flow";
+import { roundActual, roundCost, roundOrder } from "@/lib/refill-flow";
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
 import { cn } from "@/lib/utils";
 import { CancelRound } from "./cancel-round";
@@ -227,8 +227,10 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
           {step && (
             <Section title={m.refill.stopsTitle} hint={sheet.started_at ? m.refill.stopsHint : undefined}>
               <RowList>
-                {sheet.machine_ids.map((machineId) => {
+                {roundOrder(sheet.chosen_machine_ids ?? [], sheet.machine_ids).map((machineId) => {
                   const stop = sheet.stops?.[machineId];
+                  // Chosen while it stood full: on the route, nothing to do there.
+                  const passedBy = !stop?.completedAt && !sheet.lines.some((line) => line.machine_id === machineId);
                   // Minutes since the stop before it was done (or since the
                   // start): the drive there and the work at the machine.
                   const doneAt = stop?.completedAt ?? null;
@@ -253,10 +255,16 @@ export default async function RefillSheetPage({ params }: { params: Promise<{ id
                             {stop?.completedAt && !stop.skipped ? <CircleCheck /> : <MachineIcon />}
                           </Avatar>
                         }
-                        title={name}
+                        title={<span className={cn(passedBy && "text-muted-foreground")}>{name}</span>}
                         value={
                           <span className="text-[13.5px] font-medium text-muted-foreground">
-                            {stop?.completedAt ? (stop.skipped ? m.refill.stopSkipped : m.refill.stopDone) : m.refill.stopOpen}
+                            {stop?.completedAt
+                              ? stop.skipped
+                                ? m.refill.stopSkipped
+                                : m.refill.stopDone
+                              : passedBy
+                                ? m.refill.stopFull
+                                : m.refill.stopOpen}
                           </span>
                         }
                         valueSub={

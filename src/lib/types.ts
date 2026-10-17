@@ -142,7 +142,13 @@ export type RefillLine = {
 export type RefillSheet = {
   id: string;
   share_token: string;
+  /** The machines the round goes to: the ones with something to fill. */
   machine_ids: string[];
+  /**
+   * Every machine chosen for the round, in its order, also one that stood full
+   * and is passed by. Empty before 17-10-2026; absent where it is not read.
+   */
+  chosen_machine_ids?: string[];
   notes: string | null;
   lines: RefillLine[];
   created_at: string;

@@ -59,6 +59,12 @@ function doneStop(machineId: string, plan: FlowLine[], checkedAt: number, comple
 
 export function previewRound(scenario: Scenario, now: number): RefillRound {
   const plan = lines();
+  const roundMachine = (machine: { id: string; name: string }, i: number) => ({
+    ...machine,
+    photoPath: null,
+    status: machine.id === "m-gits" ? ("offline" as const) : ("online" as const),
+    lastSale: iso(now - minutes(25 + i * 40)),
+  });
   const picked = Object.fromEntries(
     plan.reduce((sum, line) => sum.set(`${line.machineId}:${line.productId}`, (sum.get(`${line.machineId}:${line.productId}`) ?? 0) + line.take), new Map<string, number>()),
   );
@@ -79,12 +85,8 @@ export function previewRound(scenario: Scenario, now: number): RefillRound {
     startedAt: readyAt === null ? null : iso(readyAt),
     readyAt: readyAt === null ? null : iso(readyAt),
     completedAt: finished ? iso(now) : null,
-    machines: [...MACHINES.slice(0, 2), FULL, ...MACHINES.slice(2)].map((machine, i) => ({
-      ...machine,
-      photoPath: null,
-      status: i === 3 ? "offline" : "online",
-      lastSale: iso(now - minutes(25 + i * 40)),
-    })),
+    machines: MACHINES.map(roundMachine),
+    route: [...MACHINES.slice(0, 2), FULL, ...MACHINES.slice(2)].map(roundMachine),
     lines: plan,
     slots: [
       ...plan.map((line) => ({

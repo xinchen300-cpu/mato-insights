@@ -267,3 +267,12 @@ ok("slot: not touched is not done; half is not done; all is done", !slotTally(2,
 ok("slot: a typed number is final, also below the plan", isDeepStrictEqual(slotTally(2, 1, true), { n: 1, aim: 1, done: true }) && slotTally(2, 3, true).done);
 ok("slot: nothing set aside is done before it starts", slotTally(0, undefined).done && slotTally(0, undefined).aim === 0);
 ok("slot: typed without a number is not typed", !slotTally(2, undefined, true).done);
+
+// ── A machine that stood full: on the route, not among the ones to visit ──
+import { roundOrder } from "../src/lib/refill-flow.ts";
+ok("order: the chosen order, the full one in its place", roundOrder([mA, mB, mC], [mA, mC]).join() === [mA, mB, mC].join());
+ok("order: a round from before keeps its own machines", roundOrder([], [mC, mA]).join() === [mC, mA].join());
+ok("order: a machine on the round but not chosen comes after, once", roundOrder([mA, mB], [mB, mD]).join() === [mA, mB, mD].join());
+const fullAtShop = onlyMine({ ...shared, chosen_machine_ids: ["fridge", "full-theirs", "other"] } as RefillSheet, view);
+ok("shop: a full machine of another business stays out of its run", fullAtShop.chosen_machine_ids?.join() === "fridge");
+ok("shop: a run read without the chosen list gets none", !("chosen_machine_ids" in onlyMine(shared, view)));
