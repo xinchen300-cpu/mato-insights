@@ -451,6 +451,7 @@ export const nl: Messages = {
     toRound: "Naar de ronde",
     stockTitle: "Voorraad per vak",
     adjustCounts: "Aantallen aanpassen",
+    fillAllSlots: "Alles bijvullen",
     countsHint: "Klopt een aantal niet? Druk op Aantallen aanpassen.",
     countsEditingHint: "Zet met − en + hoeveel er in elk vak zit en sla op.",
     layoutHint: "Kies per vak een product, pas nummers aan of zet meer of minder vakken in een rij.",
