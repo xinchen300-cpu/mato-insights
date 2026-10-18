@@ -453,6 +453,7 @@ export const fr: Messages = {
     toRound: "Aller à la tournée",
     stockTitle: "Stock par emplacement",
     adjustCounts: "Modifier les quantités",
+    fillAllSlots: "Tout remplir",
     countsHint: "Une quantité est fausse ? Appuyez sur Modifier les quantités.",
     countsEditingHint: "Réglez avec − et + la quantité de chaque case, puis enregistrez.",
     layoutHint: "Choisissez un produit par case, modifiez les numéros ou le nombre de cases par rangée.",

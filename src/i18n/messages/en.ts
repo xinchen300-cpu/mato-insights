@@ -453,6 +453,7 @@ export const en = {
     toRound: "Go to the round",
     stockTitle: "Stock per slot",
     adjustCounts: "Adjust counts",
+    fillAllSlots: "Fill everything",
     countsHint: "A count is wrong? Tap Adjust counts.",
     countsEditingHint: "Use − and + to set how many are in each slot, then save.",
     layoutHint: "Pick a product for each slot, change numbers or how many slots a row has.",

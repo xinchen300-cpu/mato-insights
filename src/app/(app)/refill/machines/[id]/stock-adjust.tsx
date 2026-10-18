@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Minus, Plus, SlidersHorizontal } from "lucide-react";
+import { Minus, PackagePlus, Plus, SlidersHorizontal } from "lucide-react";
 import { FrontView, StockLegend, type FrontSlot } from "@/components/machine/front-view";
 import { Section } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,17 @@ export function StockAdjust({ machineId, slots }: { machineId: string; slots: Sl
       return { ...current, [slot.selection_number]: Math.max(0, Math.min(slot.capacity, now + by)) };
     });
   }
+
+  /** Every slot with a product up to what it holds (Xin, 19-10-2026): after a full refill, one tap and "save". */
+  function fillAll() {
+    haptic();
+    setResult(null);
+    setLevels((current) => ({
+      ...current,
+      ...Object.fromEntries(slots.filter((slot) => slot.product_id).map((slot) => [slot.selection_number, slot.capacity])),
+    }));
+  }
+  const allFull = slots.every((slot) => !slot.product_id || (levels[slot.selection_number] ?? slot.stock) === slot.capacity);
 
   function stop() {
     setEditing(false);
@@ -135,6 +146,10 @@ export function StockAdjust({ machineId, slots }: { machineId: string; slots: Sl
       {editing && (
         // Clears the tab bar on phones, the iPhone's home bar included.
         <div className="surface-card sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 mt-2 flex flex-col gap-2 bg-card/95 p-3 backdrop-blur-xl lg:bottom-4">
+          <Button size="lg" variant="outline" onClick={fillAll} disabled={busy || allFull} className="w-full sm:w-auto sm:self-start">
+            <PackagePlus />
+            {m.refill.fillAllSlots}
+          </Button>
           <div className="flex gap-2">
             <Button size="lg" onClick={save} disabled={busy || changed.length === 0} className="flex-1 sm:flex-none">
               {busy ? m.common.saving : m.stock.saveCorrection}
