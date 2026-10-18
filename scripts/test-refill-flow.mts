@@ -303,18 +303,8 @@ const figures = roundFigures(itemReport(
 ));
 ok("figures: taken, filled, Too Good To Go, thrown away and short", figures.taken === 5 && figures.filled === 3 && figures.went.promo === 1 && figures.went.waste === 1 && figures.went.stock === 0 && figures.short === 1);
 
-// ── Out the day before, and what to bring tomorrow (src/lib/refill-flow.ts, 18-10-2026) ──
-import { removalsDue, stillMissing } from "../src/lib/refill-flow.ts";
-const due = removalsDue([
-  { machineId: "m1", selection: "1", expiresAt: "2026-10-17", remaining: 2 },
-  { machineId: "m1", selection: "1", expiresAt: "2026-10-18", remaining: 1 },
-  { machineId: "m1", selection: "1", expiresAt: "2026-10-19", remaining: 1 },
-  { machineId: "m1", selection: "3", expiresAt: "2026-10-20", remaining: 3 },
-  { machineId: "m1", selection: "5", expiresAt: null, remaining: 2 },
-  { machineId: "m1", selection: "7", expiresAt: "2026-10-16", remaining: 0 },
-], "2026-10-18", "2026-10-19");
-ok("due: past the date is expired, today and tomorrow are near", due.get(slotKey("m1", "1"))?.expired === 2 && due.get(slotKey("m1", "1"))?.near === 2);
-ok("due: the day after tomorrow, no date or nothing left is not due", !due.has(slotKey("m1", "3")) && !due.has(slotKey("m1", "5")) && !due.has(slotKey("m1", "7")));
+// ── What to bring tomorrow (src/lib/refill-flow.ts, 18-10-2026) ──
+import { stillMissing } from "../src/lib/refill-flow.ts";
 const stopAt = (filled: Record<string, number>, skipped = false): StopRecord => ({ checkedAt: null, completedAt: "x", skipped, technical: false, note: null,
   lines: Object.entries(filled).map(([selection, n]) => ({ selection, prepared: n, filled: n, removed: [], countAfter: null, full: false })) });
 // bami: 3 to take, 2 in the box, slot 63 stayed empty → 1 tomorrow. nasi: all in the box, slot 3 got 1 (fuller than thought) → the other came back, nothing tomorrow.
@@ -325,35 +315,6 @@ ok("tomorrow: never more than the box was short", stillMissing(lines, { [pickKey
 
 // ── What a slot takes on a round (src/lib/refill-flow.ts) ──
 import { lineTake } from "../src/lib/refill-flow.ts";
-ok("take: what it lacks plus what comes out", lineTake({ capacity: 6, to_add: 2, qty_expired: 1, qty_near: 1 }) === 4);
-ok("take: never more than fits", lineTake({ capacity: 4, to_add: 3, qty_expired: 2, qty_near: 1 }) === 4);
-ok("take: a plan from before has no expired or near", lineTake({ capacity: 4, to_add: 3 }) === 3);
+ok("take: what the slot lacks", lineTake({ capacity: 6, to_add: 2 }) === 2);
+ok("take: never more than fits, never below none", lineTake({ capacity: 4, to_add: 7 }) === 4 && lineTake({ capacity: 4, to_add: -1 }) === 0);
 
-// ── Moved between machines: they keep their date (src/lib/refill-flow.ts, 18-10-2026) ──
-import { moveIns, slotProducts, vanPool } from "../src/lib/refill-flow.ts";
-{
-  const bamiLine: FlowLine = { machineId: "m2", selection: "1", row: 1, slot: 1, productId: "bami", productName: "BAMI", photoPath: null, capacity: 6, stock: 1, take: 3, expired: 0 };
-  const slotsBoth = [{ machineId: "m1", selection: "1", productId: "bami", productName: "BAMI" }, { machineId: "m2", selection: "1", productId: "bami", productName: "BAMI" }];
-  const outAtM1: StopRecord = { checkedAt: null, completedAt: "2026-10-18T08:00:00Z", skipped: false, technical: false, note: null,
-    lines: [{ selection: "1", prepared: 0, filled: 0, removed: [{ reason: "moved", qty: 2, expiresOn: "2026-10-20", filledOn: "2026-10-16" }], countAfter: null, full: false }] };
-  const pool = vanPool([bamiLine], slotsBoth, { m1: outAtM1 });
-  ok("van: two bami from m1, with their date", pool.get("bami")?.[0]?.qty === 2 && pool.get("bami")?.[0]?.expiresOn === "2026-10-20");
-  const ins = moveIns("m2", [{ selection: "1", filled: 5 }], slotProducts([bamiLine], slotsBoth), pool);
-  ok("move-in: the van's two go in first and keep 20-10", ins.get("1")?.qty === 2 && ins.get("1")?.expiresOn === "2026-10-20");
-  ok("move-in: the pool itself is not used up", pool.get("bami")?.[0]?.qty === 2);
-  const inAtM2 = (filled: number, movedIn: number): StopRecord => ({ checkedAt: null, completedAt: "2026-10-18T09:00:00Z", skipped: false, technical: false, note: null,
-    lines: [{ selection: "1", prepared: 3, filled, movedIn, removed: [], countAfter: null, full: false }] });
-  const allIn = { m1: outAtM1, m2: inAtM2(5, 2) };
-  ok("van: empty once m2 took them", vanPool([bamiLine], slotsBoth, allIn).size === 0);
-  const backAll = returnsFor([bamiLine], slotsBoth, { [pickKey("m2", "bami")]: 3 }, allIn);
-  ok("returns: nothing back when the box and the van both went in", backAll.length === 0);
-  const someLeft = returnsFor([bamiLine], slotsBoth, { [pickKey("m2", "bami")]: 3 }, { m1: outAtM1, m2: inAtM2(1, 1) });
-  const movedBack = someLeft.find((r) => r.reason === "moved");
-  const boxBack = someLeft.find((r) => r.source === "leftover");
-  ok("returns: the moved piece nobody took goes back to the fridge", movedBack?.qty === 1 && movedBack.disposition === "stock");
-  ok("returns: the box's three came back, the van's piece is not counted twice", boxBack?.qty === 3);
-  const older = vanPool([bamiLine], slotsBoth, {
-    m1: { ...outAtM1, lines: [{ ...outAtM1.lines[0], removed: [{ reason: "moved", qty: 1, expiresOn: "2026-10-22", filledOn: null }, { reason: "moved", qty: 1, expiresOn: "2026-10-19", filledOn: null }] }] },
-  });
-  ok("van: the oldest first", older.get("bami")?.[0]?.expiresOn === "2026-10-19");
-}

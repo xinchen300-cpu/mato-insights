@@ -38,7 +38,6 @@ function lines(): FlowLine[] {
         stock: i === 4 && m === 1 ? null : stock,
         take: 4 - stock,
         expired: i === 2 && m === 0 ? 1 : 0,
-        near: i === 1 && m === 1 ? 1 : 0,
       };
     }),
   );
@@ -79,11 +78,6 @@ export function previewRound(scenario: Scenario, now: number): RefillRound {
             MACHINES.map((machine, i) => [machine.id, doneStop(machine.id, plan, now - minutes(40 - i * 13), now - minutes(34 - i * 13))]),
           )
         : {};
-  // Under way: two of the second dish taken out of the first machine for a machine where it sells better.
-  if (scenario === "run") {
-    const first = stops[MACHINES[0].id];
-    first.lines = first.lines.map((line) => (line.selection === "12" ? { ...line, removed: [{ reason: "moved", qty: 2, expiresOn: null, filledOn: null }] } : line));
-  }
   // Done: the box was two short of the first dish, so the last machine missed them: on the list for tomorrow.
   if (scenario === "done") {
     const last = MACHINES[MACHINES.length - 1].id;

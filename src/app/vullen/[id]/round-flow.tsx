@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronLeft, ChevronRight, MessageSquareText, Timer, TriangleAlert, Truck } from "lucide-react";
+import { CalendarCheck, Check, ChevronLeft, ChevronRight, MessageSquareText, Timer, TriangleAlert, Truck } from "lucide-react";
 import Link from "next/link";
 import { FrontView, type FrontSlot } from "@/components/machine/front-view";
 import { RefillTips } from "@/components/refill/refill-tips";
@@ -13,12 +13,10 @@ import { roundReward, summarizeRound, type MyRound } from "@/lib/filler-stats";
 import { haptic } from "@/lib/haptics";
 import {
   allocate,
-  moveIns,
   pickList,
   returnsFor,
   shortages,
   slotKey,
-  slotProducts,
   slotTally,
   stillMissing,
   tapOnce,
@@ -27,7 +25,6 @@ import {
   type RemovalReason,
   type ReturnRow,
   type StopRecord,
-  vanPool,
 } from "@/lib/refill-flow";
 import { DEFAULT_MACHINE_PHOTO, mediaUrl } from "@/lib/media";
 import { bandBg, machineFill, machineTotals, type FillBand } from "@/lib/stock";
@@ -266,18 +263,11 @@ export function RoundFlow({
   }
 
   /**
-   * What came out of a slot as it will be written: what the filler entered,
-   * and for a slot they filled, the units the plan says are past their date or
-   * run out tomorrow, unless they said how many there really were.
+   * What came out of a slot as it will be written: what the filler entered.
+   * Vendly adds nothing by date: the filler checks the dates by eye (Xin, 18-10-2026).
    */
-  function removalsOf(line: FlowLine | undefined, edit: LineDraft, filled: boolean) {
-    const entered = edit.removed.filter((r) => r.qty > 0);
-    if (!line || !filled) return entered;
-    const planned = [
-      { reason: "expired" as const, qty: line.expired },
-      { reason: "nearExpiry" as const, qty: line.near ?? 0 },
-    ].filter((p) => p.qty > 0 && !edit.removed.some((r) => r.reason === p.reason));
-    return [...entered, ...planned];
+  function removalsOf(edit: LineDraft) {
+    return edit.removed.filter((r) => r.qty > 0);
   }
 
   /** Where the steppers of "something is wrong here" start: what is already noted, or what Vendly expects. */
@@ -292,14 +282,12 @@ export function RoundFlow({
       if (edit.countAfter !== null) return edit.countAfter;
       if (edit.full) return capacity;
       const filled = edit.filled ?? 0;
-      const out = removalsOf(line, edit, edit.filled !== undefined).reduce((sum, r) => sum + r.qty, 0);
+      const out = removalsOf(edit).reduce((sum, r) => sum + r.qty, 0);
       const stock = line ? line.stock : (slot?.stock ?? null);
       return Math.min(capacity, stock === null ? filled : Math.max(0, stock - out) + filled);
     }
     const entered = edit.removed.find((r) => r.reason === kind);
     if (entered) return entered.qty;
-    if (kind === "expired" && line && line.expired > 0) return line.expired;
-    if (kind === "nearExpiry" && line && (line.near ?? 0) > 0) return line.near ?? 0;
     return 1;
   }
 
@@ -320,12 +308,11 @@ export function RoundFlow({
         const line = planned.find((l) => l.selection === selection);
         const edit = draft.lines[selection] ?? emptyLine();
         const prep = prepared[slotKey(machineId, selection)] ?? 0;
-        const filledIt = edit.filled !== undefined || (line !== undefined && open === "planned");
         const unfinished = line !== undefined && !slotTally(prep, edit.filled, edit.typed).done;
         return {
           selection,
           filled: unfinished && open === "planned" ? prep : (edit.filled ?? 0),
-          removed: removalsOf(line, edit, filledIt),
+          removed: removalsOf(edit),
           countAfter: edit.countAfter,
           full: edit.full || Boolean(full?.has(selection)),
         };
@@ -386,33 +373,28 @@ export function RoundFlow({
       run(
         () => api.completeStop(initial.id, job.machineId, { ...work, checkedAgo, doneAgo }),
         () => {
-          setStops((all) => {
-            // What came from the van, worked out as the server does, so the end of the round adds up.
-            const fromVan = moveIns(job.machineId, work.lines, slotProducts(initial.lines, initial.slots), vanPool(initial.lines, initial.slots, all));
-            return {
-              ...all,
-              [job.machineId]: {
-                checkedAt: job.checkedAt,
-                completedAt: doneAt,
-                skipped: false,
-                technical: work.technical,
-                note: work.note,
-                ...(initial.settings.checks.length && work.checks && Object.keys(work.checks).length > 0
-                  ? {
-                      checks: Object.fromEntries(
-                        initial.settings.checks.map((label) => [label, work.checks?.[label] === true]),
-                      ),
-                    }
-                  : {}),
-                lines: work.lines.map((line) => ({
-                  ...line,
-                  prepared: prepared[slotKey(job.machineId, line.selection)] ?? 0,
-                  removed: line.removed as { reason: RemovalReason; qty: number }[],
-                  ...(fromVan.has(line.selection) ? { movedIn: fromVan.get(line.selection)!.qty } : {}),
-                })),
-              },
-            };
-          });
+          setStops((all) => ({
+            ...all,
+            [job.machineId]: {
+              checkedAt: job.checkedAt,
+              completedAt: doneAt,
+              skipped: false,
+              technical: work.technical,
+              note: work.note,
+              ...(initial.settings.checks.length && work.checks && Object.keys(work.checks).length > 0
+                ? {
+                    checks: Object.fromEntries(
+                      initial.settings.checks.map((label) => [label, work.checks?.[label] === true]),
+                    ),
+                  }
+                : {}),
+              lines: work.lines.map((line) => ({
+                ...line,
+                prepared: prepared[slotKey(job.machineId, line.selection)] ?? 0,
+                removed: line.removed as { reason: RemovalReason; qty: number }[],
+              })),
+            },
+          }));
           settle();
           setFailedId((id) => (id === job.machineId ? null : id));
           router.refresh();
@@ -780,16 +762,6 @@ export function RoundFlow({
     const draft = draftFor(current.id);
     const planned = initial.lines.filter((line) => line.machineId === current.id);
     const machineSlots = initial.slots.filter((slot) => slot.machineId === current.id);
-    // Pieces another machine gave up for a dish here are in the van: said once, at the dish's first slot.
-    const van = vanPool(initial.lines, initial.slots, stops);
-    const vanFirst = new Map<string, number>();
-    const vanSeen = new Set<string>();
-    for (const line of planned) {
-      const pile = van.get(line.productId);
-      if (!pile || vanSeen.has(line.productId)) continue;
-      vanSeen.add(line.productId);
-      vanFirst.set(line.selection, pile.reduce((sum, piece) => sum + piece.qty, 0));
-    }
     const stopIndex = visits.findIndex((mc) => mc.id === current.id) + 1;
     const prepOf = (line: FlowLine) => prepared[slotKey(current.id, line.selection)] ?? 0;
     const tallyOf = (line: FlowLine) => {
@@ -862,6 +834,11 @@ export function RoundFlow({
             )}
             {removedHere > 0 && <span className={cn(chip, "ring-warning/40")}>{fmt(t.removedBadge, { n: removedHere })}</span>}
           </div>
+          {/* The dates are the filler's to check by eye: one line at every machine, nothing to tap (Xin, 18-10-2026). */}
+          <p className="mt-3 flex items-center gap-2.5 rounded-xl bg-surface px-3 py-2.5 text-[14.5px] font-medium">
+            <CalendarCheck className="size-5 shrink-0" aria-hidden="true" />
+            {t.checkDates}
+          </p>
           <div className="mt-2 flex items-center justify-between">
             <p className="text-[14.5px] text-muted-foreground">{t.fillHint}</p>
             {open.length > 0 && (
@@ -889,17 +866,8 @@ export function RoundFlow({
               // Typed below what was set aside: done, but not the plan.
               const fewer = tally.done && edit?.typed === true && tally.n < prep;
               const shortHere = line.take - prep;
-              // Past-date units first, as the plan counted them, until the filler says how many there were.
-              const pullFirst = line.expired > 0 && !edit?.removed.some((r) => r.reason === "expired");
-              // And what runs out tomorrow: out the day before, its replacement is in the box.
-              const pullNear = (line.near ?? 0) > 0 && !edit?.removed.some((r) => r.reason === "nearExpiry");
               const out = (edit?.removed ?? []).reduce((sum, r) => sum + r.qty, 0);
-              // Pieces taken out of another machine for this dish: in first, at the first of its slots here.
-              const fromVan = vanFirst.get(line.selection) ?? 0;
               const notes = [
-                ...(fromVan > 0 ? [{ text: fmt(t.vanFirst, { n: fromVan }), warn: true }] : []),
-                ...(pullFirst ? [{ text: fmt(t.pullFirst, { n: line.expired }), warn: true }] : []),
-                ...(pullNear ? [{ text: fmt(t.pullNear, { n: line.near ?? 0 }), warn: true }] : []),
                 ...(out > 0 ? [{ text: fmt(t.removedBadge, { n: out }), warn: false }] : []),
                 ...(shortHere > 0 ? [{ text: fmt(t.shortHere, { n: shortHere }), warn: true }] : []),
               ];
@@ -1563,7 +1531,6 @@ function ReturnsScreen({
     expired: t.reasonExpired,
     damaged: t.reasonDamaged,
     nearExpiry: t.reasonNear,
-    moved: t.reasonMoved,
     other: t.reasonOther,
   };
   const leftover = rows.filter((row) => row.source === "leftover");
@@ -1950,7 +1917,6 @@ function ReportSheet({
     { id: "expired", label: t.reasonExpired },
     { id: "damaged", label: t.reasonDamaged },
     { id: "nearExpiry", label: t.reasonNear },
-    { id: "moved", label: t.reasonMoved },
     { id: "other", label: t.reasonOther },
     { id: "count", label: t.reasonCount },
     { id: "technical", label: t.reasonTechnical },
