@@ -8,7 +8,7 @@ import type { MyRound } from "@/lib/filler-stats";
 import { terminalStatus, type TerminalStatus } from "@/lib/terminal-status";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
 import { reportDay } from "@/lib/stats";
-import { addDays } from "@/lib/expiry";
+import { addDays, isoDay } from "@/lib/expiry";
 import type {
   Producer,
   RunSummaryRow,
@@ -332,6 +332,25 @@ export async function getRefillPlan(orgId: string, machineIds: string[]): Promis
     });
   }
   return lines;
+}
+
+/**
+ * How old what is in each slot of one machine is: the date of its oldest
+ * piece and the day that piece went in. What is taken out to go into another
+ * machine takes this along, so it never gets younger on the way.
+ */
+export async function getSlotAges(orgId: string, machineId: string): Promise<Map<string, { expiresOn: string | null; filledOn: string | null }>> {
+  if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
+  const { data, error } = await createAdminClient().rpc("slot_freshness", { target_org: orgId, machine_filter: [machineId] });
+  if (error) throw new Error(error.message);
+  const ages = new Map<string, { expiresOn: string | null; filledOn: string | null }>();
+  for (const row of (data ?? []) as { selection_number: string; next_expires_at: string | null; oldest_filled_at: string | null }[]) {
+    ages.set(row.selection_number, {
+      expiresOn: row.next_expires_at,
+      filledOn: row.oldest_filled_at ? isoDay(new Date(row.oldest_filled_at)) : null,
+    });
+  }
+  return ages;
 }
 
 /** How this organisation wants its rounds to go, for whoever runs them: the operator or a filler. */

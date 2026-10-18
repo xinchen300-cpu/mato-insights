@@ -13,10 +13,12 @@ import { roundReward, summarizeRound, type MyRound } from "@/lib/filler-stats";
 import { haptic } from "@/lib/haptics";
 import {
   allocate,
+  moveIns,
   pickList,
   returnsFor,
   shortages,
   slotKey,
+  slotProducts,
   slotTally,
   stillMissing,
   tapOnce,
@@ -25,6 +27,7 @@ import {
   type RemovalReason,
   type ReturnRow,
   type StopRecord,
+  vanPool,
 } from "@/lib/refill-flow";
 import { DEFAULT_MACHINE_PHOTO, mediaUrl } from "@/lib/media";
 import { bandBg, machineFill, machineTotals, type FillBand } from "@/lib/stock";
@@ -73,7 +76,7 @@ type StopDraft = {
   /** The operator's own checks ticked here; absent in drafts saved before they existed. */
   checks?: Record<string, boolean>;
 };
-type Saved = { picked: Record<string, number>; touched: boolean; drafts: Record<string, StopDraft> };
+type Saved = { picked: Record<string, number>; touched: boolean; drafts: Record<string, StopDraft>; made?: Record<string, number> };
 type ReportKind = RemovalReason | "count" | "technical";
 type View = "home" | "pick" | "stop" | "returns";
 /** A stop as it is sent; when it happened is added at the moment of sending. */
@@ -126,6 +129,8 @@ export function RoundFlow({
   const [picked, setPicked] = useState<Record<string, number>>(initial.picked);
   const [touched, setTouched] = useState(Object.keys(initial.picked).length > 0);
   const [drafts, setDrafts] = useState<Record<string, StopDraft>>({});
+  // Per box line (machine:product), how many days before today it was made; today is not stored.
+  const [made, setMade] = useState<Record<string, number>>({});
   const [restored, setRestored] = useState(false);
 
   const [view, setView] = useState<View>("home");
@@ -158,17 +163,18 @@ export function RoundFlow({
         setTouched(true);
       }
       setDrafts(saved.drafts ?? {});
+      setMade(saved.made ?? {});
     }
     setRestored(true);
   }, [initial.id, initial.readyAt]);
   useEffect(() => {
     if (!restored) return;
     try {
-      localStorage.setItem(storageKey(initial.id), JSON.stringify({ picked, touched, drafts } satisfies Saved));
+      localStorage.setItem(storageKey(initial.id), JSON.stringify({ picked, touched, drafts, made } satisfies Saved));
     } catch {
       // Private mode or a full disk: the round still works, only a reload forgets.
     }
-  }, [restored, initial.id, picked, touched, drafts]);
+  }, [restored, initial.id, picked, touched, drafts, made]);
 
   // The screen stays on while the round is on: a phone that locks between two machines costs a filler time.
   useEffect(() => {
@@ -313,6 +319,12 @@ export function RoundFlow({
       technical: draft.technical,
       note: draft.note,
       checks: draft.checks,
+      // How long ago what goes in here was made, per product, as tapped while packing.
+      made: Object.fromEntries(
+        Object.entries(made)
+          .filter(([key, days]) => key.startsWith(`${machineId}:`) && days > 0)
+          .map(([key, days]) => [key.slice(machineId.length + 1), days]),
+      ),
       lines: [...selections].map((selection) => {
         const line = planned.find((l) => l.selection === selection);
         const edit = draft.lines[selection] ?? emptyLine();
@@ -383,28 +395,33 @@ export function RoundFlow({
       run(
         () => api.completeStop(initial.id, job.machineId, { ...work, checkedAgo, doneAgo }),
         () => {
-          setStops((all) => ({
-            ...all,
-            [job.machineId]: {
-              checkedAt: job.checkedAt,
-              completedAt: doneAt,
-              skipped: false,
-              technical: work.technical,
-              note: work.note,
-              ...(initial.settings.checks.length && work.checks && Object.keys(work.checks).length > 0
-                ? {
-                    checks: Object.fromEntries(
-                      initial.settings.checks.map((label) => [label, work.checks?.[label] === true]),
-                    ),
-                  }
-                : {}),
-              lines: work.lines.map((line) => ({
-                ...line,
-                prepared: prepared[slotKey(job.machineId, line.selection)] ?? 0,
-                removed: line.removed as { reason: RemovalReason; qty: number }[],
-              })),
-            },
-          }));
+          setStops((all) => {
+            // What came from the van, worked out as the server does, so the end of the round adds up.
+            const fromVan = moveIns(job.machineId, work.lines, slotProducts(initial.lines, initial.slots), vanPool(initial.lines, initial.slots, all));
+            return {
+              ...all,
+              [job.machineId]: {
+                checkedAt: job.checkedAt,
+                completedAt: doneAt,
+                skipped: false,
+                technical: work.technical,
+                note: work.note,
+                ...(initial.settings.checks.length && work.checks && Object.keys(work.checks).length > 0
+                  ? {
+                      checks: Object.fromEntries(
+                        initial.settings.checks.map((label) => [label, work.checks?.[label] === true]),
+                      ),
+                    }
+                  : {}),
+                lines: work.lines.map((line) => ({
+                  ...line,
+                  prepared: prepared[slotKey(job.machineId, line.selection)] ?? 0,
+                  removed: line.removed as { reason: RemovalReason; qty: number }[],
+                  ...(fromVan.has(line.selection) ? { movedIn: fromVan.get(line.selection)!.qty } : {}),
+                })),
+              },
+            };
+          });
           settle();
           setFailedId((id) => (id === job.machineId ? null : id));
           router.refresh();
@@ -670,40 +687,55 @@ export function RoundFlow({
                     const n = Math.min(row.take, picked[row.key] ?? 0);
                     const done = n >= row.take;
                     return (
-                      <li key={row.key} className="flex items-center gap-1 border-b border-border/60 last:border-0">
-                        <button
-                          type="button"
-                          role="checkbox"
-                          aria-checked={done}
-                          onClick={() => {
-                            haptic();
-                            setPicks((current) => ({ ...current, [row.key]: done ? 0 : row.take }));
-                          }}
-                          className="flex min-h-[68px] min-w-0 flex-1 items-center gap-3 px-1 text-left"
-                        >
-                          <Tick done={done} />
-                          <ProductPhoto path={row.photoPath} />
-                          <span className="flex min-w-0 flex-1 flex-col">
-                            <span className={cn("truncate text-[16px] font-semibold", done && "text-muted-foreground line-through")}>
-                              {row.productName}
+                      <li key={row.key} className="flex flex-col border-b border-border/60 last:border-0">
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            role="checkbox"
+                            aria-checked={done}
+                            onClick={() => {
+                              haptic();
+                              setPicks((current) => ({ ...current, [row.key]: done ? 0 : row.take }));
+                            }}
+                            className="flex min-h-[68px] min-w-0 flex-1 items-center gap-3 px-1 text-left"
+                          >
+                            <Tick done={done} />
+                            <ProductPhoto path={row.photoPath} />
+                            <span className="flex min-w-0 flex-1 flex-col">
+                              <span className={cn("truncate text-[16px] font-semibold", done && "text-muted-foreground line-through")}>
+                                {row.productName}
+                              </span>
+                              <span className="tabular truncate text-[13px] text-muted-foreground">
+                                {fmt(t.boxSlots, { slots: slotsOf(row.machineId, row.productId) })}
+                              </span>
                             </span>
-                            <span className="tabular truncate text-[13px] text-muted-foreground">
-                              {fmt(t.boxSlots, { slots: slotsOf(row.machineId, row.productId) })}
-                            </span>
-                          </span>
-                        </button>
-                        <span className="tabular w-16 shrink-0 text-center text-[18px] font-bold">{row.take}</span>
-                        <button
-                          type="button"
-                          onClick={() => setCountSheet(row.key)}
-                          className={cn(
-                            "tabular h-11 w-16 shrink-0 rounded-xl text-[18px] font-bold transition-colors",
-                            done ? "bg-positive/15 text-positive" : n > 0 ? "bg-warning/20 text-warning" : "bg-surface text-muted-foreground",
-                          )}
-                          aria-label={fmt(t.howManyOf, { product: row.productName })}
-                        >
-                          {n > 0 ? n : "–"}
-                        </button>
+                          </button>
+                          <span className="tabular w-16 shrink-0 text-center text-[18px] font-bold">{row.take}</span>
+                          <button
+                            type="button"
+                            onClick={() => setCountSheet(row.key)}
+                            className={cn(
+                              "tabular h-11 w-16 shrink-0 rounded-xl text-[18px] font-bold transition-colors",
+                              done ? "bg-positive/15 text-positive" : n > 0 ? "bg-warning/20 text-warning" : "bg-surface text-muted-foreground",
+                            )}
+                            aria-label={fmt(t.howManyOf, { product: row.productName })}
+                          >
+                            {n > 0 ? n : "–"}
+                          </button>
+                        </div>
+                        {/* Made today unless tapped: a day or two earlier and it runs out that much sooner (Xin, 18-10-2026). */}
+                        <MadeChips
+                          product={row.productName}
+                          value={made[row.key] ?? 0}
+                          onChange={(days) =>
+                            setMade((current) => {
+                              const next = { ...current };
+                              if (days > 0) next[row.key] = days;
+                              else delete next[row.key];
+                              return next;
+                            })
+                          }
+                        />
                       </li>
                     );
                   })}
@@ -772,6 +804,16 @@ export function RoundFlow({
     const draft = draftFor(current.id);
     const planned = initial.lines.filter((line) => line.machineId === current.id);
     const machineSlots = initial.slots.filter((slot) => slot.machineId === current.id);
+    // Pieces another machine gave up for a dish here are in the van: said once, at the dish's first slot.
+    const van = vanPool(initial.lines, initial.slots, stops);
+    const vanFirst = new Map<string, number>();
+    const vanSeen = new Set<string>();
+    for (const line of planned) {
+      const pile = van.get(line.productId);
+      if (!pile || vanSeen.has(line.productId)) continue;
+      vanSeen.add(line.productId);
+      vanFirst.set(line.selection, pile.reduce((sum, piece) => sum + piece.qty, 0));
+    }
     const stopIndex = visits.findIndex((mc) => mc.id === current.id) + 1;
     const prepOf = (line: FlowLine) => prepared[slotKey(current.id, line.selection)] ?? 0;
     const tallyOf = (line: FlowLine) => {
@@ -876,7 +918,10 @@ export function RoundFlow({
               // And what runs out tomorrow: out the day before, its replacement is in the box.
               const pullNear = (line.near ?? 0) > 0 && !edit?.removed.some((r) => r.reason === "nearExpiry");
               const out = (edit?.removed ?? []).reduce((sum, r) => sum + r.qty, 0);
+              // Pieces taken out of another machine for this dish: in first, at the first of its slots here.
+              const fromVan = vanFirst.get(line.selection) ?? 0;
               const notes = [
+                ...(fromVan > 0 ? [{ text: fmt(t.vanFirst, { n: fromVan }), warn: true }] : []),
                 ...(pullFirst ? [{ text: fmt(t.pullFirst, { n: line.expired }), warn: true }] : []),
                 ...(pullNear ? [{ text: fmt(t.pullNear, { n: line.near ?? 0 }), warn: true }] : []),
                 ...(out > 0 ? [{ text: fmt(t.removedBadge, { n: out }), warn: false }] : []),
@@ -1471,6 +1516,38 @@ function BigClock({ since, startedLabel }: { since: string; startedLabel: string
   );
 }
 
+/** When a dish was made: today, yesterday or the day before. One tap; today is where it starts. */
+function MadeChips({ product, value, onChange }: { product: string; value: number; onChange: (days: number) => void }) {
+  const { m } = useI18n();
+  const t = m.round;
+  const options = [t.madeToday, t.madeYesterday, t.madeTwoDays];
+  return (
+    <div role="group" aria-label={fmt(t.madeOf, { product })} className="flex items-center gap-1.5 pb-3 pl-11">
+      <span className="shrink-0 text-[12.5px] font-semibold text-muted-foreground">{t.made}</span>
+      {options.map((label, days) => {
+        const selected = value === days;
+        return (
+          <button
+            key={label}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => {
+              haptic();
+              onChange(days);
+            }}
+            className={cn(
+              "h-9 shrink-0 rounded-full px-2.5 text-[13.5px] font-semibold transition-colors",
+              selected ? (days > 0 ? "bg-warning text-white" : "bg-foreground text-background") : "bg-surface text-foreground",
+            )}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** How many of one product went into the box, when it was not all of them. */
 function CountSheet({
   title,
@@ -1542,6 +1619,7 @@ function ReturnsScreen({
     expired: t.reasonExpired,
     damaged: t.reasonDamaged,
     nearExpiry: t.reasonNear,
+    moved: t.reasonMoved,
     other: t.reasonOther,
   };
   const leftover = rows.filter((row) => row.source === "leftover");
@@ -1928,6 +2006,7 @@ function ReportSheet({
     { id: "expired", label: t.reasonExpired },
     { id: "damaged", label: t.reasonDamaged },
     { id: "nearExpiry", label: t.reasonNear },
+    { id: "moved", label: t.reasonMoved },
     { id: "other", label: t.reasonOther },
     { id: "count", label: t.reasonCount },
     { id: "technical", label: t.reasonTechnical },

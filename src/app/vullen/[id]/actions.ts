@@ -2,20 +2,24 @@
 
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { getRefillRound, type RefillRound } from "@/lib/data";
+import { getRefillRound, getSlotAges, type RefillRound } from "@/lib/data";
 import { getSessionUser, requireRefillAccess } from "@/lib/org";
 import {
   REMOVAL_REASONS,
   allocate,
   levelAfter,
+  moveIns,
   pickList,
   returnsFor,
   slotKey,
+  slotProducts,
   splitReturn,
   type RemovalReason,
   type StopLine,
   type StopRecord,
+  vanPool,
 } from "@/lib/refill-flow";
+import { addDays } from "@/lib/expiry";
 import { fmt } from "@/i18n/format";
 import { messages } from "@/i18n/messages";
 import { displayName } from "@/lib/people";
@@ -157,6 +161,12 @@ export type StopInput = {
   lines: { selection: string; filled: number; removed: { reason: string; qty: number }[]; countAfter: number | null; full: boolean }[];
   /** The operator's own checks at this machine, by label: ticked or not. */
   checks?: Record<string, boolean>;
+  /**
+   * Per product, how many days before today what went in was made (1 or 2,
+   * at most 3), as tapped while packing. Its shelf life runs from that day;
+   * without it, from today.
+   */
+  made?: Record<string, number>;
 };
 
 /**
@@ -172,6 +182,8 @@ export async function completeStop(sheetId: string, machineId: string, input: St
 
   const slots = new Map(round.slots.filter((s) => s.machineId === machineId).map((s) => [s.selection, s]));
   const prepared = allocate(round.lines, round.picked);
+  // How old each slot's pieces are, for what is taken out to go elsewhere: read before anything is written.
+  const ages = await getSlotAges(orgId, machineId);
 
   // The phone's list is read once per slot, and what came out of a slot is
   // one number per reason and never more than the slot can hold: a doubled
@@ -193,7 +205,8 @@ export async function completeStop(sheetId: string, machineId: string, input: St
     const removed: StopLine["removed"] = [];
     for (const [reason, qty] of perReason) {
       const taken = Math.min(qty, room);
-      if (taken > 0) removed.push({ reason, qty: taken });
+      // Moved pieces take the date of the oldest in the slot along: never younger than they are.
+      if (taken > 0) removed.push(reason === "moved" ? { reason, qty: taken, ...(ages.get(slot.selection) ?? { expiresOn: null, filledOn: null }) } : { reason, qty: taken });
       room -= taken;
     }
     const countAfter = raw.countAfter === null ? null : whole(raw.countAfter, slot.capacity);
@@ -207,17 +220,54 @@ export async function completeStop(sheetId: string, machineId: string, input: St
     });
   }
 
+  // What goes in from the van: pieces another machine on this round gave up,
+  // the oldest first. They keep their date; the server's own record decides.
+  const fromVan = moveIns(machineId, lines, slotProducts(round.lines, round.slots), vanPool(round.lines, round.slots, round.stops));
+  for (const line of lines) {
+    const moved = fromVan.get(line.selection);
+    if (moved) line.movedIn = moved.qty;
+  }
+  // The day what went in was made: only a day or three back, else today.
+  const madeOn = (productId: string) => {
+    const days = input.made && typeof input.made === "object" ? input.made[productId] : undefined;
+    return Number.isInteger(days) && (days as number) >= 1 && (days as number) <= 3 ? addDays(-(days as number)) : null;
+  };
+
   // One event per slot, at the level it was left at. Only what went in is a
   // refill, with a fresh batch behind it; a slot seen full or counted without
-  // filling is a correction, of stock whose age nobody knows.
-  const refills: { selection: string; level_after: number }[] = [];
+  // filling is a correction, of stock whose age nobody knows. A filled slot
+  // that also had pieces taken out writes those first, then what came from the
+  // van, then the rest: written as one level, only the difference would go in
+  // and the pieces taken out would be counted as still there.
+  type Entry = { selection: string; level_after: number; made_on?: string; expires_on?: string };
+  const pulled = new Map<string, Entry[]>();
+  const fromOthers: Entry[] = [];
+  const refills: Entry[] = [];
   const corrections = new Map<string, { selection: string; level_after: number }[]>();
   for (const line of lines) {
     const slot = slots.get(line.selection)!;
     const level = levelAfter(slot, slot.stock, line);
     if (level === null) continue;
     if (line.filled > 0) {
-      refills.push({ selection: line.selection, level_after: level });
+      const out = line.removed.reduce((sum, r) => sum + r.qty, 0);
+      const made = madeOn(slot.productId);
+      const moved = fromVan.get(line.selection);
+      const dated = (date: { expiresOn: string | null; filledOn: string | null }) => ({
+        ...(date.expiresOn ? { expires_on: date.expiresOn } : {}),
+        ...(date.filledOn ? { made_on: date.filledOn } : {}),
+      });
+      if (slot.stock !== null) {
+        const left = Math.max(0, slot.stock - out);
+        if (out > 0) {
+          const note = line.removed[0].reason;
+          pulled.set(note, [...(pulled.get(note) ?? []), { selection: line.selection, level_after: left }]);
+        }
+        if (moved) fromOthers.push({ selection: line.selection, level_after: Math.min(level, left + moved.qty), ...dated(moved) });
+        refills.push({ selection: line.selection, level_after: level, ...(made ? { made_on: made } : {}) });
+      } else {
+        // Nobody knew what was in it: one batch, dated by the oldest that went in.
+        refills.push({ selection: line.selection, level_after: level, ...(moved ? dated(moved) : made ? { made_on: made } : {}) });
+      }
     } else if (line.removed.length === 0 && line.countAfter === null && !line.full) {
       // Nothing went in, nothing came out, nobody counted: write nothing. A
       // correction at Vendly's own estimate would pass the estimate off as a count.
@@ -232,6 +282,8 @@ export async function completeStop(sheetId: string, machineId: string, input: St
   const completedAt = phoneMoment(input.doneAgo, round.readyAt, now) ?? new Date(now).toISOString();
   const checkedAt = phoneMoment(input.checkedAgo, round.readyAt, now);
   const status = await finishStop(orgId, sheetId, machineId, {
+    pulled: [...pulled].map(([note, entries]) => ({ note, entries })),
+    moved: fromOthers,
     refills,
     corrections: [...corrections].map(([note, entries]) => ({ note, entries })),
     record: {
@@ -298,7 +350,11 @@ async function finishStop(
   sheetId: string,
   machineId: string,
   work: {
-    refills: { selection: string; level_after: number }[];
+    /** Taken out of slots that are filled again: written before them. */
+    pulled?: { note: string; entries: { selection: string; level_after: number }[] }[];
+    /** Pieces from another machine on the round, with their own date: written next. */
+    moved?: { selection: string; level_after: number; made_on?: string; expires_on?: string }[];
+    refills: { selection: string; level_after: number; made_on?: string; expires_on?: string }[];
     corrections: { note: string; entries: { selection: string; level_after: number }[] }[];
     record: StopRecord;
   },
@@ -311,6 +367,8 @@ async function finishStop(
     corrections: work.corrections,
     filler_name: await fillerName(),
     record: work.record,
+    pulled: work.pulled ?? [],
+    moved: work.moved ?? [],
   });
   if (error) throw new Error(error.message);
   if (data === "closed") throw new Error("Round is closed");

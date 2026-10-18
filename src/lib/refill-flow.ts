@@ -31,15 +31,22 @@ export type FlowLine = {
 /** What a slot holds now, whether or not the round fills it. */
 export type SlotProduct = { machineId: string; selection: string; productId: string; productName: string | null };
 
-export type RemovalReason = "expired" | "damaged" | "nearExpiry" | "other";
-export const REMOVAL_REASONS: RemovalReason[] = ["expired", "damaged", "nearExpiry", "other"];
+/** "moved": taken out to go into another machine on the round, where it keeps its date (Xin, 18-10-2026). */
+export type RemovalReason = "expired" | "damaged" | "nearExpiry" | "moved" | "other";
+export const REMOVAL_REASONS: RemovalReason[] = ["expired", "damaged", "nearExpiry", "moved", "other"];
 
 /** One slot at one stop, as it was left. */
 export type StopLine = {
   selection: string;
   prepared: number;
   filled: number;
-  removed: { reason: RemovalReason; qty: number }[];
+  /**
+   * What came out, per reason. Pieces moved to another machine carry the date
+   * they had here (the oldest in the slot), set by the server when it is written.
+   */
+  removed: { reason: RemovalReason; qty: number; expiresOn?: string | null; filledOn?: string | null }[];
+  /** Of `filled`, the pieces brought from another machine on this round: they keep their own date. */
+  movedIn?: number;
   /** "How many are in it now?", answered after filling. */
   countAfter: number | null;
   /** Seen full with one's own eyes ("Ja, vol"). */
@@ -137,6 +144,98 @@ export function tapOnce(prepared: number, filled: number | undefined): number | 
   return n < prepared ? n + 1 : null;
 }
 
+/** Pieces taken out of one machine to go into another, still in the van. */
+export type VanPiece = { qty: number; expiresOn: string | null; filledOn: string | null };
+
+/** The oldest first: the earliest date, then the earliest fill; a piece without a date after one with. */
+function olderFirst(a: VanPiece, b: VanPiece): number {
+  const date = (a.expiresOn ?? "9999").localeCompare(b.expiresOn ?? "9999");
+  return date || (a.filledOn ?? "9999").localeCompare(b.filledOn ?? "9999");
+}
+
+/** What a slot of the round holds: the plan's product, or for a slot the round does not fill, what it sells. */
+export function slotProducts(lines: Pick<FlowLine, "machineId" | "selection" | "productId">[], slots: SlotProduct[]) {
+  const of = new Map<string, string>([
+    ...slots.map((slot) => [slotKey(slot.machineId, slot.selection), slot.productId] as const),
+    ...lines.map((line) => [slotKey(line.machineId, line.selection), line.productId] as const),
+  ]);
+  return (machineId: string, selection: string) => of.get(slotKey(machineId, selection));
+}
+
+/** Takes n pieces off a product's pile, the oldest first, and says what they were. */
+function takeOff(pile: VanPiece[], n: number): VanPiece[] {
+  const taken: VanPiece[] = [];
+  let left = n;
+  while (left > 0 && pile.length > 0) {
+    const piece = pile[0];
+    const qty = Math.min(piece.qty, left);
+    taken.push({ ...piece, qty });
+    piece.qty -= qty;
+    left -= qty;
+    if (piece.qty === 0) pile.shift();
+  }
+  return taken;
+}
+
+/**
+ * What is in the van to go into another machine, per product, the oldest
+ * first: every piece taken out as "moved", less what later machines took, in
+ * the order the machines were done.
+ */
+export function vanPool(
+  lines: Pick<FlowLine, "machineId" | "selection" | "productId">[],
+  slots: SlotProduct[],
+  stops: Record<string, StopRecord>,
+): Map<string, VanPiece[]> {
+  const productOf = slotProducts(lines, slots);
+  const pool = new Map<string, VanPiece[]>();
+  const done = Object.entries(stops)
+    .filter(([, stop]) => stop.completedAt && !stop.skipped)
+    .sort(([, a], [, b]) => (a.completedAt ?? "").localeCompare(b.completedAt ?? ""));
+  for (const [machineId, stop] of done) {
+    for (const line of stop.lines) {
+      const productId = productOf(machineId, line.selection);
+      if (productId && (line.movedIn ?? 0) > 0) takeOff(pool.get(productId) ?? [], line.movedIn ?? 0);
+    }
+    for (const line of stop.lines) {
+      const productId = productOf(machineId, line.selection);
+      if (!productId) continue;
+      for (const r of line.removed) {
+        if (r.reason !== "moved" || r.qty <= 0) continue;
+        const pile = pool.get(productId) ?? [];
+        pile.push({ qty: r.qty, expiresOn: r.expiresOn ?? null, filledOn: r.filledOn ?? null });
+        pool.set(productId, pile.sort(olderFirst));
+      }
+    }
+  }
+  for (const [productId, pile] of pool) if (pile.length === 0) pool.delete(productId);
+  return pool;
+}
+
+/**
+ * Which of a machine's fills come out of the van: per slot, how many and the
+ * date they carry (the oldest of them, so nothing is dated later than it is).
+ * They go in first, slot by slot in the order given. The pool is not touched.
+ */
+export function moveIns(
+  machineId: string,
+  fills: { selection: string; filled: number }[],
+  productOf: (machineId: string, selection: string) => string | undefined,
+  pool: Map<string, VanPiece[]>,
+): Map<string, { qty: number; expiresOn: string | null; filledOn: string | null }> {
+  const piles = new Map([...pool].map(([productId, pile]) => [productId, pile.map((piece) => ({ ...piece }))]));
+  const result = new Map<string, { qty: number; expiresOn: string | null; filledOn: string | null }>();
+  for (const fill of fills) {
+    const productId = productOf(machineId, fill.selection);
+    const pile = productId ? piles.get(productId) : undefined;
+    if (!pile || fill.filled <= 0) continue;
+    const taken = takeOff(pile, fill.filled);
+    const qty = taken.reduce((sum, piece) => sum + piece.qty, 0);
+    if (qty > 0) result.set(fill.selection, { qty, expiresOn: taken[0].expiresOn, filledOn: taken[0].filledOn });
+  }
+  return result;
+}
+
 /**
  * Spread what was actually picked over the slots that asked for it. The
  * emptiest slots first (and the ones Vendly cannot see into count as empty),
@@ -209,12 +308,21 @@ export function returnsFor(
     for (const line of stop.lines) {
       const productId = productOf.get(slotKey(machineId, line.selection));
       if (!productId) continue;
-      leftover.set(productId, (leftover.get(productId) ?? 0) - line.filled);
+      // Pieces brought from another machine did not come out of the box.
+      leftover.set(productId, (leftover.get(productId) ?? 0) - (line.filled - (line.movedIn ?? 0)));
       for (const r of line.removed) {
+        // Moved pieces come back only if no other machine took them: counted below.
+        if (r.reason === "moved") continue;
         const key = `${productId}|${r.reason}`;
         removed.set(key, (removed.get(key) ?? 0) + r.qty);
       }
     }
+  }
+
+  // Taken out to go elsewhere and still in the van: back to the fridge, not thrown away.
+  for (const [productId, pieces] of vanPool(lines, slots, stops)) {
+    const qty = pieces.reduce((sum, piece) => sum + piece.qty, 0);
+    if (qty > 0) removed.set(`${productId}|moved`, qty);
   }
 
   const rows: ReturnRow[] = [];
@@ -231,7 +339,7 @@ export function returnsFor(
       productName: names.get(productId) ?? "—",
       source: "removed",
       reason,
-      disposition: reason === "nearExpiry" ? "promo" : "waste",
+      disposition: reason === "nearExpiry" ? "promo" : reason === "moved" ? "stock" : "waste",
       qty,
     });
   }
@@ -350,7 +458,7 @@ export function itemReport(
       taken: 0,
       filled: 0,
       back: 0,
-      out: { expired: 0, damaged: 0, nearExpiry: 0, other: 0 },
+      out: { expired: 0, damaged: 0, nearExpiry: 0, moved: 0, other: 0 },
       short: 0,
       went: {},
     };
