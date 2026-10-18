@@ -11,9 +11,25 @@
 
 De Supabase-edge-functie heet ook `vendly-notify`; die naam is infrastructuur, geen merknaam, en blijft.
 
-Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts. Live op
-**https://vendly-six-gold.vercel.app**, Vercel-project `vendly` op team `mato1`.
-Supabase-project `bjzufmvwldoltpitkrvx`.
+Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Supabase-project
+`bjzufmvwldoltpitkrvx`.
+
+## Twee sites: live en test (sinds 18-10-2026)
+- **Live: https://vendly-six-gold.vercel.app** (project `vendly`). Hier draait **Chens Garden**
+  in de proef; Xin noemde dit "zeer delicaat". Wat er live staat, is de tak **`productie`**.
+  Die gaat alleen live met `mato release insights`, en enkel als Xin het vraagt. Een dringende fix
+  komt op `productie` zelf en daarna ook op `main`.
+- **Test: https://vendly-test-tau.vercel.app** (project `vendly-test`). Al het werk gaat via
+  `main` hierheen: `mato deploy insights`. De testsite gebruikt **dezelfde databank** en draait
+  met `VENDLY_ENV=test` (gele streep, "Testversie", "(test)" in pushmeldingen) en
+  `VENDLY_BLOCKED_ORGS` = de organisatie van Chens (`isBlockedOrg` in `src/lib/org.ts`): hun account
+  ziet daar niets en hun deellinks openen niets. Test schrijvende dingen in een demo-organisatie,
+  want MATO's eigen gegevens zijn daar wél echt.
+- **Databankwijzigingen alleen toevoegend:** de live versie draait op dezelfde databank, dus een
+  kolom of functie die weg- of anders gaat, breekt Chens. Eerst toevoegen, en pas weghalen als
+  `productie` het niet meer gebruikt.
+- Rol **nooit** uit vanuit de gedeelde werkmap. Op 16-10 belandde zo ongecommit werk live, en op
+  18-10 stond er live code die nergens in git zat (teruggezet als `productie`, commit dcd1434).
 
 Dit wordt verkocht als SaaS om **Televend** te verslaan. Televends verwijten zijn harde
 eisen: saaie interface, €450 telemetriebox per machine, te veel instellingen en bugs,
@@ -77,10 +93,11 @@ heeft het eigen, nog niet gecommitte wijzigingen, haal dan alleen de hackregel w
 wist die wijzigingen mee, gebeurd op 11-10-2026). Controleer met `grep -n HACK src/lib/org.ts`.
 
 ## Bouwen, deployen
-Gebruik `/vendly-deploy`. Kort: nooit in deze map bouwen (iCloud evict `node_modules` en
-`tsc`/`next build` lopen vast) — rsync naar de scratchpad, `npm ci`, dan pas bouwen. Deployen
-met de Vercel CLI, eerst `vercel link --project vendly --scope mato1`. Verifieer productie
-met `curl`, niet met de browser-pane (die krijgt `ERR_BLOCKED_BY_CLIENT`): `/` hoort **307
-naar `/login`** te geven.
+Bouwen en typechecken kan gewoon in de repo (iCloud speelt niet meer). Uitrollen alleen met
+`mato deploy insights` (testsite, `origin/main`) of `mato release insights` (live, `origin/productie`,
+vraagt bevestiging). Beide rollen een schone `git archive` uit, nooit de werkmap. Wie zelf met de
+CLI uitrolt: in een eigen export, `vercel link --project vendly-test --scope mato1`, en controleer
+`.vercel/project.json` vóór `vercel deploy --prod`. Verifieer met `curl`, niet met de browser-pane
+(die krijgt `ERR_BLOCKED_BY_CLIENT`): `/` hoort **307 naar `/login`** te geven.
 
 `README.md` is nog de ongewijzigde create-next-app-boilerplate; negeer hem.
