@@ -300,6 +300,27 @@ export async function skipStop(sheetId: string, machineId: string, doneAgo: numb
 }
 
 /**
+ * A finished or skipped machine opened again, to put right what was entered
+ * (Xin, 19-10-2026). Only while the round is open. The database writes the
+ * slots back to where the stop found them (less what sold since), so the
+ * machine is done again from there and nothing is counted twice.
+ */
+export async function reopenStop(sheetId: string, machineId: string): Promise<void> {
+  const { orgId, round } = await openRound(sheetId);
+  if (!round.machines.some((machine) => machine.id === machineId)) throw new Error("Not found");
+  if (!round.stops[machineId]?.completedAt) return;
+  const { data, error } = await createAdminClient().rpc("refill_reopen_stop", {
+    target_org: orgId,
+    sheet: sheetId,
+    machine: machineId,
+    filler_name: await fillerName(),
+  });
+  if (error) throw new Error(error.message);
+  if (data === "closed") throw new Error("Round is closed");
+  revalidatePath(`/refill/${sheetId}`);
+}
+
+/**
  * The stock a stop writes and the note that it is done go in one database
  * transaction, under a lock on the round. If anything fails nothing is
  * written, so a retry starts from the same stock; a second phone on the same

@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { Check, ChevronRight, Medal, PackageOpen, Route, TriangleAlert, Undo2 } from "lucide-react";
+import { Check, ChevronRight, Medal, PackageOpen, Pencil, Route, TriangleAlert, Undo2 } from "lucide-react";
 import { Avatar, ListRow, RowList } from "@/components/list-row";
 import { MachineIcon } from "@/components/machine/machine-icon";
 import { ProgressRing } from "@/components/motion/success";
@@ -9,9 +10,12 @@ import { RollingNumber } from "@/components/motion/rolling-number";
 import { EmptyState, Section } from "@/components/page-header";
 import { useI18n } from "@/i18n/client";
 import { duration, fmt } from "@/i18n/format";
+import type { AvatarLook } from "@/lib/avatar";
 import type { FillerStats } from "@/lib/filler-stats";
 import { MIN_ROUNDS } from "@/lib/stats";
 import { cn } from "@/lib/utils";
+import { FillerAvatar } from "./avatar";
+import { AvatarEditor } from "./avatar-editor";
 
 // A filler's own scoreboard. It reads a little like a game (a level, records)
 // but speaks like the rest of the app: calm, factual, and only about their own
@@ -19,7 +23,7 @@ import { cn } from "@/lib/utils";
 // "best" and "usual" to mean something; nothing is compared with a colleague.
 
 /** The whole page with one's own figures. */
-export function FillerFigures({ stats, names }: { stats: FillerStats; names: Record<string, string> }) {
+export function FillerFigures({ stats, names, look }: { stats: FillerStats; names: Record<string, string>; look: AvatarLook | null }) {
   const { m, f } = useI18n();
   const t = m.me;
   const time = (minutes: number) => duration(minutes, m.refill.runTime, m.refill.runTimeHours);
@@ -27,6 +31,8 @@ export function FillerFigures({ stats, names }: { stats: FillerStats; names: Rec
   if (stats.rounds === 0) {
     return (
       <div className="flex flex-col gap-6">
+        {/* The avatar can be made before the first round. */}
+        <LevelCard stats={stats} look={look} />
         <EmptyState title={t.emptyTitle} hint={t.emptyHint} icon={<Medal className="size-5" />} />
         <HowItWorks />
       </div>
@@ -36,7 +42,7 @@ export function FillerFigures({ stats, names }: { stats: FillerStats; names: Rec
   return (
     <div className="flex flex-col gap-10">
       <section className="flex flex-col gap-4">
-        <LevelCard stats={stats} />
+        <LevelCard stats={stats} look={look} />
         <div className="grid grid-cols-3 gap-3">
           <Figure label={t.rounds} value={f.number(stats.rounds)} />
           <Figure label={t.machines} value={f.number(stats.visits)} />
@@ -119,27 +125,84 @@ export function FillerFigures({ stats, names }: { stats: FillerStats; names: Rec
 }
 
 /** The level as a ring that fills towards the next one, with every piece filled so far. */
-function LevelCard({ stats }: { stats: FillerStats }) {
+function LevelCard({ stats, look }: { stats: FillerStats; look: AvatarLook | null }) {
   const { m, f } = useI18n();
   const t = m.me;
+  const [editing, setEditing] = useState(false);
   return (
-    <div className="surface-card flex items-center gap-5 p-5 sm:p-6">
-      <ProgressRing value={stats.level.progress} size={104} stroke={9} className="text-primary">
-        <span className="flex flex-col items-center leading-none">
-          <span className="text-[11.5px] font-semibold text-muted-foreground">{t.levelWord}</span>
-          <span className="tabular mt-1 text-[36px] font-bold tracking-[-0.04em] text-foreground">{stats.level.level}</span>
-        </span>
-      </ProgressRing>
-      <div className="min-w-0">
-        <p className="tabular text-[34px] font-bold leading-none tracking-[-0.04em]">
-          <RollingNumber value={f.number(stats.items)} />
-        </p>
-        <p className="mt-1.5 text-[14.5px] font-medium text-muted-foreground">{t.itemsLabel}</p>
-        <p className="tabular mt-3 text-[13.5px] text-muted-foreground">
-          {fmt(t.toNext, { n: f.number(stats.level.to - stats.items), level: stats.level.level + 1 })}
-        </p>
+    <div className="surface-card flex flex-col gap-4 p-5 sm:p-6">
+      <div className="flex items-center gap-5">
+        <LevelRing stats={stats} look={look} size={104} stroke={9}>
+          <span className="flex flex-col items-center leading-none">
+            <span className="text-[11.5px] font-semibold text-muted-foreground">{t.levelWord}</span>
+            <span className="tabular mt-1 text-[36px] font-bold tracking-[-0.04em] text-foreground">{stats.level.level}</span>
+          </span>
+        </LevelRing>
+        <div className="min-w-0">
+          <p className="tabular text-[34px] font-bold leading-none tracking-[-0.04em]">
+            <RollingNumber value={f.number(stats.items)} />
+          </p>
+          <p className="mt-1.5 text-[14.5px] font-medium text-muted-foreground">{t.itemsLabel}</p>
+          <p className="tabular mt-3 text-[13.5px] text-muted-foreground">
+            {fmt(t.toNext, { n: f.number(stats.level.to - stats.items), level: stats.level.level + 1 })}
+          </p>
+        </div>
       </div>
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="flex h-11 items-center justify-center gap-2 rounded-full bg-surface text-[14.5px] font-semibold active:scale-[0.99]"
+      >
+        <Pencil className="size-4" aria-hidden="true" />
+        {look ? t.avatarEdit : t.avatarMake}
+      </button>
+      {editing && <AvatarEditor initial={look} onClose={() => setEditing(false)} />}
     </div>
+  );
+}
+
+/**
+ * The level as a ring that fills towards the next one. With an avatar chosen
+ * (Xin, 19-10-2026) the avatar sits in the ring and the level on a badge under
+ * it; without one, the ring holds the level as before.
+ */
+function LevelRing({
+  stats,
+  look,
+  size,
+  stroke,
+  children,
+}: {
+  stats: FillerStats;
+  look: AvatarLook | null;
+  size: number;
+  stroke: number;
+  children: React.ReactNode;
+}) {
+  const { m } = useI18n();
+  const inner = size - stroke * 2 - 4;
+  return (
+    <span className="relative shrink-0">
+      <ProgressRing value={stats.level.progress} size={size} stroke={stroke} className="text-primary">
+        {look ? (
+          <span className="block overflow-hidden rounded-full bg-primary/12" style={{ width: inner, height: inner }}>
+            <FillerAvatar look={look} className="size-full" />
+          </span>
+        ) : (
+          children
+        )}
+      </ProgressRing>
+      {look && (
+        <span
+          className={cn(
+            "tabular absolute left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-foreground font-bold text-background shadow-sm",
+            size >= 80 ? "-bottom-1.5 px-2.5 py-0.5 text-[12.5px]" : "-bottom-1.5 px-1.5 py-px text-[10.5px]",
+          )}
+        >
+          {fmt(m.me.levelShort, { n: stats.level.level })}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -157,7 +220,7 @@ function Figure({ label, value }: { label: string; value: string }) {
  * On the filler's home: the level and this week at a glance, one tap from
  * the whole page. Small on purpose: the round itself comes first.
  */
-export function FiguresCard({ stats }: { stats: FillerStats }) {
+export function FiguresCard({ stats, look }: { stats: FillerStats; look: AvatarLook | null }) {
   const { m, f } = useI18n();
   const t = m.me;
   return (
@@ -165,9 +228,9 @@ export function FiguresCard({ stats }: { stats: FillerStats }) {
       href="/refill/me"
       className="surface-card hover-surface flex items-center gap-4 p-4 transition-transform duration-150 active:scale-[0.99]"
     >
-      <ProgressRing value={stats.level.progress} size={56} stroke={5} className="text-primary">
+      <LevelRing stats={stats} look={look} size={56} stroke={5}>
         <span className="tabular text-[19px] font-bold tracking-[-0.03em] text-foreground">{stats.level.level}</span>
-      </ProgressRing>
+      </LevelRing>
       <span className="min-w-0 flex-1">
         <span className="block text-[15.5px] font-semibold">{m.me.title}</span>
         <span className="tabular mt-0.5 block truncate text-[13.5px] text-muted-foreground">

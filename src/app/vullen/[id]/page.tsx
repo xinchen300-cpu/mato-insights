@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getI18n } from "@/i18n/server";
+import { cleanLook } from "@/lib/avatar";
 import { getMyRounds, getRefillRound, getRouteTimes } from "@/lib/data";
 import { displayName } from "@/lib/people";
 import { createClient } from "@/lib/supabase/server";
@@ -32,5 +33,13 @@ export default async function RoundPage({ params }: { params: Promise<{ id: stri
   // earned: not on every reload while the round is on.
   const ending = Boolean(round.completedAt) || round.machines.every((machine) => round.stops[machine.id]?.completedAt);
   const history = ending ? await getMyRounds(orgId) : null;
-  return <RoundFlow round={round} who={displayName(me.data.user)} times={times} history={history} />;
+  return (
+    <RoundFlow
+      round={round}
+      who={displayName(me.data.user)}
+      look={cleanLook(me.data.user?.user_metadata?.avatar)}
+      times={times}
+      history={history}
+    />
+  );
 }

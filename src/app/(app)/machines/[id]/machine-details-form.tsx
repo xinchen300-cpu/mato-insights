@@ -38,6 +38,7 @@ export function MachineDetailsForm({
   const [sharedBusinessId, setSharedBusinessId] = useState(machine.shared_business_id ?? "");
   const [dataSince, setDataSince] = useState(machine.data_since ?? "");
   const [km, setKm] = useState(machine.km_round_trip === null ? "" : String(machine.km_round_trip));
+  const [byHand, setByHand] = useState(machine.refill_manual);
   const [newBusiness, setNewBusiness] = useState("");
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [isPending, startTransition] = useTransition();
@@ -63,6 +64,7 @@ export function MachineDetailsForm({
             : {}),
           dataSince: dataSince || null,
           kmRoundTrip: km.trim() === "" ? null : Number(km.replace(",", ".")),
+          refillManual: byHand,
         });
         setStatus("saved");
         if (businessId === NEW_BUSINESS) setBusinessId("");
@@ -188,6 +190,27 @@ export function MachineDetailsForm({
         />
         <p className={hintClass}>{m.machines.kmRoundTripHint}</p>
       </div>
+      {/* Filled by hand, outside Vendly (Xin, 19-10-2026): out of the refill work, still in the sales. */}
+      <button
+        type="button"
+        role="switch"
+        aria-checked={byHand}
+        onClick={() => setByHand((on) => !on)}
+        className="flex min-h-14 w-full items-center gap-3 py-2 text-left sm:col-span-2"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium">{m.machines.refillManual}</span>
+          <span className={cn("block", hintClass)}>{m.machines.refillManualHint}</span>
+        </span>
+        <span className={cn("relative h-7 w-12 shrink-0 rounded-full transition-colors duration-200", byHand ? "bg-positive" : "bg-border")}>
+          <span
+            className={cn(
+              "absolute top-0.5 size-6 rounded-full bg-white shadow-sm transition-transform duration-200",
+              byHand ? "translate-x-[22px]" : "translate-x-0.5",
+            )}
+          />
+        </span>
+      </button>
       {saveRow}
     </div>
   );

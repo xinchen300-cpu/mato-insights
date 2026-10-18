@@ -31,7 +31,7 @@ import { buildInsights } from "@/lib/insights";
 import { compareMoneySince, compareSince, fillDays, lastFullWeeks } from "@/lib/stats";
 import { terminalStatus } from "@/lib/terminal-status";
 import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
-import { fillLevel, needsAttention } from "@/lib/stock";
+import { fillLevel, needsAttention, slotsFilledByVendly } from "@/lib/stock";
 import { MachineIcon } from "@/components/machine/machine-icon";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { LiveSales } from "@/components/live-sales";
@@ -156,7 +156,8 @@ export default async function OverviewPage() {
   const goodToKnow = insights.filter((i) => i.kind !== "quietMachine").slice(0, 3);
 
   const lowByMachine = new Map<string, number>();
-  for (const slot of stock) {
+  // A machine filled by hand has no stock to warn about.
+  for (const slot of slotsFilledByVendly(stock, machines)) {
     if (!slot.product_id) continue;
     if (needsAttention(fillLevel(slot.stock, slot.capacity))) {
       lowByMachine.set(slot.machine_id, (lowByMachine.get(slot.machine_id) ?? 0) + 1);
@@ -164,8 +165,10 @@ export default async function OverviewPage() {
   }
 
   // One number and the machine worst off; the list lives on its own page.
-  const expiringUnits = expiring.reduce((sum, a) => sum + a.qty_expired + a.qty_expiring_24h, 0);
-  const worstMachine = [...expiring].sort(
+  // Dates of a machine filled by hand are not known to Vendly either.
+  const dated = slotsFilledByVendly(expiring, machines);
+  const expiringUnits = dated.reduce((sum, a) => sum + a.qty_expired + a.qty_expiring_24h, 0);
+  const worstMachine = [...dated].sort(
     (a, b) => b.qty_expired - a.qty_expired || b.qty_expiring_24h - a.qty_expiring_24h,
   )[0];
 

@@ -8,6 +8,7 @@ import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getLiveSold, getMachines, getMachineStock, getMyRounds, getOpenRounds, getRefillSheets, getRoundSettings, getShortages, type OpenRound } from "@/lib/data";
 import { orderByRoute } from "@/lib/round-settings";
+import { cleanLook } from "@/lib/avatar";
 import { fillerStats } from "@/lib/filler-stats";
 import { displayName } from "@/lib/people";
 import { createClient } from "@/lib/supabase/server";
@@ -16,7 +17,7 @@ import { LiveRounds } from "@/components/refill/live-rounds";
 import { RoundList } from "@/components/refill/round-list";
 import { RefillTabs } from "@/components/refill/refill-tabs";
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
-import { fillLevel, needsAttention } from "@/lib/stock";
+import { fillLevel, filledByVendly, needsAttention, slotsFilledByVendly } from "@/lib/stock";
 import { LiveSold } from "@/components/filler/live-sold";
 import { MachineGrid, gridMachines } from "@/components/filler/machine-grid";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
@@ -34,7 +35,7 @@ export default async function RefillPage() {
   // A filler gets their own view of the refill work: rounds and pieces, no money.
   if (await isFiller()) {
     const fillerOrg = await requireRefillAccess();
-    const [rounds, fleet, slots, mine, me, settings, sold] = await Promise.all([
+    const [rounds, everyMachine, everySlot, mine, me, settings, sold] = await Promise.all([
       getOpenRounds(fillerOrg),
       getMachines(fillerOrg),
       getMachineStock(fillerOrg),
@@ -43,6 +44,9 @@ export default async function RefillPage() {
       getRoundSettings(fillerOrg),
       getLiveSold(fillerOrg),
     ]);
+    // A machine filled by hand is not this screen's work: no tile, no round, no start button.
+    const fleet = filledByVendly(everyMachine);
+    const slots = slotsFilledByVendly(everySlot, everyMachine);
     const pieces = new Map<string, { toAdd: number; counted: number; low: number }>();
     for (const slot of slots) {
       if (!slot.product_id) continue;
@@ -97,7 +101,7 @@ export default async function RefillPage() {
           )}
           <LiveSold initial={sold} />
           {/* Someone new sees how a round goes; after the first one, their own figures. */}
-          {stats.rounds > 0 ? <FiguresCard stats={stats} /> : <HowItWorks />}
+          {stats.rounds > 0 ? <FiguresCard stats={stats} look={cleanLook(me.data.user?.user_metadata?.avatar)} /> : <HowItWorks />}
           <OpenRounds rounds={rounds.filter((round) => round.id !== next?.id)} m={m} f={f} />
           {choices.length > 0 ? (
             // Choosing machines one by one is still there, folded away under the big button's way.

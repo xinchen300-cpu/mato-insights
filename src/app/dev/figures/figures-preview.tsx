@@ -4,8 +4,12 @@ import { useEffect, useState } from "react";
 import { FiguresCard, FillerFigures } from "@/components/filler/figures";
 import { PageHeader } from "@/components/page-header";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
+import type { AvatarLook } from "@/lib/avatar";
 import { fillerStats, type FillerStats } from "@/lib/filler-stats";
 import { previewFigures, previewMachineNames } from "../preview-data";
+
+// Someone who made one: dark, wild hair and a full beard, a black jumper.
+const previewLook: AvatarLook = { skin: 1, hair: "spiky", hairColor: 0, beard: "full", shirt: 0, glasses: false };
 
 export function FiguresPreview({ fresh }: { fresh: boolean }) {
   // Built after mounting, from this moment: the server's clock would not match the browser's.
@@ -19,11 +23,11 @@ export function FiguresPreview({ fresh }: { fresh: boolean }) {
     <main className="mx-auto w-full max-w-5xl px-4 pb-28 pt-6 sm:px-6">
       {stats.rounds > 0 && (
         <div className="mb-10">
-          <FiguresCard stats={stats} />
+          <FiguresCard stats={stats} look={previewLook} />
         </div>
       )}
       <PageHeader title="Jouw cijfers" subtitle="Je rondes, je niveau en je beste tijden." backHref="/dev/figures" backLabel="Bijvullen" />
-      <FillerFigures stats={stats} names={previewMachineNames} />
+      <FillerFigures stats={stats} names={previewMachineNames} look={fresh ? null : previewLook} />
     </main>
   );
 }
