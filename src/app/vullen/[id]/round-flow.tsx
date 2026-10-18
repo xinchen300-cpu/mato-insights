@@ -1583,7 +1583,7 @@ function ReturnsScreen({
               ) : (
                 <select
                   aria-label={row.productName}
-                  className="h-10 min-w-0 flex-1 rounded-xl bg-surface px-2 text-[13.5px] font-semibold"
+                  className="h-10 min-w-0 flex-1 rounded-xl bg-surface px-2 text-base font-semibold md:text-[13.5px]"
                   value={where[0]?.[0] ?? row.disposition}
                   onChange={(event) => setParts((all) => ({ ...all, [keyOf(row)]: { [event.target.value]: row.qty } }))}
                 >
@@ -1750,7 +1750,7 @@ function SplitSheet({
             setCount((all) => ({ ...all, [next]: 0, [rest]: 0 }));
             setRest(next);
           }}
-          className="h-10 min-w-0 flex-1 rounded-xl bg-card px-2 text-[14px] font-semibold"
+          className="h-10 min-w-0 flex-1 rounded-xl bg-card px-2 text-base font-semibold md:text-[14px]"
         >
           {order.map((where) => (
             <option key={where} value={where}>

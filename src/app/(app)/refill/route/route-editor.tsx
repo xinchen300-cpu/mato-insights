@@ -157,7 +157,7 @@ export function RouteEditor({
                         }}
                         aria-label={fmt(t.kmLabel, { from: label(line.from), to: label(line.to) })}
                         className={cn(
-                          "tabular h-10 w-20 rounded-xl border bg-card px-3 text-right text-[15px] font-semibold outline-none focus:ring-2 focus:ring-ring/40",
+                          "tabular h-10 w-20 rounded-xl border bg-card px-3 text-right text-base font-semibold md:text-[15px] outline-none focus:ring-2 focus:ring-ring/40",
                           Number.isNaN(typed) ? "border-negative" : "border-input",
                         )}
                       />
