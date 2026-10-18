@@ -36,16 +36,17 @@ export function machineFill(stock: number, capacity: number, counted: boolean): 
   return { percent, band: percent < 30 ? "red" : percent < 60 ? "orange" : "green" };
 }
 
+// The strong shades: these carry text (white on the pill, or the % itself), so they keep 4.5:1.
 export const bandText: Record<FillBand, string> = {
-  red: "text-level-low",
-  orange: "text-level-half",
-  green: "text-level-full",
+  red: "text-level-low-strong",
+  orange: "text-level-half-strong",
+  green: "text-level-full-strong",
 };
 
 export const bandBg: Record<FillBand, string> = {
-  red: "bg-level-low",
-  orange: "bg-level-half",
-  green: "bg-level-full",
+  red: "bg-level-low-strong",
+  orange: "bg-level-half-strong",
+  green: "bg-level-full-strong",
 };
 
 /** Sums slot stock per machine; slots never counted stay out of both sides. */

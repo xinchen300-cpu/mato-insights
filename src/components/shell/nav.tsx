@@ -6,6 +6,7 @@ import {
   ChartColumn,
   ClipboardList,
   LayoutDashboard,
+  ListChecks,
   Package,
   type LucideIcon,
 } from "lucide-react";
@@ -14,7 +15,15 @@ import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/client";
 import type { Messages } from "@/i18n/messages";
 
-const items: { href: string; label: keyof Messages["nav"]; icon: LucideIcon | typeof MachineIcon }[] = [
+type NavItem = {
+  href: string;
+  label: keyof Messages["nav"];
+  icon: LucideIcon | typeof MachineIcon;
+  /** Another place that belongs to this item. */
+  also?: string;
+};
+
+const items: NavItem[] = [
   { href: "/", label: "overview", icon: LayoutDashboard },
   { href: "/machines", label: "machines", icon: MachineIcon },
   { href: "/products", label: "products", icon: Package },
@@ -22,22 +31,44 @@ const items: { href: string; label: keyof Messages["nav"]; icon: LucideIcon | ty
   { href: "/statistics", label: "statistics", icon: ChartColumn },
 ];
 
-/** What a filler may open: the refill work and nothing else. */
-const fillerItems = items.filter((item) => item.href === "/refill");
+/**
+ * What a filler may open: the machines, the refill work, the vullijst (what
+ * each machine needs, box by box) and what sells, in pieces. Their machines
+ * open in the refill pages, so those count as the machines tab.
+ */
+const fillerItems: NavItem[] = [
+  { href: "/machines", label: "machines", icon: MachineIcon, also: "/refill/machines" },
+  { href: "/refill", label: "refill", icon: ClipboardList },
+  { href: "/refill/list", label: "fillList", icon: ListChecks },
+  { href: "/statistics", label: "sales", icon: ChartColumn },
+];
 
-function isActive(pathname: string, href: string) {
-  return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+function matchLength(pathname: string, path: string) {
+  if (path === "/") return pathname === "/" ? 1 : -1;
+  return pathname === path || pathname.startsWith(`${path}/`) ? path.length : -1;
+}
+
+/** The one item to light up: the longest match, so a machine under /refill/machines is not also the refill tab. */
+function activeHref(pathname: string, list: NavItem[]) {
+  let best: { href: string; length: number } | null = null;
+  for (const item of list) {
+    const length = Math.max(matchLength(pathname, item.href), item.also ? matchLength(pathname, item.also) : -1);
+    if (length >= 0 && (!best || length > best.length)) best = { href: item.href, length };
+  }
+  return best?.href ?? null;
 }
 
 /** The left rail on large screens: icon and word, the current page on a soft grey. */
 export function SidebarNav({ filler = false }: { filler?: boolean }) {
   const pathname = usePathname();
   const { m } = useI18n();
+  const list = filler ? fillerItems : items;
+  const current = activeHref(pathname, list);
 
   return (
     <nav className="flex flex-col gap-1">
-      {(filler ? fillerItems : items).map(({ href, label, icon: Icon }) => {
-        const active = isActive(pathname, href);
+      {list.map(({ href, label, icon: Icon }) => {
+        const active = href === current;
         return (
           <Link
             key={href}
@@ -63,21 +94,23 @@ export function SidebarNav({ filler = false }: { filler?: boolean }) {
 export function MobileNav({ filler = false }: { filler?: boolean }) {
   const pathname = usePathname();
   const { m } = useI18n();
-  // One destination needs no tab bar.
-  if (filler) return null;
+  const list = filler ? fillerItems : items;
+  const current = activeHref(pathname, list);
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
-      <div className="mx-auto grid max-w-xl grid-cols-5 px-2">
-        {items.map(({ href, label, icon: Icon }) => {
-          const active = isActive(pathname, href);
+      <div className={cn("mx-auto grid max-w-xl px-2", filler ? "grid-cols-4" : "grid-cols-5")}>
+        {list.map(({ href, label, icon: Icon }) => {
+          const active = href === current;
           return (
             <Link
               key={href}
               href={href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex flex-col items-center gap-1 py-2 text-[10.5px] transition-colors",
+                // Four tabs for a filler still leave room for a label that reads outdoors.
+                "flex flex-col items-center gap-1 py-2 transition-colors",
+                filler ? "text-[12px]" : "text-[10.5px]",
                 active ? "font-semibold text-foreground" : "font-medium text-muted-foreground",
               )}
             >

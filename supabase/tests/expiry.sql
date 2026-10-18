@@ -237,3 +237,111 @@ end;
 $$;
 
 rollback;
+
+-- Third run: one stop of a round that takes pieces out, brings some from
+-- another machine and fills the rest, some of it made earlier.
+begin;
+
+do $$
+declare
+  org   uuid := gen_random_uuid();
+  mach  uuid := gen_random_uuid();
+  mach2 uuid := gen_random_uuid();
+  row1  uuid := gen_random_uuid();
+  row2  uuid := gen_random_uuid();
+  soup  uuid := gen_random_uuid();
+  sheet uuid := gen_random_uuid();
+  e1 uuid;
+  today date := (now() at time zone 'Europe/Brussels')::date;
+  checks int := 0;
+  v_sum int;
+  v_expired int;
+  v_next date;
+  v_stock int;
+  v_count int;
+  v_expires date;
+  v_status text;
+begin
+  insert into organizations (id, name) values (org, 'TEST stop dates');
+  insert into machines (id, org_id, name, payter_serial_number, type)
+  values (mach, org, 'TEST machine', 'TEST-' || left(org::text, 8), 'lift'),
+         (mach2, org, 'TEST machine 2', 'TEST2-' || left(org::text, 8), 'lift');
+  insert into machine_rows (id, org_id, machine_id, position) values (row1, org, mach, 0), (row2, org, mach2, 0);
+  insert into slots (org_id, machine_id, row_id, position, selection_number, size, depth)
+  values (org, mach, row1, 0, '1', 'small', 6), (org, mach, row1, 1, '3', 'small', 6),
+         (org, mach2, row2, 0, '1', 'small', 6);
+  insert into products (id, org_id, name, shelf_life_days) values (soup, org, 'TEST soup', 5);
+  insert into selection_assignments (org_id, machine_id, selection_number, product_id, valid_from)
+  values (org, mach, '1', soup, now() - interval '60 days'), (org, mach, '3', soup, now() - interval '60 days'),
+         (org, mach2, '1', soup, now() - interval '60 days');
+
+  -- Ten days ago: four soups, three days over date.
+  perform record_stock(org, mach, 'refill', jsonb_build_array(jsonb_build_object('selection', '1', 'level_after', 4)),
+    null::uuid, null::text, null::text, '{}'::jsonb);
+  select id into e1 from stock_events where machine_id = mach and selection_number = '1' order by occurred_at desc limit 1;
+  update stock_events set occurred_at = now() - interval '10 days' where id = e1;
+  update stock_batches set filled_at = now() - interval '10 days', expires_at = today - 3 where stock_event_id = e1;
+
+  insert into refill_sheets (id, org_id, share_token, machine_ids, lines, flow_version, ready_at)
+  values (sheet, org, 'TEST-' || left(org::text, 8), array[mach, mach2], '[]'::jsonb, 2, now());
+
+  -- All four out, one brought from another machine, three made yesterday in.
+  v_status := refill_finish_stop(org, sheet, mach,
+    jsonb_build_array(
+      jsonb_build_object('selection', '1', 'level_after', 4, 'made_on', today - 1),
+      jsonb_build_object('selection', '3', 'level_after', 4, 'made_on', today - 2)),
+    '[]'::jsonb, 'TEST', '{}'::jsonb,
+    jsonb_build_array(jsonb_build_object('note', 'expired', 'entries',
+      jsonb_build_array(jsonb_build_object('selection', '1', 'level_after', 0)))),
+    jsonb_build_array(jsonb_build_object('selection', '1', 'level_after', 1, 'expires_on', today + 1)));
+  checks := checks + 1;
+  if v_status is distinct from 'ok' then raise exception 'ASSERT 1 status: %', v_status; end if;
+
+  -- 1. The pieces taken out are gone: nothing over date is left in the slot.
+  select sum(qty_remaining), max(qty_expired), min(next_expires_at)
+  into v_sum, v_expired, v_next from slot_freshness(org, array[mach]) where selection_number = '1';
+  checks := checks + 1;
+  if v_sum is distinct from 4 or v_expired is distinct from 0 then
+    raise exception 'ASSERT 2 pulled first: sum=% expired=%', v_sum, v_expired;
+  end if;
+  -- 2. The brought piece kept its date and is the next to run out.
+  checks := checks + 1;
+  if v_next is distinct from today + 1 then raise exception 'ASSERT 3 moved date: got %', v_next; end if;
+
+  -- 3. Made yesterday with five days: good until four days from now.
+  select b.expires_at into v_expires from stock_batches b join stock_events e on e.id = b.stock_event_id
+  where b.machine_id = mach and b.selection_number = '1' and e.note is null and e.type = 'refill' and b.filled_at > now() - interval '1 hour';
+  checks := checks + 1;
+  if v_expires is distinct from today + 4 or (select qty_filled from stock_batches where expires_at = today + 4 and machine_id = mach and selection_number = '1') <> 3 then
+    raise exception 'ASSERT 4 made yesterday: expires=%', v_expires;
+  end if;
+  select expires_at into v_expires from stock_batches where machine_id = mach and selection_number = '3';
+  checks := checks + 1;
+  if v_expires is distinct from today + 3 then raise exception 'ASSERT 5 made two days ago: got %', v_expires; end if;
+
+  -- 4. The slot ends at its last level, the events in the order they happened.
+  select stock into v_stock from machine_stock(org, array[mach]) where selection_number = '1';
+  checks := checks + 1;
+  if v_stock is distinct from 4 then raise exception 'ASSERT 6 level: got %', v_stock; end if;
+  select count(*) into v_count from (
+    select type, note, row_number() over (order by occurred_at) as n from stock_events
+    where machine_id = mach and selection_number = '1' and refill_sheet_id = sheet
+  ) x where (n = 1 and type = 'correction') or (n = 2 and note = 'moved') or (n = 3 and type = 'refill' and note is null);
+  checks := checks + 1;
+  if v_count <> 3 then raise exception 'ASSERT 7 order: % of 3 in place', v_count; end if;
+
+  -- 5. A server from before calls with seven arguments and still gets the old one.
+  v_status := refill_finish_stop(target_org => org, sheet => sheet, machine => mach2,
+    refills => jsonb_build_array(jsonb_build_object('selection', '1', 'level_after', 2)),
+    corrections => '[]'::jsonb, filler_name => 'TEST', record => '{}'::jsonb);
+  select expires_at into v_expires from stock_batches where machine_id = mach2 and selection_number = '1';
+  checks := checks + 1;
+  if v_status is distinct from 'ok' or v_expires is distinct from today + 5 then
+    raise exception 'ASSERT 8 old call: status=% expires=%', v_status, v_expires;
+  end if;
+
+  raise exception 'TESTS PASSED (% checks)', checks;
+end;
+$$;
+
+rollback;

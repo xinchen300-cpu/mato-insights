@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarClock, CircleDashed, Link2, PackageOpen, TriangleAlert, WifiOff, type LucideIcon } from "lucide-react";
+import { CalendarClock, CircleDashed, ClipboardList, Link2, PackageOpen, TriangleAlert, WifiOff, type LucideIcon } from "lucide-react";
 import { RevenueChart } from "@/components/charts/revenue-chart";
 import { Delta } from "@/components/delta";
 import { KpiHero, MiniStat } from "@/components/kpi";
@@ -49,6 +49,11 @@ const LOW_ROWS = 3;
 /** Payter is asked every 15 seconds; only data this old is worth a word on the page. */
 const STALE_MS = 15 * 60_000;
 const isStale = (syncedAt: string | null) => syncedAt !== null && Date.now() - Date.parse(syncedAt) > STALE_MS;
+
+export async function generateMetadata() {
+  const { m } = await getI18n();
+  return { title: m.overview.title };
+}
 
 export default async function OverviewPage() {
   await denyFiller();
@@ -183,7 +188,8 @@ export default async function OverviewPage() {
       text: fmt(m.overview.todoOffline, { machine: mc.name, when: f.relative(mc.last_disconnected_at!) }),
       href: `/machines/${mc.id}`,
     })),
-    ...quiet.map((q) => ({
+    // A machine that is offline sells nothing anyway: once is enough, as offline.
+    ...quiet.filter((q) => !offline.some((mc) => mc.id === q.machineId)).map((q) => ({
       key: `quiet-${q.machineId}`,
       icon: TriangleAlert,
       tone: "warning" as const,
@@ -285,31 +291,25 @@ export default async function OverviewPage() {
         }
       />
 
-      {/* Like Bijvullen: what you look for first. The money, what needs doing,
+      {/* Like Bijvullen: what you look for first. What needs doing, the money,
           what just sold, then each machine. One thing per block. */}
       <div className="flex flex-col gap-10">
         {/* A round that is out right now comes first: who, how long, where. */}
         {liveRounds.length > 0 && <LiveRounds rounds={liveRounds} refresh={false} />}
-        {/* The balance, as a bank would show it: one figure, two smaller ones, the curve. */}
-        <section className="surface-card px-5 pb-4 pt-6 sm:px-8 sm:pb-6 sm:pt-8">
-          <KpiHero
-            label={m.overview.month}
-            value={f.euro(month.totals.revenue)}
-            compare={compareOf(month, m.periods.compareMonth)}
-            detail={plural(month.totals.units, m.common.salesOne, m.common.salesOther)}
-            f={f}
-          />
-          <div className="mt-7 grid grid-cols-2 gap-x-6 gap-y-6">
-            <MiniStat label={m.overview.today} value={f.euro(today.totals.revenue)} compare={compareOf(today)} f={f} />
-            <MiniStat label={m.overview.week} value={f.euro(week.totals.revenue)} compare={compareOf(week)} f={f} />
-          </div>
-          <div className="-mx-2 mt-7 sm:-mx-3">
-            <RevenueChart data={chartData} height={220} />
-          </div>
-        </section>
-
+        {/* What needs doing today first, above the money (UX review, 17-10-2026). */}
         {todos.length > 0 && (
-          <Section title={m.overview.todo}>
+          <Section
+            title={m.overview.todo}
+            actions={
+              // Machines running low are what a round is for: /refill/new ticks them already.
+              operator && lowSorted.length > 0 ? (
+                <Link href="/refill/new" className={buttonVariants({ variant: "outline" })}>
+                  <ClipboardList />
+                  {m.refill.newRound}
+                </Link>
+              ) : undefined
+            }
+          >
             <RowList>
               {todos.map((t) => (
                 <li key={t.key}>
@@ -328,6 +328,24 @@ export default async function OverviewPage() {
             </RowList>
           </Section>
         )}
+        {/* The balance, as a bank would show it: one figure, two smaller ones, the curve. */}
+        <section className="surface-card px-5 pb-4 pt-6 sm:px-8 sm:pb-6 sm:pt-8">
+          <KpiHero
+            label={m.overview.month}
+            value={f.euro(month.totals.revenue)}
+            compare={compareOf(month, m.periods.compareMonth)}
+            detail={plural(month.totals.units, m.common.salesOne, m.common.salesOther)}
+            f={f}
+          />
+          <div className="mt-7 grid grid-cols-2 gap-x-6 gap-y-6">
+            <MiniStat label={m.overview.today} value={f.euro(today.totals.revenue)} compare={compareOf(today)} f={f} />
+            <MiniStat label={m.overview.week} value={f.euro(week.totals.revenue)} compare={compareOf(week)} f={f} />
+          </div>
+          <div className="-mx-2 mt-7 sm:-mx-3">
+            <RevenueChart data={chartData} height={220} />
+          </div>
+        </section>
+
 
         {/* What just sold, sliding in as it happens. */}
         <LiveSales initial={recentSales} />

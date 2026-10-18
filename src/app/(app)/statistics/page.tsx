@@ -14,7 +14,7 @@ import { getI18n } from "@/i18n/server";
 import Link from "next/link";
 import { getBusinesses, getMachines, getPriceMismatches, getProducts, getStatsReport } from "@/lib/data";
 import { mediaUrl } from "@/lib/media";
-import { denyFiller, requireOrgId } from "@/lib/org";
+import { isFiller, requireOrgId, requireRefillAccess } from "@/lib/org";
 import { cn } from "@/lib/utils";
 import {
   busiestWeekday,
@@ -27,6 +27,7 @@ import {
 } from "@/lib/stats";
 import { compareLabelKey, parseStatsParams, type StatsSearchParams } from "@/lib/stats-params";
 import type { StatsReport } from "@/lib/types";
+import { FillerSales } from "./filler-sales";
 import { MonthlyOverview, MonthlySkeleton } from "./monthly";
 import { StatsFilters } from "./stats-filters";
 import { MachineIcon } from "@/components/machine/machine-icon";
@@ -38,7 +39,11 @@ export async function generateMetadata() {
 
 
 export default async function StatisticsPage({ searchParams }: { searchParams: Promise<StatsSearchParams> }) {
-  await denyFiller();
+  // A filler gets what sells and when, in pieces and without money.
+  if (await isFiller()) {
+    const fillerOrg = await requireRefillAccess();
+    return <FillerSales orgId={fillerOrg} />;
+  }
   const raw = await searchParams;
   const { m, f } = await getI18n();
   const orgId = await requireOrgId();

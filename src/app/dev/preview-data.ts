@@ -78,6 +78,12 @@ export function previewRound(scenario: Scenario, now: number): RefillRound {
             MACHINES.map((machine, i) => [machine.id, doneStop(machine.id, plan, now - minutes(40 - i * 13), now - minutes(34 - i * 13))]),
           )
         : {};
+  // Done: the box was two short of the first dish, so the last machine missed them: on the list for tomorrow.
+  if (scenario === "done") {
+    const last = MACHINES[MACHINES.length - 1].id;
+    picked[`${last}:p-0`] -= 2;
+    stops[last].lines = stops[last].lines.map((line) => (line.selection === "11" ? { ...line, filled: line.filled - 2 } : line));
+  }
   // Bringing back: two Bami goreng and a Loempia did not fit, and one Loempia was past its date.
   if (scenario === "back") {
     const first = stops[MACHINES[0].id];
