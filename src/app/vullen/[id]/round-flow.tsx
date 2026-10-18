@@ -76,7 +76,7 @@ type StopDraft = {
   /** The operator's own checks ticked here; absent in drafts saved before they existed. */
   checks?: Record<string, boolean>;
 };
-type Saved = { picked: Record<string, number>; touched: boolean; drafts: Record<string, StopDraft>; made?: Record<string, number> };
+type Saved = { picked: Record<string, number>; touched: boolean; drafts: Record<string, StopDraft> };
 type ReportKind = RemovalReason | "count" | "technical";
 type View = "home" | "pick" | "stop" | "returns";
 /** A stop as it is sent; when it happened is added at the moment of sending. */
@@ -129,8 +129,6 @@ export function RoundFlow({
   const [picked, setPicked] = useState<Record<string, number>>(initial.picked);
   const [touched, setTouched] = useState(Object.keys(initial.picked).length > 0);
   const [drafts, setDrafts] = useState<Record<string, StopDraft>>({});
-  // Per box line (machine:product), how many days before today it was made; today is not stored.
-  const [made, setMade] = useState<Record<string, number>>({});
   const [restored, setRestored] = useState(false);
 
   const [view, setView] = useState<View>("home");
@@ -163,18 +161,17 @@ export function RoundFlow({
         setTouched(true);
       }
       setDrafts(saved.drafts ?? {});
-      setMade(saved.made ?? {});
     }
     setRestored(true);
   }, [initial.id, initial.readyAt]);
   useEffect(() => {
     if (!restored) return;
     try {
-      localStorage.setItem(storageKey(initial.id), JSON.stringify({ picked, touched, drafts, made } satisfies Saved));
+      localStorage.setItem(storageKey(initial.id), JSON.stringify({ picked, touched, drafts } satisfies Saved));
     } catch {
       // Private mode or a full disk: the round still works, only a reload forgets.
     }
-  }, [restored, initial.id, picked, touched, drafts, made]);
+  }, [restored, initial.id, picked, touched, drafts]);
 
   // The screen stays on while the round is on: a phone that locks between two machines costs a filler time.
   useEffect(() => {
@@ -319,12 +316,6 @@ export function RoundFlow({
       technical: draft.technical,
       note: draft.note,
       checks: draft.checks,
-      // How long ago what goes in here was made, per product, as tapped while packing.
-      made: Object.fromEntries(
-        Object.entries(made)
-          .filter(([key, days]) => key.startsWith(`${machineId}:`) && days > 0)
-          .map(([key, days]) => [key.slice(machineId.length + 1), days]),
-      ),
       lines: [...selections].map((selection) => {
         const line = planned.find((l) => l.selection === selection);
         const edit = draft.lines[selection] ?? emptyLine();
@@ -687,55 +678,40 @@ export function RoundFlow({
                     const n = Math.min(row.take, picked[row.key] ?? 0);
                     const done = n >= row.take;
                     return (
-                      <li key={row.key} className="flex flex-col border-b border-border/60 last:border-0">
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            role="checkbox"
-                            aria-checked={done}
-                            onClick={() => {
-                              haptic();
-                              setPicks((current) => ({ ...current, [row.key]: done ? 0 : row.take }));
-                            }}
-                            className="flex min-h-[68px] min-w-0 flex-1 items-center gap-3 px-1 text-left"
-                          >
-                            <Tick done={done} />
-                            <ProductPhoto path={row.photoPath} />
-                            <span className="flex min-w-0 flex-1 flex-col">
-                              <span className={cn("truncate text-[16px] font-semibold", done && "text-muted-foreground line-through")}>
-                                {row.productName}
-                              </span>
-                              <span className="tabular truncate text-[13px] text-muted-foreground">
-                                {fmt(t.boxSlots, { slots: slotsOf(row.machineId, row.productId) })}
-                              </span>
+                      <li key={row.key} className="flex items-center gap-1 border-b border-border/60 last:border-0">
+                        <button
+                          type="button"
+                          role="checkbox"
+                          aria-checked={done}
+                          onClick={() => {
+                            haptic();
+                            setPicks((current) => ({ ...current, [row.key]: done ? 0 : row.take }));
+                          }}
+                          className="flex min-h-[68px] min-w-0 flex-1 items-center gap-3 px-1 text-left"
+                        >
+                          <Tick done={done} />
+                          <ProductPhoto path={row.photoPath} />
+                          <span className="flex min-w-0 flex-1 flex-col">
+                            <span className={cn("truncate text-[16px] font-semibold", done && "text-muted-foreground line-through")}>
+                              {row.productName}
                             </span>
-                          </button>
-                          <span className="tabular w-16 shrink-0 text-center text-[18px] font-bold">{row.take}</span>
-                          <button
-                            type="button"
-                            onClick={() => setCountSheet(row.key)}
-                            className={cn(
-                              "tabular h-11 w-16 shrink-0 rounded-xl text-[18px] font-bold transition-colors",
-                              done ? "bg-positive/15 text-positive" : n > 0 ? "bg-warning/20 text-warning" : "bg-surface text-muted-foreground",
-                            )}
-                            aria-label={fmt(t.howManyOf, { product: row.productName })}
-                          >
-                            {n > 0 ? n : "–"}
-                          </button>
-                        </div>
-                        {/* Made today unless tapped: a day or two earlier and it runs out that much sooner (Xin, 18-10-2026). */}
-                        <MadeChips
-                          product={row.productName}
-                          value={made[row.key] ?? 0}
-                          onChange={(days) =>
-                            setMade((current) => {
-                              const next = { ...current };
-                              if (days > 0) next[row.key] = days;
-                              else delete next[row.key];
-                              return next;
-                            })
-                          }
-                        />
+                            <span className="tabular truncate text-[13px] text-muted-foreground">
+                              {fmt(t.boxSlots, { slots: slotsOf(row.machineId, row.productId) })}
+                            </span>
+                          </span>
+                        </button>
+                        <span className="tabular w-16 shrink-0 text-center text-[18px] font-bold">{row.take}</span>
+                        <button
+                          type="button"
+                          onClick={() => setCountSheet(row.key)}
+                          className={cn(
+                            "tabular h-11 w-16 shrink-0 rounded-xl text-[18px] font-bold transition-colors",
+                            done ? "bg-positive/15 text-positive" : n > 0 ? "bg-warning/20 text-warning" : "bg-surface text-muted-foreground",
+                          )}
+                          aria-label={fmt(t.howManyOf, { product: row.productName })}
+                        >
+                          {n > 0 ? n : "–"}
+                        </button>
                       </li>
                     );
                   })}
@@ -1512,38 +1488,6 @@ function BigClock({ since, startedLabel }: { since: string; startedLabel: string
         {`${h}:${mm}:${ss}`}
       </span>
       <span className="ml-auto text-right text-[12.5px] font-medium opacity-80">{startedLabel}</span>
-    </div>
-  );
-}
-
-/** When a dish was made: today, yesterday or the day before. One tap; today is where it starts. */
-function MadeChips({ product, value, onChange }: { product: string; value: number; onChange: (days: number) => void }) {
-  const { m } = useI18n();
-  const t = m.round;
-  const options = [t.madeToday, t.madeYesterday, t.madeTwoDays];
-  return (
-    <div role="group" aria-label={fmt(t.madeOf, { product })} className="flex items-center gap-1.5 pb-3 pl-11">
-      <span className="shrink-0 text-[12.5px] font-semibold text-muted-foreground">{t.made}</span>
-      {options.map((label, days) => {
-        const selected = value === days;
-        return (
-          <button
-            key={label}
-            type="button"
-            aria-pressed={selected}
-            onClick={() => {
-              haptic();
-              onChange(days);
-            }}
-            className={cn(
-              "h-9 shrink-0 rounded-full px-2.5 text-[13.5px] font-semibold transition-colors",
-              selected ? (days > 0 ? "bg-warning text-white" : "bg-foreground text-background") : "bg-surface text-foreground",
-            )}
-          >
-            {label}
-          </button>
-        );
-      })}
     </div>
   );
 }

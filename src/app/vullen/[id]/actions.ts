@@ -19,7 +19,6 @@ import {
   type StopRecord,
   vanPool,
 } from "@/lib/refill-flow";
-import { addDays } from "@/lib/expiry";
 import { fmt } from "@/i18n/format";
 import { messages } from "@/i18n/messages";
 import { displayName } from "@/lib/people";
@@ -161,12 +160,6 @@ export type StopInput = {
   lines: { selection: string; filled: number; removed: { reason: string; qty: number }[]; countAfter: number | null; full: boolean }[];
   /** The operator's own checks at this machine, by label: ticked or not. */
   checks?: Record<string, boolean>;
-  /**
-   * Per product, how many days before today what went in was made (1 or 2,
-   * at most 3), as tapped while packing. Its shelf life runs from that day;
-   * without it, from today.
-   */
-  made?: Record<string, number>;
 };
 
 /**
@@ -227,11 +220,6 @@ export async function completeStop(sheetId: string, machineId: string, input: St
     const moved = fromVan.get(line.selection);
     if (moved) line.movedIn = moved.qty;
   }
-  // The day what went in was made: only a day or three back, else today.
-  const madeOn = (productId: string) => {
-    const days = input.made && typeof input.made === "object" ? input.made[productId] : undefined;
-    return Number.isInteger(days) && (days as number) >= 1 && (days as number) <= 3 ? addDays(-(days as number)) : null;
-  };
 
   // One event per slot, at the level it was left at. Only what went in is a
   // refill, with a fresh batch behind it; a slot seen full or counted without
@@ -250,7 +238,6 @@ export async function completeStop(sheetId: string, machineId: string, input: St
     if (level === null) continue;
     if (line.filled > 0) {
       const out = line.removed.reduce((sum, r) => sum + r.qty, 0);
-      const made = madeOn(slot.productId);
       const moved = fromVan.get(line.selection);
       const dated = (date: { expiresOn: string | null; filledOn: string | null }) => ({
         ...(date.expiresOn ? { expires_on: date.expiresOn } : {}),
@@ -263,10 +250,10 @@ export async function completeStop(sheetId: string, machineId: string, input: St
           pulled.set(note, [...(pulled.get(note) ?? []), { selection: line.selection, level_after: left }]);
         }
         if (moved) fromOthers.push({ selection: line.selection, level_after: Math.min(level, left + moved.qty), ...dated(moved) });
-        refills.push({ selection: line.selection, level_after: level, ...(made ? { made_on: made } : {}) });
+        refills.push({ selection: line.selection, level_after: level });
       } else {
         // Nobody knew what was in it: one batch, dated by the oldest that went in.
-        refills.push({ selection: line.selection, level_after: level, ...(moved ? dated(moved) : made ? { made_on: made } : {}) });
+        refills.push({ selection: line.selection, level_after: level, ...(moved ? dated(moved) : {}) });
       }
     } else if (line.removed.length === 0 && line.countAfter === null && !line.full) {
       // Nothing went in, nothing came out, nobody counted: write nothing. A
