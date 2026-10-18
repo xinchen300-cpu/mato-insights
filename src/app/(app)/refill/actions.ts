@@ -4,14 +4,12 @@ import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSessionUser, isFiller, isOperator, requireOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
-import { getDishes, getMachineStock, getMachines, requireRefillLayoutAccess, type Dish } from "@/lib/data";
+import { getDishes, getMachineStock, getMachines, getRefillPlan, requireRefillLayoutAccess, type Dish } from "@/lib/data";
 import { displayName } from "@/lib/people";
 import { featureAllowed } from "@/lib/billing";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { RefillLine, SlotSize } from "@/lib/types";
+import type { SlotSize } from "@/lib/types";
 import { cleanRoundSettings, legKey, mergeRoute, orderByRoute, type RoundSettings } from "@/lib/round-settings";
-import { addDays } from "@/lib/expiry";
-import { removalsDue, slotKey } from "@/lib/refill-flow";
 
 export async function createRefillSheet(
   machineIds: string[],
@@ -25,8 +23,7 @@ export async function createRefillSheet(
   if (machineIds.length === 0) return { empty: true };
   // The list comes from a checkbox on a page, so it comes from the client:
   // asking for a machine that is not yours must not put it on your sheet.
-  const fleet = await getMachines(orgId);
-  const own = new Set(fleet.map((machine) => machine.id));
+  const own = new Set((await getMachines(orgId)).map((machine) => machine.id));
   if (machineIds.some((machineId) => !own.has(machineId))) throw new Error("Not found");
   const admin = createAdminClient();
 
@@ -38,60 +35,17 @@ export async function createRefillSheet(
   const chosen = [...new Set(machineIds)];
   const order = operator ? chosen : orderByRoute(chosen, settings.route);
 
-  const [{ data, error }, freshness, slots] = await Promise.all([
-    admin.rpc("refill_plan", { target_org: orgId, machine_filter: machineIds }),
-    admin.rpc("slot_freshness", { target_org: orgId, machine_filter: machineIds }),
-    getMachineStock(orgId, machineIds),
-  ]);
-  if (error) throw new Error(error.message);
-  if (freshness.error) throw new Error(freshness.error.message);
-  const lines = (data ?? []) as RefillLine[];
-  // What has to come out by its date, also what runs out tomorrow: its
-  // replacement goes in the box, and a full machine with such a meal is visited.
-  const due = removalsDue(
-    ((freshness.data ?? []) as { machine_id: string; selection_number: string; expires_at: string | null; qty_remaining: number }[]).map(
-      (row) => ({ machineId: row.machine_id, selection: row.selection_number, expiresAt: row.expires_at, remaining: Number(row.qty_remaining) }),
-    ),
-    addDays(0),
-    addDays(1),
-  );
-  for (const line of lines) {
-    const out = due.get(slotKey(line.machine_id, line.selection_number));
-    if (out) line.qty_near = out.near;
-  }
-  const planned = new Set(lines.map((line) => slotKey(line.machine_id, line.selection_number)));
-  const machineName = new Map(fleet.map((machine) => [machine.id, machine.name]));
-  for (const slot of slots) {
-    const out = due.get(slotKey(slot.machine_id, slot.selection_number));
-    if (!slot.product_id || !out || planned.has(slotKey(slot.machine_id, slot.selection_number))) continue;
-    lines.push({
-      machine_id: slot.machine_id,
-      machine_name: machineName.get(slot.machine_id) ?? "—",
-      row_position: slot.row_position,
-      slot_position: slot.slot_position,
-      selection_number: slot.selection_number,
-      product_id: slot.product_id,
-      product_name: slot.product_name ?? "—",
-      photo_path: slot.photo_path,
-      stock: slot.stock ?? 0,
-      capacity: slot.capacity,
-      to_add: 0,
-      shelf_life_days: null,
-      next_expires_at: null,
-      qty_expired: out.expired,
-      qty_near: out.near,
-    });
-  }
+  const lines = await getRefillPlan(orgId, machineIds);
   if (lines.length === 0) return { empty: true };
   // A machine with nothing to fill is not visited: nobody drives to a full machine.
-  const visited = new Set(lines.map((line) => line.machine_id));
+  const planned = new Set(lines.map((line) => line.machine_id));
 
   const { data: sheet, error: insertError } = await admin
     .from("refill_sheets")
     .insert({
       org_id: orgId,
       share_token: randomBytes(18).toString("base64url"),
-      machine_ids: order.filter((id) => visited.has(id)),
+      machine_ids: order.filter((id) => planned.has(id)),
       // All of them, in order: a full one stays on the filler's route with a word.
       chosen_machine_ids: order,
       lines,

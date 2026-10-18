@@ -102,6 +102,11 @@ export function roundOrder(chosen: string[], machineIds: string[]): string[] {
   return [...new Set([...chosen, ...machineIds])];
 }
 
+/** How many a slot takes on a round: what it lacks plus what comes out, never more than fits. */
+export function lineTake(line: { capacity: number; to_add: number; qty_expired?: number | null; qty_near?: number | null }): number {
+  return Math.min(line.capacity, line.to_add + (line.qty_expired ?? 0) + (line.qty_near ?? 0));
+}
+
 /** What the box is short of after packing, per product over all machines, most first. */
 export function shortages(rows: PickRow[], picked: Record<string, number>): { productId: string; name: string; n: number }[] {
   const byProduct = new Map<string, { productId: string; name: string; n: number }>();

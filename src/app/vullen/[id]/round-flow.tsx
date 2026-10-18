@@ -22,13 +22,11 @@ import {
   tapOnce,
   type Disposition,
   type FlowLine,
-  type PickRow,
   type RemovalReason,
   type ReturnRow,
   type StopRecord,
 } from "@/lib/refill-flow";
 import { DEFAULT_MACHINE_PHOTO, mediaUrl } from "@/lib/media";
-import { addDays } from "@/lib/expiry";
 import { bandBg, machineFill, machineTotals, type FillBand } from "@/lib/stock";
 import { cn } from "@/lib/utils";
 import { completeRound, completeStop, savePicked, skipStop, startRound, type StopInput } from "./actions";
@@ -75,7 +73,7 @@ type StopDraft = {
   /** The operator's own checks ticked here; absent in drafts saved before they existed. */
   checks?: Record<string, boolean>;
 };
-type Saved = { picked: Record<string, number>; touched: boolean; drafts: Record<string, StopDraft>; dates?: Record<string, string> };
+type Saved = { picked: Record<string, number>; touched: boolean; drafts: Record<string, StopDraft> };
 type ReportKind = RemovalReason | "count" | "technical";
 type View = "home" | "pick" | "stop" | "returns";
 /** A stop as it is sent; when it happened is added at the moment of sending. */
@@ -128,10 +126,6 @@ export function RoundFlow({
   const [picked, setPicked] = useState<Record<string, number>>(initial.picked);
   const [touched, setTouched] = useState(Object.keys(initial.picked).length > 0);
   const [drafts, setDrafts] = useState<Record<string, StopDraft>>({});
-  // The date on each product's label, read while packing: "2026-10-21" by product.
-  const [dates, setDates] = useState<Record<string, string>>({});
-  // Packing from the fridge goes per dish; per machine stays one tap away.
-  const [pickMode, setPickMode] = useState<"dish" | "machine">("dish");
   const [restored, setRestored] = useState(false);
 
   const [view, setView] = useState<View>("home");
@@ -164,18 +158,17 @@ export function RoundFlow({
         setTouched(true);
       }
       setDrafts(saved.drafts ?? {});
-      setDates(saved.dates ?? {});
     }
     setRestored(true);
   }, [initial.id, initial.readyAt]);
   useEffect(() => {
     if (!restored) return;
     try {
-      localStorage.setItem(storageKey(initial.id), JSON.stringify({ picked, touched, drafts, dates } satisfies Saved));
+      localStorage.setItem(storageKey(initial.id), JSON.stringify({ picked, touched, drafts } satisfies Saved));
     } catch {
       // Private mode or a full disk: the round still works, only a reload forgets.
     }
-  }, [restored, initial.id, picked, touched, drafts, dates]);
+  }, [restored, initial.id, picked, touched, drafts]);
 
   // The screen stays on while the round is on: a phone that locks between two machines costs a filler time.
   useEffect(() => {
@@ -316,13 +309,10 @@ export function RoundFlow({
     const draft = draftFor(machineId);
     const planned = initial.lines.filter((line) => line.machineId === machineId);
     const selections = new Set([...planned.map((line) => line.selection), ...Object.keys(draft.lines)]);
-    const products = new Set(planned.map((line) => line.productId));
     return {
       technical: draft.technical,
       note: draft.note,
       checks: draft.checks,
-      // The label dates of what this machine got, so each batch keeps its real date.
-      expiry: Object.fromEntries(Object.entries(dates).filter(([productId]) => products.has(productId))),
       lines: [...selections].map((selection) => {
         const line = planned.find((l) => l.selection === selection);
         const edit = draft.lines[selection] ?? emptyLine();
@@ -600,11 +590,16 @@ export function RoundFlow({
   // ——— Packing ———
   if (view === "pick" && !readyAt) {
     const short = shortages(rows, picked);
-    const dishes = dishesOf(rows, initial.machines.map((machine) => machine.id));
-    const haveOf = (dish: { rows: { key: string; take: number }[] }) =>
-      dish.rows.reduce((sum, row) => sum + Math.min(row.take, picked[row.key] ?? 0), 0);
-    const machineNameOf = (id: string) => initial.machines.find((machine) => machine.id === id)?.name ?? "—";
-    const countDish = countSheet?.startsWith("dish:") ? (dishes.find((dish) => `dish:${dish.productId}` === countSheet) ?? null) : null;
+    // Which slots a product goes in at a machine, so a box can be packed slot by slot.
+    const slotsOf = (machineId: string, productId: string) =>
+      initial.lines
+        .filter((line) => line.machineId === machineId && line.productId === productId && line.take > 0)
+        .map((line) => line.selection)
+        .join(" · ");
+    const boxes = initial.machines.flatMap((machine) => {
+      const boxRows = rows.filter((row) => row.machineId === machine.id);
+      return boxRows.length > 0 ? [{ machine, rows: boxRows, take: boxRows.reduce((sum, row) => sum + row.take, 0) }] : [];
+    });
     const shortTotal = short.reduce((sum, item) => sum + item.n, 0);
     const countRow = rows.find((row) => row.key === countSheet) ?? null;
     return (
@@ -636,143 +631,86 @@ export function RoundFlow({
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 pb-36 pt-1">
-          {/* Per dish: what to take from the fridge at once, and where it goes. Per machine: one box at a time. */}
-          <div className="mx-1 grid grid-cols-2 gap-1 rounded-full bg-surface p-1">
-            {(["dish", "machine"] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                aria-pressed={pickMode === mode}
-                onClick={() => setPickMode(mode)}
-                className={cn(
-                  "h-10 rounded-full text-[15px] font-semibold transition-colors",
-                  pickMode === mode ? "bg-card shadow-[var(--shadow-card)]" : "text-muted-foreground",
-                )}
-              >
-                {mode === "dish" ? t.pickByDish : t.pickByMachine}
-              </button>
-            ))}
-          </div>
-          {pickMode === "dish" ? (
-            <section className="flex flex-col gap-2">
-              <div className="flex items-end gap-1 px-2">
-                <p className="min-w-0 flex-1 text-[13.5px] text-muted-foreground">{t.useByHint}</p>
-                <span className="w-16 text-center text-[12px] font-semibold text-muted-foreground">{t.pickTakeCol}</span>
-                <span className="w-16 text-center text-[12px] font-semibold text-muted-foreground">{t.pickHaveCol}</span>
-              </div>
-              <ul className="surface-card flex flex-col px-2 py-1">
-                {dishes.map((dish) => {
-                  const have = haveOf(dish);
-                  const done = have >= dish.take;
-                  return (
-                    <li key={dish.productId} className="flex flex-col border-b border-border/60 last:border-0">
-                      <div className="flex items-center gap-1">
+        <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 pb-36 pt-3">
+          {/* One box per machine, in the order of the round (Xin, 18-10-2026): each is packed on its own. */}
+          {boxes.map((box, index) => {
+            const have = box.rows.reduce((sum, row) => sum + Math.min(row.take, picked[row.key] ?? 0), 0);
+            const boxDone = have >= box.take;
+            return (
+              <section key={box.machine.id} className="flex flex-col gap-2">
+                <div className="flex items-center gap-1 px-1">
+                  {/* The box's number; a tap ticks the whole box, or clears it. */}
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={boxDone}
+                    aria-label={fmt(t.boxAll, { n: index + 1, machine: box.machine.name })}
+                    onClick={() => {
+                      haptic();
+                      setPicks((current) => ({ ...current, ...Object.fromEntries(box.rows.map((row) => [row.key, boxDone ? 0 : row.take])) }));
+                    }}
+                    className={cn(
+                      "tabular grid size-11 shrink-0 place-items-center rounded-full text-[17px] font-bold transition-colors",
+                      boxDone ? "bg-positive text-white" : "bg-foreground text-background",
+                    )}
+                  >
+                    {boxDone ? <Check className="size-5" strokeWidth={3} aria-hidden="true" /> : index + 1}
+                  </button>
+                  <span className="flex min-w-0 flex-1 flex-col pl-2">
+                    <span className="truncate text-[17px] font-bold tracking-[-0.01em]">{box.machine.name}</span>
+                    <span className={cn("tabular text-[13.5px]", boxDone ? "font-semibold text-positive" : "text-muted-foreground")}>
+                      {fmt(t.boxProgress, { n: have, total: box.take })}
+                    </span>
+                  </span>
+                  <span className="w-16 self-end text-center text-[12px] font-semibold text-muted-foreground">{t.pickTakeCol}</span>
+                  <span className="w-16 self-end text-center text-[12px] font-semibold text-muted-foreground">{t.pickHaveCol}</span>
+                </div>
+                <ul className="surface-card flex flex-col px-2 py-1">
+                  {box.rows.map((row) => {
+                    const n = Math.min(row.take, picked[row.key] ?? 0);
+                    const done = n >= row.take;
+                    return (
+                      <li key={row.key} className="flex items-center gap-1 border-b border-border/60 last:border-0">
                         <button
                           type="button"
                           role="checkbox"
                           aria-checked={done}
                           onClick={() => {
                             haptic();
-                            setPicks((current) => ({ ...current, ...Object.fromEntries(dish.rows.map((row) => [row.key, done ? 0 : row.take])) }));
+                            setPicks((current) => ({ ...current, [row.key]: done ? 0 : row.take }));
                           }}
                           className="flex min-h-[68px] min-w-0 flex-1 items-center gap-3 px-1 text-left"
                         >
                           <Tick done={done} />
-                          <ProductPhoto path={dish.photoPath} />
+                          <ProductPhoto path={row.photoPath} />
                           <span className="flex min-w-0 flex-1 flex-col">
-                            <span className={cn("truncate text-[16px] font-semibold", done && "text-muted-foreground line-through")}>{dish.name}</span>
-                            {/* Where it goes, in the order of the round: the boxes to split it over. */}
-                            <span className="line-clamp-2 text-[13px] leading-snug text-muted-foreground">
-                              {dish.rows.map((row) => `${machineNameOf(row.machineId)} ${row.take}`).join(" · ")}
+                            <span className={cn("truncate text-[16px] font-semibold", done && "text-muted-foreground line-through")}>
+                              {row.productName}
+                            </span>
+                            <span className="tabular truncate text-[13px] text-muted-foreground">
+                              {fmt(t.boxSlots, { slots: slotsOf(row.machineId, row.productId) })}
                             </span>
                           </span>
                         </button>
-                        <span className="tabular w-16 shrink-0 text-center text-[18px] font-bold">{dish.take}</span>
+                        <span className="tabular w-16 shrink-0 text-center text-[18px] font-bold">{row.take}</span>
                         <button
                           type="button"
-                          onClick={() => setCountSheet(`dish:${dish.productId}`)}
+                          onClick={() => setCountSheet(row.key)}
                           className={cn(
                             "tabular h-11 w-16 shrink-0 rounded-xl text-[18px] font-bold transition-colors",
-                            done ? "bg-positive/15 text-positive" : have > 0 ? "bg-warning/20 text-warning" : "bg-surface text-muted-foreground",
+                            done ? "bg-positive/15 text-positive" : n > 0 ? "bg-warning/20 text-warning" : "bg-surface text-muted-foreground",
                           )}
-                          aria-label={fmt(t.howManyOf, { product: dish.name })}
+                          aria-label={fmt(t.howManyOf, { product: row.productName })}
                         >
-                          {have > 0 ? have : "–"}
+                          {n > 0 ? n : "–"}
                         </button>
-                      </div>
-                      <DateChips
-                        value={dates[dish.productId] ?? null}
-                        onChange={(date) =>
-                          setDates((current) => {
-                            const next = { ...current };
-                            if (date) next[dish.productId] = date;
-                            else delete next[dish.productId];
-                            return next;
-                          })
-                        }
-                      />
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ) : (
-            <>
-            {initial.machines.map((machine) => {
-              const machineRows = rows.filter((row) => row.machineId === machine.id);
-              if (machineRows.length === 0) return null;
-              return (
-                <section key={machine.id} className="flex flex-col gap-2">
-                  {/* The machine, and above the two numbers what they mean: first what to take, then what is with you. */}
-                  <div className="flex items-end gap-1 px-2">
-                    <p className="min-w-0 flex-1 truncate text-[14px] font-semibold text-muted-foreground">{machine.name}</p>
-                    <span className="w-16 text-center text-[12px] font-semibold text-muted-foreground">{t.pickTakeCol}</span>
-                    <span className="w-16 text-center text-[12px] font-semibold text-muted-foreground">{t.pickHaveCol}</span>
-                  </div>
-                  <ul className="surface-card flex flex-col px-2 py-1">
-                    {machineRows.map((row) => {
-                      const n = Math.min(row.take, picked[row.key] ?? 0);
-                      const done = n >= row.take;
-                      return (
-                        <li key={row.key} className="flex items-center gap-1 border-b border-border/60 last:border-0">
-                          <button
-                            type="button"
-                            role="checkbox"
-                            aria-checked={done}
-                            onClick={() => {
-                              haptic();
-                              setPicks((current) => ({ ...current, [row.key]: done ? 0 : row.take }));
-                            }}
-                            className="flex min-h-[68px] min-w-0 flex-1 items-center gap-3 px-1 text-left"
-                          >
-                            <Tick done={done} />
-                            <ProductPhoto path={row.photoPath} />
-                            <span className={cn("min-w-0 flex-1 truncate text-[16px] font-semibold", done && "text-muted-foreground line-through")}>
-                              {row.productName}
-                            </span>
-                          </button>
-                          <span className="tabular w-16 shrink-0 text-center text-[18px] font-bold">{row.take}</span>
-                          <button
-                            type="button"
-                            onClick={() => setCountSheet(row.key)}
-                            className={cn(
-                              "tabular h-11 w-16 shrink-0 rounded-xl text-[18px] font-bold transition-colors",
-                              done ? "bg-positive/15 text-positive" : n > 0 ? "bg-warning/20 text-warning" : "bg-surface text-muted-foreground",
-                            )}
-                            aria-label={fmt(t.howManyOf, { product: row.productName })}
-                          >
-                            {n > 0 ? n : "–"}
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </section>
-              );
-            })}
-            </>
-          )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            );
+          })}
         </div>
 
         <BottomBar>
@@ -786,27 +724,6 @@ export function RoundFlow({
           </button>
         </BottomBar>
 
-        {countDish && (
-          <CountSheet
-            title={countDish.name}
-            max={countDish.take}
-            value={haveOf(countDish)}
-            onClose={() => setCountSheet(null)}
-            onSave={(value) => {
-              // What was taken goes to the boxes in the order of the round, each up to what it needs.
-              let left = value;
-              const next = Object.fromEntries(
-                countDish.rows.map((row) => {
-                  const n = Math.min(row.take, left);
-                  left -= n;
-                  return [row.key, n];
-                }),
-              );
-              setPicks((current) => ({ ...current, ...next }));
-              setCountSheet(null);
-            }}
-          />
-        )}
         {countRow && (
           <CountSheet
             title={countRow.productName}
@@ -1550,60 +1467,6 @@ function BigClock({ since, startedLabel }: { since: string; startedLabel: string
         {`${h}:${mm}:${ss}`}
       </span>
       <span className="ml-auto text-right text-[12.5px] font-medium opacity-80">{startedLabel}</span>
-    </div>
-  );
-}
-
-/** The pick list per dish, most first: its rows in the order of the round, one per machine. */
-function dishesOf(rows: PickRow[], order: string[]) {
-  const byProduct = new Map<string, { productId: string; name: string; photoPath: string | null; take: number; rows: PickRow[] }>();
-  for (const row of rows) {
-    const dish = byProduct.get(row.productId) ?? { productId: row.productId, name: row.productName, photoPath: row.photoPath, take: 0, rows: [] };
-    dish.take += row.take;
-    dish.rows.push(row);
-    byProduct.set(row.productId, dish);
-  }
-  return [...byProduct.values()]
-    .map((dish) => ({ ...dish, rows: [...dish.rows].sort((a, b) => order.indexOf(a.machineId) - order.indexOf(b.machineId)) }))
-    .sort((a, b) => b.take - a.take || a.name.localeCompare(b.name));
-}
-
-/**
- * The date on a dish's label, a tap away: today and the week after. It is
- * the real date of the meal, however long it waited in the fridge; tapped
- * again it is cleared, and then the product's shelf life counts from today.
- */
-function DateChips({ value, onChange }: { value: string | null; onChange: (date: string | null) => void }) {
-  const { m } = useI18n();
-  const t = m.round;
-  const days = Array.from({ length: 8 }, (_, i) => addDays(i));
-  return (
-    <div className="flex items-center gap-2 pb-3 pl-1">
-      <span className="shrink-0 text-[12.5px] font-semibold text-muted-foreground">{t.useBy}</span>
-      <div className="-mr-2 flex min-w-0 gap-1.5 overflow-x-auto pr-2">
-        {days.map((day, i) => {
-          const selected = value === day;
-          const weekday = (new Date(`${day}T12:00:00Z`).getUTCDay() + 6) % 7;
-          const label = i === 0 ? t.useByToday : i === 1 ? t.useByTomorrow : `${m.weekdaysShort[weekday]} ${Number(day.slice(8))}`;
-          return (
-            <button
-              key={day}
-              type="button"
-              aria-pressed={selected}
-              onClick={() => {
-                haptic();
-                onChange(selected ? null : day);
-              }}
-              className={cn(
-                "h-10 shrink-0 rounded-full px-3.5 text-[14px] font-semibold transition-colors",
-                selected ? "bg-foreground text-background" : "bg-surface text-foreground",
-              )}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
     </div>
   );
 }

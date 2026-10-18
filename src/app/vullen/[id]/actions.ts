@@ -19,7 +19,6 @@ import {
 import { fmt } from "@/i18n/format";
 import { messages } from "@/i18n/messages";
 import { displayName } from "@/lib/people";
-import { addDays } from "@/lib/expiry";
 import { notifyOperators } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { RefillLine } from "@/lib/types";
@@ -158,12 +157,6 @@ export type StopInput = {
   lines: { selection: string; filled: number; removed: { reason: string; qty: number }[]; countAfter: number | null; full: boolean }[];
   /** The operator's own checks at this machine, by label: ticked or not. */
   checks?: Record<string, boolean>;
-  /**
-   * The date on the label of what went in, per product ("2026-10-21"), as read
-   * while packing. It is the real date however long a meal waited in the
-   * fridge; without it the batch runs from today by the product's shelf life.
-   */
-  expiry?: Record<string, string>;
 };
 
 /**
@@ -217,21 +210,14 @@ export async function completeStop(sheetId: string, machineId: string, input: St
   // One event per slot, at the level it was left at. Only what went in is a
   // refill, with a fresh batch behind it; a slot seen full or counted without
   // filling is a correction, of stock whose age nobody knows.
-  const refills: { selection: string; level_after: number; expires_on: string | null }[] = [];
+  const refills: { selection: string; level_after: number }[] = [];
   const corrections = new Map<string, { selection: string; level_after: number }[]>();
-  // A label date only within reason: not long gone, not months ahead.
-  const earliest = addDays(-1);
-  const latest = addDays(60);
-  const labelDate = (productId: string) => {
-    const date = input.expiry && typeof input.expiry === "object" ? input.expiry[productId] : undefined;
-    return typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= earliest && date <= latest ? date : null;
-  };
   for (const line of lines) {
     const slot = slots.get(line.selection)!;
     const level = levelAfter(slot, slot.stock, line);
     if (level === null) continue;
     if (line.filled > 0) {
-      refills.push({ selection: line.selection, level_after: level, expires_on: labelDate(slot.productId) });
+      refills.push({ selection: line.selection, level_after: level });
     } else if (line.removed.length === 0 && line.countAfter === null && !line.full) {
       // Nothing went in, nothing came out, nobody counted: write nothing. A
       // correction at Vendly's own estimate would pass the estimate off as a count.
@@ -312,7 +298,7 @@ async function finishStop(
   sheetId: string,
   machineId: string,
   work: {
-    refills: { selection: string; level_after: number; expires_on?: string | null }[];
+    refills: { selection: string; level_after: number }[];
     corrections: { note: string; entries: { selection: string; level_after: number }[] }[];
     record: StopRecord;
   },

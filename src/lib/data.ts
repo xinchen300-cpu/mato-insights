@@ -3,11 +3,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { denyFillerAccess, getScope, getSessionUser, isFiller, isOperator, requireOperator, requireRefillAccess, type Role } from "@/lib/org";
 import { displayName } from "@/lib/people";
 import { cleanRoundSettings, type RoundSettings } from "@/lib/round-settings";
-import { onlyMine, roundOrder, roundTimings, slotKey, type Average, type FlowLine, type RoundTimings, type ShopView, type StopRecord } from "@/lib/refill-flow";
+import { lineTake, onlyMine, removalsDue, roundOrder, roundTimings, slotKey, type Average, type FlowLine, type RoundTimings, type ShopView, type StopRecord } from "@/lib/refill-flow";
 import type { MyRound } from "@/lib/filler-stats";
 import { terminalStatus, type TerminalStatus } from "@/lib/terminal-status";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
 import { reportDay } from "@/lib/stats";
+import { addDays } from "@/lib/expiry";
 import type {
   Producer,
   RunSummaryRow,
@@ -239,7 +240,7 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
         photoPath: line.photo_path,
         capacity: now?.capacity ?? line.capacity,
         stock: now ? knownStock(now) : null,
-        take: Math.min(line.capacity, line.to_add + (line.qty_expired ?? 0) + (line.qty_near ?? 0)),
+        take: lineTake(line),
         expired: line.qty_expired ?? 0,
         near: line.qty_near ?? 0,
       };
@@ -274,6 +275,63 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
     settings: cleanRoundSettings(org?.refill_settings),
     notes: (sheet.notes as string | null)?.trim() || null,
   };
+}
+
+/**
+ * What a round made now would carry, slot by slot: what each slot lacks, what
+ * is past its date, and what runs out tomorrow (out the day before, with its
+ * replacement in the box), also in a full slot that only needs something taken
+ * out. A new round and the vullijst read this one plan, so they never disagree.
+ */
+export async function getRefillPlan(orgId: string, machineIds: string[]): Promise<RefillLine[]> {
+  if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
+  // No machines asked for is nothing to plan, never every machine.
+  if (machineIds.length === 0) return [];
+  const admin = createAdminClient();
+  const [fleet, plan, freshness, slots] = await Promise.all([
+    getMachines(orgId),
+    admin.rpc("refill_plan", { target_org: orgId, machine_filter: machineIds }),
+    admin.rpc("slot_freshness", { target_org: orgId, machine_filter: machineIds }),
+    getMachineStock(orgId, machineIds),
+  ]);
+  if (plan.error) throw new Error(plan.error.message);
+  if (freshness.error) throw new Error(freshness.error.message);
+  const lines = (plan.data ?? []) as RefillLine[];
+  const due = removalsDue(
+    ((freshness.data ?? []) as { machine_id: string; selection_number: string; expires_at: string | null; qty_remaining: number }[]).map(
+      (row) => ({ machineId: row.machine_id, selection: row.selection_number, expiresAt: row.expires_at, remaining: Number(row.qty_remaining) }),
+    ),
+    addDays(0),
+    addDays(1),
+  );
+  for (const line of lines) {
+    const out = due.get(slotKey(line.machine_id, line.selection_number));
+    if (out) line.qty_near = out.near;
+  }
+  const planned = new Set(lines.map((line) => slotKey(line.machine_id, line.selection_number)));
+  const machineName = new Map(fleet.map((machine) => [machine.id, machine.name]));
+  for (const slot of slots) {
+    const out = due.get(slotKey(slot.machine_id, slot.selection_number));
+    if (!slot.product_id || !out || planned.has(slotKey(slot.machine_id, slot.selection_number))) continue;
+    lines.push({
+      machine_id: slot.machine_id,
+      machine_name: machineName.get(slot.machine_id) ?? "—",
+      row_position: slot.row_position,
+      slot_position: slot.slot_position,
+      selection_number: slot.selection_number,
+      product_id: slot.product_id,
+      product_name: slot.product_name ?? "—",
+      photo_path: slot.photo_path,
+      stock: slot.stock ?? 0,
+      capacity: slot.capacity,
+      to_add: 0,
+      shelf_life_days: null,
+      next_expires_at: null,
+      qty_expired: out.expired,
+      qty_near: out.near,
+    });
+  }
+  return lines;
 }
 
 /** How this organisation wants its rounds to go, for whoever runs them: the operator or a filler. */

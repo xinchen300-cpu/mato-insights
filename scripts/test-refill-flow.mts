@@ -322,3 +322,9 @@ const missing = stillMissing(lines, { [pickKey("m1", "bami")]: 2, [pickKey("m1",
 ok("tomorrow: what the box lacked and the slot missed", missing.length === 1 && missing[0].productId === "bami" && missing[0].n === 1);
 ok("tomorrow: a machine passed by brings its pieces back, nothing to make", stillMissing(lines, { [pickKey("m1", "bami")]: 3, [pickKey("m1", "nasi")]: 2 }, { m1: stopAt({}, true) }).length === 0);
 ok("tomorrow: never more than the box was short", stillMissing(lines, { [pickKey("m1", "bami")]: 2, [pickKey("m1", "nasi")]: 2 }, { m1: stopAt({ "1": 0, "63": 0, "3": 2 }) })[0]?.n === 1);
+
+// ── What a slot takes on a round (src/lib/refill-flow.ts) ──
+import { lineTake } from "../src/lib/refill-flow.ts";
+ok("take: what it lacks plus what comes out", lineTake({ capacity: 6, to_add: 2, qty_expired: 1, qty_near: 1 }) === 4);
+ok("take: never more than fits", lineTake({ capacity: 4, to_add: 3, qty_expired: 2, qty_near: 1 }) === 4);
+ok("take: a plan from before has no expired or near", lineTake({ capacity: 4, to_add: 3 }) === 3);
