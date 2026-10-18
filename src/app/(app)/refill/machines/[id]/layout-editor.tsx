@@ -204,7 +204,7 @@ export function LayoutEditor({ machineId, slots, dishes: initialDishes }: { mach
                       changeSlot(row.key, slot.key, { product: event.target.value || null });
                     }}
                     aria-label={m.layout.product}
-                    className="h-11 min-w-0 flex-1 rounded-lg border bg-card px-2 text-[15px] outline-none focus:ring-3 focus:ring-ring/25"
+                    className="h-11 min-w-0 flex-1 rounded-lg border bg-card px-2 text-base outline-none md:text-[15px] focus:ring-3 focus:ring-ring/25"
                   >
                     <option value="">{m.layout.noProduct}</option>
                     {options.map(([id, name]) => (
@@ -223,7 +223,7 @@ export function LayoutEditor({ machineId, slots, dishes: initialDishes }: { mach
                       onChange={(event) => setTyping({ slot: slot.key, name: event.target.value })}
                       onKeyDown={(event) => event.key === "Enter" && addDish(row.key, slot.key, typing.name)}
                       placeholder={m.products.name}
-                      className="h-11 min-w-0 flex-1 rounded-lg border bg-card px-3 text-[15px] outline-none focus:ring-3 focus:ring-ring/25"
+                      className="h-11 min-w-0 flex-1 rounded-lg border bg-card px-3 text-base outline-none md:text-[15px] focus:ring-3 focus:ring-ring/25"
                     />
                     <Button onClick={() => addDish(row.key, slot.key, typing.name)} disabled={busy || !typing.name.trim()}>
                       {m.common.add}

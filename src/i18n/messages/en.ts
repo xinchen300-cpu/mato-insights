@@ -1399,6 +1399,21 @@ export const en = {
     notifyHint: "Turn on notifications in Settings to get them.",
     saved: "Saved. Applies from the next round.",
   },
+  install: {
+    title: "Put Vendly on your phone",
+    hint: "Then it opens with one tap, like an app.",
+    button: "Install",
+    iphoneStep1: "Tap the Share button",
+    iphoneStep2: "Scroll down and choose Add to Home Screen",
+    iphoneStep3: "Open Vendly from your home screen and log in once",
+    later: "Not now",
+  },
+  offline: {
+    title: "No connection",
+    body: "Vendly can't reach the internet. As soon as you have signal again, it carries on by itself.",
+    kept: "What you already marked in a round stays saved on this phone.",
+    retry: "Try again",
+  },
   errors: {
     title: "Something went wrong",
     hint: "Try again. If it still does not work, reload the page.",

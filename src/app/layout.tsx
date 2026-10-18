@@ -30,7 +30,21 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export const viewport: Viewport = {
   themeColor: "#f6f6f7",
+  // Edge to edge on a phone: the bars at the bottom pad themselves above the home bar (safe-area-inset).
+  viewportFit: "cover",
 };
+
+// Two things for Vendly as an app on the phone. Android offers to install it
+// only once, early, before the page has started: keep that offer for the
+// install card on Bijvullen. And the service worker, which keeps Vendly's own
+// files on the phone; only in a real build, where those files never change.
+const APP_SCRIPT = [
+  "addEventListener('beforeinstallprompt',function(e){window.__vendlyInstall=e;dispatchEvent(new Event('vendly:installable'))});",
+  "addEventListener('appinstalled',function(){window.__vendlyInstall=null;dispatchEvent(new Event('vendly:installable'))});",
+  process.env.NODE_ENV === "production"
+    ? "if('serviceWorker'in navigator)addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){})});"
+    : "",
+].join("");
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await getLocale();
@@ -50,6 +64,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               "try{if(localStorage.getItem('vendly:hide-numbers')==='1')document.documentElement.setAttribute('data-hide-numbers','')}catch(e){}",
           }}
         />
+        <script dangerouslySetInnerHTML={{ __html: APP_SCRIPT }} />
         <I18nProvider locale={locale}>{children}</I18nProvider>
         {TEST && (
           // A stripe along the top and a label in the middle, both above everything and

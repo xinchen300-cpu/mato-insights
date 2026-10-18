@@ -37,7 +37,7 @@ export function ShareBox({ token }: { token: string }) {
           value={url}
           aria-label={m.refill.share}
           onFocus={(e) => e.currentTarget.select()}
-          className="h-10 min-w-0 flex-1 bg-transparent font-mono text-xs text-muted-foreground outline-none"
+          className="h-10 min-w-0 flex-1 bg-transparent font-mono text-base text-muted-foreground outline-none md:text-xs"
         />
         <Button variant="outline" size="icon" onClick={copy} aria-label={m.common.copy} className="shrink-0">
           {copied ? <Check className="text-positive" /> : <Copy />}
