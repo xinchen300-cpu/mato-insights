@@ -102,7 +102,7 @@ self.addEventListener("push", (event) => {
     payload = { body: event.data ? event.data.text() : "" };
   }
 
-  const title = payload.title || "MATO Info";
+  const title = payload.title || "Vendly";
   event.waitUntil(
     self.registration.showNotification(title, {
       body: payload.body || "",

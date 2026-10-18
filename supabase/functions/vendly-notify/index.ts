@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
         try {
           await webpush.sendNotification(
             { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-            JSON.stringify({ title: "MATO Info", body, url: "/", tag: "evening" }),
+            JSON.stringify({ title: "Vendly", body, url: "/", tag: "evening" }),
           );
           sent += 1;
           await db.from("push_subscriptions").update({ last_sent_at: new Date().toISOString(), failures: 0 }).eq("endpoint", sub.endpoint);

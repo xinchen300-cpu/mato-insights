@@ -1063,6 +1063,7 @@ export const fr: Messages = {
     routeTitle: "Votre itinéraire",
     drive: "environ {time} de route",
     driveBack: "environ {time} retour",
+    samePlace: "même endroit, pas de trajet",
     running: "commencée à {time}",
     backToRound: "Tournée",
     now: "Maintenant",

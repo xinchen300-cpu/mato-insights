@@ -1063,6 +1063,7 @@ export const nl: Messages = {
     routeTitle: "Jouw route",
     drive: "ongeveer {time} rijden",
     driveBack: "ongeveer {time} terug",
+    samePlace: "zelfde plek, niet rijden",
     running: "gestart {time}",
     backToRound: "Ronde",
     now: "Nu",

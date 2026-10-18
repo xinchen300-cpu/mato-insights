@@ -47,7 +47,7 @@ export function RouteEditor({
   const read = (text: string | undefined) => {
     if (!text?.trim()) return null;
     const value = Number(text.replace(/\s/g, "").replace(",", "."));
-    return Number.isFinite(value) && value > 0 && value <= 1000 ? value : NaN;
+    return Number.isFinite(value) && value >= 0 && value <= 1000 ? value : NaN;
   };
   const known = lines.map((line) => read(km[line.key]));
   const total = known.every((value) => value !== null && !Number.isNaN(value))

@@ -66,7 +66,8 @@ export function previewRound(scenario: Scenario, now: number): RefillRound {
     lastSale: iso(now - minutes(25 + i * 40)),
     // Gits is a snack machine in the preview: no question about dates there.
     type: machine.id === "m-gits" ? ("spiral" as const) : ("lift" as const),
-    address: `${machine.name.split(" ")[0]}, België`,
+    // The snack machine stands with Diksmuide, as at Chens Garden.
+    address: `${machine.id === "m-gits" ? "Diksmuide" : machine.name.split(" ")[0]}, België`,
   });
   const picked = Object.fromEntries(
     plan.reduce((sum, line) => sum.set(`${line.machineId}:${line.productId}`, (sum.get(`${line.machineId}:${line.productId}`) ?? 0) + line.take), new Map<string, number>()),
