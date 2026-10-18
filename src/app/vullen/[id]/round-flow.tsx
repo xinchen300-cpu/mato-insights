@@ -160,6 +160,14 @@ export function RoundFlow({
   const [deleteAsk, setDeleteAsk] = useState(false);
   const [deleteRefused, setDeleteRefused] = useState(false);
   const [fullAsk, setFullAsk] = useState<{ open: "empty" | "planned"; selections: string[] } | null>(null);
+  // The last question before a machine is done (Xin, 19-10-2026): anything over date? And if so, which.
+  const [expiredAsk, setExpiredAsk] = useState<{
+    machineId: string;
+    open: "empty" | "planned";
+    full?: string[];
+    step: "ask" | "pick";
+    counts: Record<string, number>;
+  } | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [pendingSkip, setPendingSkip] = useState(false);
@@ -524,6 +532,7 @@ export function RoundFlow({
     setPendingSkip(job.work === null);
     setUnchecked(null);
     setFullAsk(null);
+    setExpiredAsk(null);
     setSkipAsk(false);
     setSkipArmed(false);
     setView("home");
@@ -531,10 +540,42 @@ export function RoundFlow({
     setCountdown(3);
   }
 
-  function finishStop(machineId: string, open: "empty" | "planned", full?: Set<string>) {
+  function finishStop(machineId: string, open: "empty" | "planned", full?: Set<string>, expired?: Record<string, number>) {
     haptic("success");
     const draft = draftFor(machineId);
-    hold({ machineId, work: stopInput(machineId, open, full), checkedAt: draft.checkedAt ?? draft.openedAt ?? null, tappedAt: tapTime() });
+    const work = stopInput(machineId, open, full);
+    if (expired) {
+      // What the last question says came out over date, per slot: it replaces what was noted before; 0 is none.
+      work.lines = work.lines.map((line) =>
+        line.selection in expired
+          ? {
+              ...line,
+              removed: [
+                ...line.removed.filter((r) => r.reason !== "expired"),
+                ...(expired[line.selection] > 0 ? [{ reason: "expired", qty: expired[line.selection] }] : []),
+              ],
+            }
+          : line,
+      );
+      for (const [selection, qty] of Object.entries(expired)) {
+        if (qty > 0 && !work.lines.some((line) => line.selection === selection)) {
+          work.lines.push({ selection, filled: 0, removed: [{ reason: "expired", qty }], countAfter: null, full: false });
+        }
+      }
+    }
+    hold({ machineId, work, checkedAt: draft.checkedAt ?? draft.openedAt ?? null, tappedAt: tapTime() });
+  }
+
+  /** Before a machine is done: "Zijn er gerechten over datum?", starting from what was already noted here. */
+  function askExpired(machineId: string, open: "empty" | "planned", full?: Set<string>) {
+    setUnchecked(null);
+    setFullAsk(null);
+    const counts: Record<string, number> = {};
+    for (const [selection, line] of Object.entries(draftFor(machineId).lines)) {
+      const qty = line.removed.find((r) => r.reason === "expired")?.qty ?? 0;
+      if (qty > 0) counts[selection] = qty;
+    }
+    setExpiredAsk({ machineId, open, full: full ? [...full] : undefined, step: "ask", counts });
   }
 
   /** "Klaar", or after the question about unticked slots: one more question when a slot may be full now. */
@@ -545,7 +586,7 @@ export function RoundFlow({
       setFullAsk({ open, selections: unsure });
       return;
     }
-    finishStop(machineId, open);
+    askExpired(machineId, open);
   }
 
   function skipMachine(machineId: string) {
@@ -1160,11 +1201,9 @@ export function RoundFlow({
             <button type="button" className={primary} onClick={() => requestFinish(current.id, "planned")}>
               {t.yesAllIn}
             </button>
-            <button type="button" className={outline} onClick={() => requestFinish(current.id, "empty")}>
-              {open.some((line) => tallyOf(line).n > 0) ? t.noOnlyTapped : open.length === 1 ? t.noNotInOne : t.noNotIn}
-            </button>
-            <button type="button" className={ghost} onClick={() => setUnchecked(null)}>
-              {t.backToTap}
+            {/* Not all in: back to the slots to set the right numbers (Xin, 19-10-2026). */}
+            <button type="button" className={outline} onClick={() => setUnchecked(null)}>
+              {t.noAdjust}
             </button>
           </Sheet>
         )}
@@ -1184,14 +1223,47 @@ export function RoundFlow({
               ))}
             </ul>
             <p className="text-[15px] text-muted-foreground">{t.unknownHint}</p>
-            <button type="button" className={primary} onClick={() => finishStop(current.id, fullAsk.open, new Set(fullAsk.selections))}>
+            <button type="button" className={primary} onClick={() => askExpired(current.id, fullAsk.open, new Set(fullAsk.selections))}>
               {t.yesFull}
             </button>
-            <button type="button" className={outline} onClick={() => finishStop(current.id, fullAsk.open)}>
+            <button type="button" className={outline} onClick={() => askExpired(current.id, fullAsk.open)}>
               {t.notAll}
             </button>
           </Sheet>
         )}
+        {expiredAsk?.machineId === current.id &&
+          (expiredAsk.step === "ask" ? (
+            <Sheet onClose={() => setExpiredAsk(null)}>
+              <h2 className="text-[24px] font-bold tracking-[-0.02em]">{t.expiredQuestion}</h2>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" className={cn(outline, "gap-2")} onClick={() => setExpiredAsk({ ...expiredAsk, step: "pick" })}>
+                  <CalendarX className="size-5 text-negative" aria-hidden="true" />
+                  {t.expiredYes}
+                </button>
+                <button
+                  type="button"
+                  className={primary}
+                  onClick={() =>
+                    finishStop(current.id, expiredAsk.open, expiredAsk.full ? new Set(expiredAsk.full) : undefined)
+                  }
+                >
+                  {t.expiredNo}
+                </button>
+              </div>
+            </Sheet>
+          ) : (
+            <ExpiredPick
+              slots={machineSlots.filter((slot) => slot.productName)}
+              counts={expiredAsk.counts}
+              doneLabel={fmt(t.doneWith, { machine: current.name })}
+              onChange={(selection, n) => setExpiredAsk({ ...expiredAsk, counts: { ...expiredAsk.counts, [selection]: n } })}
+              onDone={() =>
+                finishStop(current.id, expiredAsk.open, expiredAsk.full ? new Set(expiredAsk.full) : undefined, expiredAsk.counts)
+              }
+              onBack={() => setExpiredAsk({ ...expiredAsk, step: "ask" })}
+              onClose={() => setExpiredAsk(null)}
+            />
+          ))}
         {skipAsk && (
           <Sheet onClose={() => setSkipAsk(false)}>
             <h2 className="text-[22px] font-bold tracking-[-0.02em]">{fmt(t.skipTickedTitle, { machine: current.name })}</h2>
@@ -2050,6 +2122,69 @@ function BackButton({ onClick, disabled }: { onClick: () => void; disabled?: boo
       <ChevronLeft className="size-5" aria-hidden="true" />
       {m.round.back}
     </button>
+  );
+}
+
+/** "Welke gerechten zijn over datum?": the machine's dishes, each with − and +, then the machine is done. */
+function ExpiredPick({
+  slots,
+  counts,
+  doneLabel,
+  onChange,
+  onDone,
+  onBack,
+  onClose,
+}: {
+  slots: RefillRound["slots"];
+  counts: Record<string, number>;
+  doneLabel: string;
+  onChange: (selection: string, n: number) => void;
+  onDone: () => void;
+  onBack: () => void;
+  onClose: () => void;
+}) {
+  const { m } = useI18n();
+  const t = m.round;
+  const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
+  return (
+    <Sheet onClose={onClose}>
+      <h2 className="text-[22px] font-bold tracking-[-0.02em]">{t.expiredPickTitle}</h2>
+      <p className="text-[15px] text-muted-foreground">{t.expiredPickHint}</p>
+      <ul className="flex flex-col">
+        {slots.map((slot) => {
+          const n = counts[slot.selection] ?? 0;
+          return (
+            <li key={slot.selection} className="flex min-h-[60px] items-center gap-2.5 border-b border-border/60 last:border-0">
+              <span className="min-w-8 rounded-lg bg-surface px-1.5 py-0.5 text-center font-mono text-[12.5px] font-semibold">{slot.selection}</span>
+              <span className={cn("min-w-0 flex-1 truncate text-[15.5px] font-semibold", n > 0 && "text-negative")}>{slot.productName}</span>
+              <button type="button" className={stepper} disabled={n === 0} onClick={() => onChange(slot.selection, n - 1)} aria-label={`− ${slot.selection}`}>
+                −
+              </button>
+              <span className="tabular w-7 text-center text-[19px] font-bold">{n}</span>
+              <button
+                type="button"
+                className={stepper}
+                disabled={n >= slot.capacity}
+                onClick={() => {
+                  haptic();
+                  onChange(slot.selection, n + 1);
+                }}
+                aria-label={`+ ${slot.selection}`}
+              >
+                +
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <button type="button" className={primary} disabled={total === 0} onClick={onDone}>
+        <Check className="size-5" strokeWidth={3} aria-hidden="true" />
+        <span className="truncate">{doneLabel}</span>
+      </button>
+      <button type="button" className={ghost} onClick={onBack}>
+        {t.back}
+      </button>
+    </Sheet>
   );
 }
 
