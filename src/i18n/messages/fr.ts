@@ -1239,6 +1239,11 @@ export const fr: Messages = {
     reopenConfirm: "Rouvrir",
     reopening: "Ouverture…",
     pickLocked: "Votre tournée est en cours : voici ce qui est dans vos caisses.",
+    deleteRound: "Supprimer la tournée",
+    deleteTitle: "Supprimer cette tournée ?",
+    deleteHint: "Rien n'a encore été rempli. La tournée disparaît ; vous pourrez ensuite en commencer une nouvelle.",
+    deleteConfirm: "Supprimer",
+    deleteStarted: "Un distributeur est déjà fait : cette tournée reste.",
   },
   fillList: {
     title: "Liste de remplissage",

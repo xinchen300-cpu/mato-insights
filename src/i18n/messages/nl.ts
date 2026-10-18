@@ -1239,6 +1239,11 @@ export const nl: Messages = {
     reopenConfirm: "Opnieuw openen",
     reopening: "Openen…",
     pickLocked: "Je ronde loopt: dit zit in je dozen.",
+    deleteRound: "Ronde verwijderen",
+    deleteTitle: "Deze ronde verwijderen?",
+    deleteHint: "Er is nog niets bijgevuld. De ronde verdwijnt; daarna kun je een nieuwe beginnen.",
+    deleteConfirm: "Verwijderen",
+    deleteStarted: "Er is al een automaat gedaan: deze ronde blijft.",
   },
   fillList: {
     title: "Vullijst",

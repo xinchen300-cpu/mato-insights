@@ -1239,6 +1239,11 @@ export const en = {
     reopenConfirm: "Open again",
     reopening: "Opening…",
     pickLocked: "Your round is on: this is what is in your boxes.",
+    deleteRound: "Delete round",
+    deleteTitle: "Delete this round?",
+    deleteHint: "Nothing has been filled yet. The round goes away; you can start a new one afterwards.",
+    deleteConfirm: "Delete",
+    deleteStarted: "A machine is already done: this round stays.",
   },
   fillList: {
     title: "Fill list",
