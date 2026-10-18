@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarCheck, CalendarX, Check, ChevronLeft, ChevronRight, MessageSquareText, Timer, TriangleAlert, Truck } from "lucide-react";
+import { CalendarCheck, CalendarX, Check, ChevronLeft, ChevronRight, MessageSquareText, Timer, Trash2, TriangleAlert, Truck } from "lucide-react";
 import Link from "next/link";
 import { FillerAvatar } from "@/components/filler/avatar";
 import { FrontView, type FrontSlot } from "@/components/machine/front-view";
@@ -31,7 +31,7 @@ import {
 import { DEFAULT_MACHINE_PHOTO, mediaUrl } from "@/lib/media";
 import { bandBg, machineFill, machineTotals, type FillBand } from "@/lib/stock";
 import { cn } from "@/lib/utils";
-import { completeRound, completeStop, reopenStop, savePicked, skipStop, startRound, type StopInput } from "./actions";
+import { completeRound, completeStop, deleteRound, reopenStop, savePicked, skipStop, startRound, type StopInput } from "./actions";
 import { RoundDone, RoundProgress, SlotProgress, StopToast, type SegmentState } from "./round-moments";
 import { chip, ghost, outline, primary, stepper } from "./styles";
 
@@ -43,8 +43,9 @@ export type RoundApi = {
   skipStop: typeof skipStop;
   completeRound: typeof completeRound;
   reopenStop: typeof reopenStop;
+  deleteRound: typeof deleteRound;
 };
-const serverApi: RoundApi = { savePicked, startRound, completeStop, skipStop, completeRound, reopenStop };
+const serverApi: RoundApi = { savePicked, startRound, completeStop, skipStop, completeRound, reopenStop, deleteRound };
 
 // The round as a checklist: pack, each machine, bring back. One list that
 // always says where the filler is, a clock that runs by itself from the start,
@@ -156,6 +157,8 @@ export function RoundFlow({
   const [skipArmed, setSkipArmed] = useState(false);
   const [skipAsk, setSkipAsk] = useState(false);
   const [reopenAsk, setReopenAsk] = useState(false);
+  const [deleteAsk, setDeleteAsk] = useState(false);
+  const [deleteRefused, setDeleteRefused] = useState(false);
   const [fullAsk, setFullAsk] = useState<{ open: "empty" | "planned"; selections: string[] } | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -491,6 +494,27 @@ export function RoundFlow({
         openStop(machineId);
         router.refresh();
       },
+    );
+  }
+
+  /** "Ronde verwijderen": only while nothing was filled; then back to Bijvullen. */
+  function removeRound() {
+    run(
+      () =>
+        api.deleteRound(initial.id).then((outcome) => {
+          if (outcome === "started") {
+            setDeleteRefused(true);
+            return;
+          }
+          try {
+            localStorage.removeItem(storageKey(initial.id));
+          } catch {
+            // Nothing kept on this phone then.
+          }
+          router.push("/refill");
+          router.refresh();
+        }),
+      () => setDeleteAsk(false),
     );
   }
 
@@ -1287,6 +1311,9 @@ export function RoundFlow({
     },
   ];
 
+  // Nothing filled yet, nothing on its way: the round may still be deleted.
+  const nothingDone = countdown === null && !pendingId && Object.values(stops).every((stop) => !stop.completedAt);
+
   // The round as a bar, one segment per machine, and where the filler was
   // last done, for the estimate: the latest machine filled (a skip says
   // nothing about where they are now).
@@ -1386,82 +1413,105 @@ export function RoundFlow({
       {/* The route as a line with a stop for every step: done in green, the
           one to do now in black, the rest still ahead, the drive in between. */}
       <h2 className="px-5 pt-6 text-[13px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{t.routeTitle}</h2>
-      <ol className="flex flex-1 flex-col overflow-y-auto px-3 pb-44 pt-3">
-        {steps.map((step, index) => {
-          const last = index === steps.length - 1;
-          const passed = step.state === "done" || step.state === "skipped";
-          const next = steps[index + 1];
-          const nextPassed = next?.state === "done" || next?.state === "skipped";
-          const drive = !last && next.state !== "full" && !nextPassed ? driveInto(index + 1) : null;
-          // The line past a full machine turns green with the stop after it.
-          const lineDone = passed || (step.state === "full" && nextPassed);
-          return (
-            <li key={step.key} className="flex gap-3">
-              <div className="flex w-10 shrink-0 flex-col items-center pt-[18px]" aria-hidden="true">
-                <span
-                  className={cn(
-                    "relative grid size-10 shrink-0 place-items-center rounded-full text-[15px] font-bold",
-                    step.state === "done" && "bg-positive text-background",
-                    step.state === "skipped" && "bg-warning/25 text-foreground",
-                    step.state === "now" && "bg-foreground text-background ring-4 ring-foreground/12",
-                    step.state === "later" && "border-2 border-border bg-card text-muted-foreground",
-                    step.state === "full" && "border-2 border-dashed border-border bg-background text-muted-foreground/70",
-                  )}
-                >
-                  {step.state === "done" ? <Check className="size-5" strokeWidth={3} /> : index + 1}
-                </span>
-                {!last && <span className={cn("-mb-[18px] w-[3px] flex-1 rounded-full", lineDone ? "bg-positive" : "bg-border")} />}
-              </div>
-              <div className="flex min-w-0 flex-1 flex-col pb-2">
-                <button
-                  type="button"
-                  disabled={!step.onOpen}
-                  onClick={step.onOpen}
-                  className={cn(
-                    "flex min-h-[76px] w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-[transform,background-color] active:scale-[0.99]",
-                    step.state === "now"
-                      ? "bg-card shadow-[0_0_0_2px_var(--foreground)]"
-                      : step.state === "full"
-                        ? "border-2 border-dashed border-border bg-transparent"
-                        : "bg-card/70",
-                  )}
-                >
-                  {step.machine && (
-                    <MachineThumb
-                      path={step.machine.photoPath}
-                      // Only the picture fades for what comes later: faded text would no longer read outdoors.
-                      className={cn("size-12 rounded-xl", (passed || step.state === "full" || step.state === "later") && "opacity-60")}
-                    />
-                  )}
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className={cn("truncate text-[16.5px] font-semibold", (passed || step.state === "full") && "text-muted-foreground")}>
-                      {step.title}
-                    </span>
-                    <span className={cn("text-[13.5px] text-muted-foreground", step.state === "full" ? "font-medium leading-snug" : "truncate")}>
-                      {step.sub}
-                    </span>
+      <div className="flex flex-1 flex-col overflow-y-auto px-3 pb-44 pt-3">
+        <ol className="flex flex-col">
+          {steps.map((step, index) => {
+            const last = index === steps.length - 1;
+            const passed = step.state === "done" || step.state === "skipped";
+            const next = steps[index + 1];
+            const nextPassed = next?.state === "done" || next?.state === "skipped";
+            const drive = !last && next.state !== "full" && !nextPassed ? driveInto(index + 1) : null;
+            // The line past a full machine turns green with the stop after it.
+            const lineDone = passed || (step.state === "full" && nextPassed);
+            return (
+              <li key={step.key} className="flex gap-3">
+                <div className="flex w-10 shrink-0 flex-col items-center pt-[18px]" aria-hidden="true">
+                  <span
+                    className={cn(
+                      "relative grid size-10 shrink-0 place-items-center rounded-full text-[15px] font-bold",
+                      step.state === "done" && "bg-positive text-background",
+                      step.state === "skipped" && "bg-warning/25 text-foreground",
+                      step.state === "now" && "bg-foreground text-background ring-4 ring-foreground/12",
+                      step.state === "later" && "border-2 border-border bg-card text-muted-foreground",
+                      step.state === "full" && "border-2 border-dashed border-border bg-background text-muted-foreground/70",
+                    )}
+                  >
+                    {step.state === "done" ? <Check className="size-5" strokeWidth={3} /> : index + 1}
                   </span>
-                  {/* Not for a full one: it was full when the round was made, and sales since would contradict the word. */}
-                  {step.machine && !passed && step.state !== "full" && <FillPill fill={fillOf(step.machine.id)} compact />}
-                  {step.aside ? (
-                    <span className="shrink-0 text-[13px] font-semibold text-muted-foreground">{step.aside}</span>
-                  ) : step.state === "now" && !step.machine ? (
-                    <span className="shrink-0 rounded-full bg-foreground px-2.5 py-1 text-[12px] font-bold text-background">{t.now}</span>
-                  ) : step.onOpen ? (
-                    <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
-                  ) : null}
-                </button>
-                {drive && (
-                  <p className="flex items-center gap-2 px-1 pb-1 pt-2.5 text-[13px] font-medium text-muted-foreground">
-                    <Truck className="size-4" aria-hidden="true" />
-                    {drive}
-                  </p>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
+                  {!last && <span className={cn("-mb-[18px] w-[3px] flex-1 rounded-full", lineDone ? "bg-positive" : "bg-border")} />}
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col pb-2">
+                  <button
+                    type="button"
+                    disabled={!step.onOpen}
+                    onClick={step.onOpen}
+                    className={cn(
+                      "flex min-h-[76px] w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-[transform,background-color] active:scale-[0.99]",
+                      step.state === "now"
+                        ? "bg-card shadow-[0_0_0_2px_var(--foreground)]"
+                        : step.state === "full"
+                          ? "border-2 border-dashed border-border bg-transparent"
+                          : "bg-card/70",
+                    )}
+                  >
+                    {step.machine && (
+                      <MachineThumb
+                        path={step.machine.photoPath}
+                        // Only the picture fades for what comes later: faded text would no longer read outdoors.
+                        className={cn("size-12 rounded-xl", (passed || step.state === "full" || step.state === "later") && "opacity-60")}
+                      />
+                    )}
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className={cn("truncate text-[16.5px] font-semibold", (passed || step.state === "full") && "text-muted-foreground")}>
+                        {step.title}
+                      </span>
+                      <span className={cn("text-[13.5px] text-muted-foreground", step.state === "full" ? "font-medium leading-snug" : "truncate")}>
+                        {step.sub}
+                      </span>
+                    </span>
+                    {/* Not for a full one: it was full when the round was made, and sales since would contradict the word. */}
+                    {step.machine && !passed && step.state !== "full" && <FillPill fill={fillOf(step.machine.id)} compact />}
+                    {step.aside ? (
+                      <span className="shrink-0 text-[13px] font-semibold text-muted-foreground">{step.aside}</span>
+                    ) : step.state === "now" && !step.machine ? (
+                      <span className="shrink-0 rounded-full bg-foreground px-2.5 py-1 text-[12px] font-bold text-background">{t.now}</span>
+                    ) : step.onOpen ? (
+                      <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+                    ) : null}
+                  </button>
+                  {drive && (
+                    <p className="flex items-center gap-2 px-1 pb-1 pt-2.5 text-[13px] font-medium text-muted-foreground">
+                      <Truck className="size-4" aria-hidden="true" />
+                      {drive}
+                    </p>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+        {/* A round nothing was filled on yet can go (Xin, 19-10-2026): quiet, at the end of the route. */}
+        {nothingDone && (
+          <button type="button" className={cn(ghost, "mt-4 gap-2 text-negative")} onClick={() => setDeleteAsk(true)}>
+            <Trash2 className="size-4" aria-hidden="true" />
+            {t.deleteRound}
+          </button>
+        )}
+        {deleteRefused && <p className="px-2 pt-2 text-center text-[14px] font-medium text-muted-foreground">{t.deleteStarted}</p>}
+      </div>
+
+      {deleteAsk && (
+        <Sheet onClose={() => setDeleteAsk(false)}>
+          <h2 className="text-[22px] font-bold tracking-[-0.02em]">{t.deleteTitle}</h2>
+          <p className="text-[15.5px] text-muted-foreground">{t.deleteHint}</p>
+          <button type="button" className={cn(primary, "bg-negative")} disabled={pending} onClick={removeRound}>
+            {pending ? t.sending : t.deleteConfirm}
+          </button>
+          <button type="button" className={ghost} onClick={() => setDeleteAsk(false)}>
+            {t.back}
+          </button>
+        </Sheet>
+      )}
 
       <BottomBar>
         {failedMachine && (

@@ -14,6 +14,7 @@ const api: RoundApi = {
   skipStop: () => wait(250),
   completeRound: () => wait(400),
   reopenStop: () => wait(300),
+  deleteRound: () => wait(300).then(() => "deleted" as const),
 };
 
 export function RoundPreview({ scenario }: { scenario: Scenario }) {
