@@ -239,8 +239,9 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
         photoPath: line.photo_path,
         capacity: now?.capacity ?? line.capacity,
         stock: now ? knownStock(now) : null,
-        take: Math.min(line.capacity, line.to_add + (line.qty_expired ?? 0)),
+        take: Math.min(line.capacity, line.to_add + (line.qty_expired ?? 0) + (line.qty_near ?? 0)),
         expired: line.qty_expired ?? 0,
+        near: line.qty_near ?? 0,
       };
     });
 

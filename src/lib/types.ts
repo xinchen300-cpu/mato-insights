@@ -137,6 +137,11 @@ export type RefillLine = {
   /** The date the oldest stock in the slot runs out, before this refill. */
   next_expires_at: string | null;
   qty_expired: number;
+  /**
+   * Units that run out today or tomorrow: out the day before their date, so
+   * the round packs their replacements too. Absent on rounds before 18-10-2026.
+   */
+  qty_near?: number;
 };
 
 export type RefillSheet = {

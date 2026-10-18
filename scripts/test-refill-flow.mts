@@ -302,3 +302,23 @@ const figures = roundFigures(itemReport(
   [{ productId: "eend", qty: 1 }],
 ));
 ok("figures: taken, filled, Too Good To Go, thrown away and short", figures.taken === 5 && figures.filled === 3 && figures.went.promo === 1 && figures.went.waste === 1 && figures.went.stock === 0 && figures.short === 1);
+
+// ── Out the day before, and what to bring tomorrow (src/lib/refill-flow.ts, 18-10-2026) ──
+import { removalsDue, stillMissing } from "../src/lib/refill-flow.ts";
+const due = removalsDue([
+  { machineId: "m1", selection: "1", expiresAt: "2026-10-17", remaining: 2 },
+  { machineId: "m1", selection: "1", expiresAt: "2026-10-18", remaining: 1 },
+  { machineId: "m1", selection: "1", expiresAt: "2026-10-19", remaining: 1 },
+  { machineId: "m1", selection: "3", expiresAt: "2026-10-20", remaining: 3 },
+  { machineId: "m1", selection: "5", expiresAt: null, remaining: 2 },
+  { machineId: "m1", selection: "7", expiresAt: "2026-10-16", remaining: 0 },
+], "2026-10-18", "2026-10-19");
+ok("due: past the date is expired, today and tomorrow are near", due.get(slotKey("m1", "1"))?.expired === 2 && due.get(slotKey("m1", "1"))?.near === 2);
+ok("due: the day after tomorrow, no date or nothing left is not due", !due.has(slotKey("m1", "3")) && !due.has(slotKey("m1", "5")) && !due.has(slotKey("m1", "7")));
+const stopAt = (filled: Record<string, number>, skipped = false): StopRecord => ({ checkedAt: null, completedAt: "x", skipped, technical: false, note: null,
+  lines: Object.entries(filled).map(([selection, n]) => ({ selection, prepared: n, filled: n, removed: [], countAfter: null, full: false })) });
+// bami: 3 to take, 2 in the box, slot 63 stayed empty → 1 tomorrow. nasi: all in the box, slot 3 got 1 (fuller than thought) → the other came back, nothing tomorrow.
+const missing = stillMissing(lines, { [pickKey("m1", "bami")]: 2, [pickKey("m1", "nasi")]: 2 }, { m1: stopAt({ "1": 2, "63": 0, "3": 1 }) });
+ok("tomorrow: what the box lacked and the slot missed", missing.length === 1 && missing[0].productId === "bami" && missing[0].n === 1);
+ok("tomorrow: a machine passed by brings its pieces back, nothing to make", stillMissing(lines, { [pickKey("m1", "bami")]: 3, [pickKey("m1", "nasi")]: 2 }, { m1: stopAt({}, true) }).length === 0);
+ok("tomorrow: never more than the box was short", stillMissing(lines, { [pickKey("m1", "bami")]: 2, [pickKey("m1", "nasi")]: 2 }, { m1: stopAt({ "1": 0, "63": 0, "3": 2 }) })[0]?.n === 1);

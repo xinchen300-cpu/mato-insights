@@ -24,6 +24,8 @@ export type FlowLine = {
   take: number;
   /** Units the shelf life says are past their date: out first. */
   expired: number;
+  /** Units that run out today or tomorrow: out the day before, replaced from the box. */
+  near?: number;
 };
 
 /** What a slot holds now, whether or not the round fills it. */
@@ -557,4 +559,54 @@ export function roundActual(
       skipped: stops.filter(([, stop]) => stop.skipped).map(([machineId]) => machineId),
     },
   };
+}
+
+/** One batch in a slot, as slot_freshness gives it: what is left of it and its date. */
+export type BatchLeft = { machineId: string; selection: string; expiresAt: string | null; remaining: number };
+
+/**
+ * What must come out of each slot on a round, by the dates of what is left in
+ * it: past its date, and running out today or tomorrow, since a filler takes a
+ * meal out the day before its date (Xin, 18-10-2026). Dates are "2026-10-18".
+ */
+export function removalsDue(batches: BatchLeft[], today: string, tomorrow: string): Map<string, { expired: number; near: number }> {
+  const due = new Map<string, { expired: number; near: number }>();
+  for (const batch of batches) {
+    if (!batch.expiresAt || batch.remaining <= 0 || batch.expiresAt > tomorrow) continue;
+    const key = slotKey(batch.machineId, batch.selection);
+    const entry = due.get(key) ?? { expired: 0, near: 0 };
+    if (batch.expiresAt < today) entry.expired += batch.remaining;
+    else entry.near += batch.remaining;
+    due.set(key, entry);
+  }
+  return due;
+}
+
+/**
+ * What to bring next time, per product, most first: what the box was short of
+ * and the slots then also missed. A piece that only came back, because a slot
+ * was fuller than thought or its machine was passed by, is in the fridge
+ * already and not counted.
+ */
+export function stillMissing(
+  lines: FlowLine[],
+  picked: Record<string, number>,
+  stops: Record<string, StopRecord>,
+): { productId: string; name: string; n: number }[] {
+  const boxShort = new Map(shortages(pickList(lines), picked).map((item) => [item.productId, item.n]));
+  const byProduct = new Map<string, { productId: string; name: string; n: number }>();
+  for (const line of lines) {
+    const stop = stops[line.machineId];
+    if (!stop || stop.skipped) continue;
+    const filled = stop.lines.find((l) => l.selection === line.selection)?.filled ?? 0;
+    const n = line.take - filled;
+    if (n <= 0) continue;
+    const entry = byProduct.get(line.productId) ?? { productId: line.productId, name: line.productName, n: 0 };
+    entry.n += n;
+    byProduct.set(line.productId, entry);
+  }
+  return [...byProduct.values()]
+    .map((item) => ({ ...item, n: Math.min(item.n, boxShort.get(item.productId) ?? 0) }))
+    .filter((item) => item.n > 0)
+    .sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
 }
