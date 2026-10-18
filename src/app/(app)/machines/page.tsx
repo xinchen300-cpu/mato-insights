@@ -4,7 +4,7 @@ import { StatusBadge } from "@/components/machine/status-badge";
 import { PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { fmt } from "@/i18n/format";
+import { fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getBusinesses, getLastSales, getMachines, getMachineStock, getRoundSettings, rentsToBusinesses } from "@/lib/data";
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
@@ -127,7 +127,7 @@ export default async function MachinesPage() {
               const tracksStock = mc.type !== "other";
               const line =
                 tracksStock && s && s.low > 0
-                  ? { text: fmt(m.overview.slotsLow, { count: s.low }), alert: true }
+                  ? { text: plural(s.low, m.overview.slotsLowOne, m.overview.slotsLow), alert: true }
                   : tracksStock && (!s || s.slots === 0)
                     ? { text: m.machines.noLayout, alert: false }
                     : tracksStock && s && !s.counted

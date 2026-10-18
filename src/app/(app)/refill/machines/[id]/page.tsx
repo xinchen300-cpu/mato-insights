@@ -4,7 +4,7 @@ import { MachinePhoto } from "@/components/machine/machine-photo";
 import { StatusDot } from "@/components/machine/status-badge";
 import { PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
-import { fmt } from "@/i18n/format";
+import { fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getDishes, getLastSales, getMachines, getMachineStock, getOpenRounds } from "@/lib/data";
 import { requireRefillAccess } from "@/lib/org";
@@ -86,7 +86,7 @@ export default async function FillMachinePage({
             <p className="text-[14.5px] text-muted-foreground">
               {[
                 total?.counted ? fmt(m.refill.piecesIn, { n: total.stock, cap: total.capacity }) : null,
-                low > 0 ? fmt(m.overview.slotsLow, { count: low }) : null,
+                low > 0 ? plural(low, m.overview.slotsLowOne, m.overview.slotsLow) : null,
                 lastSale ? fmt(m.round.lastSale, { when: f.dateTime(lastSale) }) : null,
               ]
                 .filter(Boolean)

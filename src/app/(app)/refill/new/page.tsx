@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { ClipboardList } from "lucide-react";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
-import { DISPLAY_TIME_ZONE, fmt } from "@/i18n/format";
+import { DISPLAY_TIME_ZONE, fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getMachines, getMachineStock, getOpenRounds, getRefillSheets, getStatsReport } from "@/lib/data";
 import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
@@ -141,7 +141,7 @@ export default async function NewRoundPage() {
             : p.counted === 0
               ? m.overview.stockUnknown
               : p.low > 0
-                ? fmt(m.overview.slotsLow, { count: p.low })
+                ? plural(p.low, m.overview.slotsLowOne, m.overview.slotsLow)
                 : fmt(m.refill.items, { count: p.toAdd }),
         note: busy.has(mc.id)
           ? m.refill.onOpenRound

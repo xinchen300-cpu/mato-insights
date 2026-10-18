@@ -80,6 +80,7 @@ export const fr: Messages = {
     runningLow: "Presque vide",
     runningLowEmpty: "Rien n'est presque vide.",
     slotsLow: "{count} cases presque ou complètement vides",
+    slotsLowOne: "1 case presque ou complètement vide",
     todo: "À faire aujourd'hui",
     todoMoreLow: "{count} autres distributeurs se vident aussi",
     notCounted: "Stock pas encore compté",

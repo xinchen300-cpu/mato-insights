@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { MachinePhoto } from "@/components/machine/machine-photo";
 import { StatusDot } from "@/components/machine/status-badge";
-import { fmt } from "@/i18n/format";
+import { plural } from "@/i18n/format";
 import type { Messages } from "@/i18n/messages";
 import { orderByRoute } from "@/lib/round-settings";
 import { bandBg, fillLevel, machineFill, machineTotals, needsAttention, type FillBand } from "@/lib/stock";
@@ -97,7 +97,7 @@ export function MachineGrid({ machines, m, from }: { machines: GridMachine[]; m:
                 {machine.status === "offline"
                   ? m.status.offline
                   : machine.low > 0
-                  ? fmt(m.overview.slotsLow, { count: machine.low })
+                  ? plural(machine.low, m.overview.slotsLowOne, m.overview.slotsLow)
                   : machine.noLayout
                     ? m.machines.noLayout
                     : machine.fill

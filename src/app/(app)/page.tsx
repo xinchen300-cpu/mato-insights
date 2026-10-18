@@ -211,7 +211,7 @@ export default async function OverviewPage() {
       key: `low-${id}`,
       icon: PackageOpen,
       tone: "warning" as const,
-      text: `${machineName.get(id) ?? ""} · ${fmt(m.overview.slotsLow, { count })}`,
+      text: `${machineName.get(id) ?? ""} · ${plural(count, m.overview.slotsLowOne, m.overview.slotsLow)}`,
       href: `/machines/${id}`,
     })),
     ...(lowSorted.length > LOW_ROWS

@@ -80,6 +80,7 @@ export const en = {
     runningLow: "Running low",
     runningLowEmpty: "Nothing is running low.",
     slotsLow: "{count} slots low or empty",
+    slotsLowOne: "1 slot low or empty",
     todo: "To do today",
     todoMoreLow: "{count} other machines are running low too",
     notCounted: "Stock not counted yet",

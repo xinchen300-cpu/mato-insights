@@ -80,6 +80,7 @@ export const nl: Messages = {
     runningLow: "Raakt leeg",
     runningLowEmpty: "Er raakt niets leeg.",
     slotsLow: "{count} vakken bijna of helemaal leeg",
+    slotsLowOne: "1 vak bijna of helemaal leeg",
     todo: "Vandaag te doen",
     todoMoreLow: "Nog {count} andere automaten raken leeg",
     notCounted: "Voorraad nog niet geteld",
