@@ -35,6 +35,7 @@ export function FrontView({
   onSlotClick,
   renderSlotFooter,
   lockedKeys,
+  roomy = false,
 }: {
   rows: FrontSlot[][];
   showStock?: boolean;
@@ -43,6 +44,8 @@ export function FrontView({
   renderSlotFooter?: (slot: FrontSlot) => React.ReactNode;
   /** Slots shown but not offered, like a co-tenant's on a shared fridge. */
   lockedKeys?: string[];
+  /** Wider slots, for buttons in each one big enough for a thumb; a long row then scrolls. */
+  roomy?: boolean;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -55,7 +58,8 @@ export function FrontView({
                 const level = fillLevel(slot.stock, slot.capacity);
                 const clickable = Boolean(onSlotClick) && !lockedKeys?.includes(slot.key);
                 const className = cn(
-                  "flex min-w-[52px] flex-col overflow-hidden rounded-lg bg-card text-left shadow-[0_0_0_1px_var(--border),var(--shadow-card)]",
+                  "flex flex-col overflow-hidden rounded-lg bg-card text-left shadow-[0_0_0_1px_var(--border),var(--shadow-card)]",
+                  roomy ? "min-w-[74px]" : "min-w-[52px]",
                   clickable && "cursor-pointer transition-transform duration-150 hover:-translate-y-0.5",
                   lockedKeys?.includes(slot.key) && "opacity-60",
                   selectedKey === slot.key && "outline-2 outline-offset-1 outline-primary",

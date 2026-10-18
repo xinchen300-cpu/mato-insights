@@ -36,6 +36,9 @@
   --color-level-full: var(--level-full);
   --color-level-half: var(--level-half);
   --color-level-low: var(--level-low);
+  --color-level-full-strong: var(--level-full-strong);
+  --color-level-half-strong: var(--level-half-strong);
+  --color-level-low-strong: var(--level-low-strong);
   --color-level-empty: var(--level-empty);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
@@ -74,21 +77,26 @@
   --muted-foreground: #6b6b74;
   --accent: #efeff1;
   --accent-foreground: #0e0e10;
-  --destructive: #d0433b;
+  --destructive: #b83a2f;
   --border: rgb(14 14 16 / 0.07);
   --input: rgb(14 14 16 / 0.13);
   --ring: #b5862a;
   --heading: #0e0e10;
 
-  --positive: #16a05a;
-  --negative: #d0433b;
-  --warning: #c77a12;
+  /* Dark enough to read as text on white and on the page, at least 4.5:1 (WCAG AA). */
+  --positive: #128049;
+  --negative: #b83a2f;
+  --warning: #a35f12;
 
   /* Stock fill levels: green / amber / red / empty. */
   --level-full: #1fa463;
   --level-half: #e09a2b;
   --level-low: #dd5240;
   --level-empty: #ebebee;
+  /* The same levels for white text on them (the % pills) or as text: at least 4.5:1. The light ones stay for bars and dots. */
+  --level-full-strong: #137a49;
+  --level-half-strong: #9a5b0e;
+  --level-low-strong: #b83a2f;
 
   --chart-1: #b5862a;
   --chart-2: #8a6117;
@@ -103,7 +111,8 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    /* Full strength: the gold ring keeps 3:1 against white, so keyboard focus stays visible. */
+    @apply border-border outline-ring;
   }
   html {
     @apply font-sans;

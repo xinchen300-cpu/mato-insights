@@ -1,20 +1,19 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { StockLegend } from "@/components/machine/front-view";
-import { FrontView } from "@/components/machine/front-view";
 import { MachinePhoto } from "@/components/machine/machine-photo";
 import { StatusDot } from "@/components/machine/status-badge";
 import { PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getLastSales, getMachines, getMachineStock, getOpenRounds } from "@/lib/data";
-import { toFrontRows } from "@/lib/layout";
+import { getDishes, getLastSales, getMachines, getMachineStock, getOpenRounds } from "@/lib/data";
 import { requireRefillAccess } from "@/lib/org";
 import { bandBg, fillLevel, machineFill, machineTotals, needsAttention } from "@/lib/stock";
 import { terminalStatus } from "@/lib/terminal-status";
 import { cn } from "@/lib/utils";
 import { FillButton } from "./fill-button";
+import { LayoutEditor } from "./layout-editor";
+import { StockAdjust } from "./stock-adjust";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -26,16 +25,26 @@ export async function generateMetadata() {
  * and the button to fill it. Products and pieces only: no prices, no sales
  * figures, no money (the stock comes without prices for a filler).
  */
-export default async function FillMachinePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function FillMachinePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string | string[] }>;
+}) {
   const orgId = await requireRefillAccess();
   const { id } = await params;
+  // Opened from the machines page: back goes there, else to the refill page.
+  const fromMachines = (await searchParams).from === "machines";
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const { m, f } = await getI18n();
-  const [machines, slots, lastSales, open] = await Promise.all([
+  const [machines, slots, lastSales, open, dishes] = await Promise.all([
     getMachines(orgId),
     getMachineStock(orgId, [id]),
     getLastSales(orgId),
     getOpenRounds(orgId),
+    // Null for a shared machine: its layout stays the operator's.
+    getDishes(orgId, id).catch(() => null),
   ]);
   const machine = machines.find((candidate) => candidate.id === id);
   if (!machine) notFound();
@@ -51,7 +60,11 @@ export default async function FillMachinePage({ params }: { params: Promise<{ id
 
   return (
     <>
-      <PageHeader backHref="/refill" backLabel={m.refill.title} title={machine.name} />
+      <PageHeader
+        backHref={fromMachines ? "/machines" : "/refill"}
+        backLabel={fromMachines ? m.machines.title : m.refill.title}
+        title={machine.name}
+      />
       <div className="flex flex-col gap-8">
         <div className="grid gap-4 sm:grid-cols-[260px_1fr] sm:items-center">
           <MachinePhoto path={machine.photo_path} className="rounded-2xl" />
@@ -84,29 +97,23 @@ export default async function FillMachinePage({ params }: { params: Promise<{ id
                 {m.refill.toRound}
               </Link>
             ) : (
-              <FillButton machineId={id} />
+              // A machine without a layout has nothing to fill yet.
+              stocked.length > 0 && <FillButton machineId={id} />
             )}
           </div>
         </div>
 
-        <Section title={m.refill.stockTitle}>
-          {stocked.length === 0 ? (
+        {/* The slots, with one button to set their counts with a big minus and plus (Xin, 17-10-2026). */}
+        {stocked.length === 0 ? (
+          <Section title={m.refill.stockTitle}>
             <p className="px-1 text-sm text-muted-foreground">{m.machines.noLayoutHint}</p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              <FrontView rows={toFrontRows(stocked)} />
-              <StockLegend
-                labels={{
-                  full: m.machines.legendFull,
-                  half: m.machines.legendHalf,
-                  low: m.machines.legendLow,
-                  empty: m.machines.legendEmpty,
-                  unknown: m.machines.legendUnknown,
-                }}
-              />
-            </div>
-          )}
-        </Section>
+          </Section>
+        ) : (
+          <StockAdjust machineId={id} slots={stocked} />
+        )}
+
+        {/* The layout itself, simply: a product per slot, the numbers, how many slots a row has (Xin, 17-10-2026). */}
+        {dishes && slots.length > 0 && <LayoutEditor machineId={id} slots={slots} dishes={dishes} />}
       </div>
     </>
   );

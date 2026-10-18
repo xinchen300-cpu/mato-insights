@@ -100,6 +100,14 @@ export function roundOrder(chosen: string[], machineIds: string[]): string[] {
   return [...new Set([...chosen, ...machineIds])];
 }
 
+/**
+ * How many a slot takes on a round: what it lacks, never more than fits. The
+ * filler checks the dates by eye; the round counts no expiry (Xin, 18-10-2026).
+ */
+export function lineTake(line: { capacity: number; to_add: number }): number {
+  return Math.min(line.capacity, Math.max(0, line.to_add));
+}
+
 /** What the box is short of after packing, per product over all machines, most first. */
 export function shortages(rows: PickRow[], picked: Record<string, number>): { productId: string; name: string; n: number }[] {
   const byProduct = new Map<string, { productId: string; name: string; n: number }>();
@@ -557,4 +565,33 @@ export function roundActual(
       skipped: stops.filter(([, stop]) => stop.skipped).map(([machineId]) => machineId),
     },
   };
+}
+
+/**
+ * What to bring next time, per product, most first: what the box was short of
+ * and the slots then also missed. A piece that only came back, because a slot
+ * was fuller than thought or its machine was passed by, is in the fridge
+ * already and not counted.
+ */
+export function stillMissing(
+  lines: FlowLine[],
+  picked: Record<string, number>,
+  stops: Record<string, StopRecord>,
+): { productId: string; name: string; n: number }[] {
+  const boxShort = new Map(shortages(pickList(lines), picked).map((item) => [item.productId, item.n]));
+  const byProduct = new Map<string, { productId: string; name: string; n: number }>();
+  for (const line of lines) {
+    const stop = stops[line.machineId];
+    if (!stop || stop.skipped) continue;
+    const filled = stop.lines.find((l) => l.selection === line.selection)?.filled ?? 0;
+    const n = line.take - filled;
+    if (n <= 0) continue;
+    const entry = byProduct.get(line.productId) ?? { productId: line.productId, name: line.productName, n: 0 };
+    entry.n += n;
+    byProduct.set(line.productId, entry);
+  }
+  return [...byProduct.values()]
+    .map((item) => ({ ...item, n: Math.min(item.n, boxShort.get(item.productId) ?? 0) }))
+    .filter((item) => item.n > 0)
+    .sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
 }

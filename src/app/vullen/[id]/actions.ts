@@ -207,16 +207,27 @@ export async function completeStop(sheetId: string, machineId: string, input: St
     });
   }
 
+
   // One event per slot, at the level it was left at. Only what went in is a
   // refill, with a fresh batch behind it; a slot seen full or counted without
-  // filling is a correction, of stock whose age nobody knows.
-  const refills: { selection: string; level_after: number }[] = [];
+  // filling is a correction, of stock whose age nobody knows. A filled slot
+  // that also had pieces taken out writes those first, then the new level:
+  // written as one level, only the difference would go in and the pieces taken
+  // out would be counted as still there.
+  type Entry = { selection: string; level_after: number };
+  const pulled = new Map<string, Entry[]>();
+  const refills: Entry[] = [];
   const corrections = new Map<string, { selection: string; level_after: number }[]>();
   for (const line of lines) {
     const slot = slots.get(line.selection)!;
     const level = levelAfter(slot, slot.stock, line);
     if (level === null) continue;
     if (line.filled > 0) {
+      const out = line.removed.reduce((sum, r) => sum + r.qty, 0);
+      if (slot.stock !== null && out > 0) {
+        const note = line.removed[0].reason;
+        pulled.set(note, [...(pulled.get(note) ?? []), { selection: line.selection, level_after: Math.max(0, slot.stock - out) }]);
+      }
       refills.push({ selection: line.selection, level_after: level });
     } else if (line.removed.length === 0 && line.countAfter === null && !line.full) {
       // Nothing went in, nothing came out, nobody counted: write nothing. A
@@ -232,6 +243,7 @@ export async function completeStop(sheetId: string, machineId: string, input: St
   const completedAt = phoneMoment(input.doneAgo, round.readyAt, now) ?? new Date(now).toISOString();
   const checkedAt = phoneMoment(input.checkedAgo, round.readyAt, now);
   const status = await finishStop(orgId, sheetId, machineId, {
+    pulled: [...pulled].map(([note, entries]) => ({ note, entries })),
     refills,
     corrections: [...corrections].map(([note, entries]) => ({ note, entries })),
     record: {
@@ -298,6 +310,8 @@ async function finishStop(
   sheetId: string,
   machineId: string,
   work: {
+    /** Taken out of slots that are filled again: written before them. */
+    pulled?: { note: string; entries: { selection: string; level_after: number }[] }[];
     refills: { selection: string; level_after: number }[];
     corrections: { note: string; entries: { selection: string; level_after: number }[] }[];
     record: StopRecord;
@@ -311,6 +325,9 @@ async function finishStop(
     corrections: work.corrections,
     filler_name: await fillerName(),
     record: work.record,
+    pulled: work.pulled ?? [],
+    // The database also takes pieces brought from another machine; Vendly no longer sends any (Xin, 18-10-2026).
+    moved: [],
   });
   if (error) throw new Error(error.message);
   if (data === "closed") throw new Error("Round is closed");
