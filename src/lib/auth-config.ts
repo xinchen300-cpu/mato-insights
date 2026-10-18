@@ -10,8 +10,9 @@ export const REQUIRE_LOGIN =
 // route looks up again with our own key.
 const PUBLIC_PREFIXES = ["/login", "/signup", "/auth/", "/r/", "/b/", "/pwa-icon/", "/api/mollie/"];
 // The service worker is fetched by the browser without the session, so a
-// redirect to the login page would stop it registering at all.
-const PUBLIC_FILES = ["/manifest.webmanifest", "/icon.svg", "/sw.js"];
+// redirect to the login page would stop it registering at all. The offline
+// page it keeps on the phone holds no data, so it is open too.
+const PUBLIC_FILES = ["/manifest.webmanifest", "/icon.svg", "/sw.js", "/offline"];
 
 export function isPublicPath(pathname: string) {
   return PUBLIC_FILES.includes(pathname) || PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));

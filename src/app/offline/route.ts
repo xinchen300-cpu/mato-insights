@@ -1,0 +1,52 @@
+import { getI18n } from "@/i18n/server";
+
+// The page the service worker shows when a page is opened without any
+// connection. It is kept on the phone, so it is one plain file: no scripts or
+// styles from the app that might not be there, and nothing of anyone's data.
+// It is shown at the address that was asked for, so trying again (or the
+// signal coming back) simply opens that page once more.
+
+function escape(text: string) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+export async function GET() {
+  const { locale, m } = await getI18n();
+  const t = m.offline;
+  const html = `<!doctype html>
+<html lang="${locale}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f6f7">
+<title>${escape(t.title)} · Vendly</title>
+<style>
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; min-height: 100svh; display: flex; align-items: center; justify-content: center; background: #f6f6f7; color: #0e0e10;
+         font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; letter-spacing: -0.011em; }
+  main { max-width: 22rem; padding: 2rem 1.5rem calc(2rem + env(safe-area-inset-bottom)); text-align: center; }
+  svg { width: 4.5rem; height: auto; }
+  h1 { margin: 1.5rem 0 0.5rem; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
+  p { margin: 0 0 0.75rem; font-size: 16px; line-height: 1.45; color: #6b6b74; }
+  a { display: flex; align-items: center; justify-content: center; height: 3.5rem; margin-top: 1.5rem; border-radius: 1rem;
+      background: #0e0e10; color: #fff; font-size: 17px; font-weight: 600; text-decoration: none; touch-action: manipulation; }
+  a:active { transform: scale(0.99); }
+</style>
+</head>
+<body>
+<main>
+  <svg viewBox="14 15 92 60" aria-hidden="true">
+    <path d="M34,20 L20,20 L20,70 L34,70" fill="none" stroke="#A6752C" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M86,20 L100,20 L100,70 L86,70" fill="none" stroke="#A6752C" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon points="48.2,36.5 54,36.5 60,54.5 66,36.5 71.8,36.5 63.1,61 56.9,61" fill="#2A2520"/>
+  </svg>
+  <h1>${escape(t.title)}</h1>
+  <p>${escape(t.body)}</p>
+  <p>${escape(t.kept)}</p>
+  <a href="">${escape(t.retry)}</a>
+</main>
+<script>addEventListener("online", function () { location.reload(); });</script>
+</body>
+</html>`;
+  return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+}

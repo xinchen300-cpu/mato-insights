@@ -1399,6 +1399,21 @@ export const fr: Messages = {
     notifyHint: "Activez les notifications dans Réglages pour les recevoir.",
     saved: "Enregistré. Valable dès la prochaine tournée.",
   },
+  install: {
+    title: "Mettez Vendly sur votre téléphone",
+    hint: "Vous l'ouvrez alors d'un geste, comme une application.",
+    button: "Installer",
+    iphoneStep1: "Touchez le bouton Partager",
+    iphoneStep2: "Faites défiler et choisissez Sur l'écran d'accueil",
+    iphoneStep3: "Ouvrez Vendly depuis l'écran d'accueil et connectez-vous une fois",
+    later: "Pas maintenant",
+  },
+  offline: {
+    title: "Pas de connexion",
+    body: "Vendly ne trouve pas internet. Dès que le réseau revient, il reprend tout seul.",
+    kept: "Ce que vous avez déjà indiqué dans une tournée reste enregistré sur ce téléphone.",
+    retry: "Réessayer",
+  },
   errors: {
     title: "Un problème est survenu",
     hint: "Réessayez. Si cela ne marche toujours pas, rechargez la page.",

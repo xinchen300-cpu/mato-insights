@@ -180,7 +180,7 @@ export function WorkflowStudio({
               placeholder={t.messagePlaceholder}
               onFocus={() => show("start")}
               onChange={(event) => change({ message: event.target.value || null }, "start")}
-              className="resize-none rounded-xl border border-input bg-card px-3 py-2.5 text-[15px] outline-none focus:ring-2 focus:ring-ring/40"
+              className="resize-none rounded-xl border border-input bg-card px-3 py-2.5 text-base outline-none md:text-[15px] focus:ring-2 focus:ring-ring/40"
             />
           </label>
 

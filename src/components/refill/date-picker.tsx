@@ -89,7 +89,7 @@ export function ExpiryPicker({
             value={value}
             aria-label={m.refill.expiryDate}
             onChange={(e) => e.target.value && onChange(e.target.value)}
-            className="h-9 rounded-full border border-input bg-card px-3 text-[13px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25"
+            className="h-9 rounded-full border border-input bg-card px-3 text-base outline-none md:text-[13px] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25"
           />
         </div>
       )}

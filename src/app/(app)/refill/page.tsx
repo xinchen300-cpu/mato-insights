@@ -22,6 +22,7 @@ import { MachineGrid, gridMachines } from "@/components/filler/machine-grid";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
 import { MachinePicker } from "./machine-picker";
 import { StartRound } from "./list/start-round";
+import { InstallApp } from "@/components/install-app";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -87,6 +88,8 @@ export default async function RefillPage() {
               machineIds={orderByRoute(choices.filter((c) => !c.note).map((c) => c.id), settings.route)}
             />
           ) : null}
+          {/* Vendly on the home screen, one tap to open (Xin, 18-10-2026). Only on a phone, until it is there or closed. */}
+          <InstallApp />
           {grid.length > 0 && (
             <Section title={m.refill.machinesTitle}>
               <MachineGrid machines={grid} m={m} />

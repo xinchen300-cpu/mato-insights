@@ -1399,6 +1399,21 @@ export const nl: Messages = {
     notifyHint: "Zet meldingen aan in Instellingen om ze te krijgen.",
     saved: "Opgeslagen. Geldt vanaf de volgende ronde.",
   },
+  install: {
+    title: "Zet Vendly op je gsm",
+    hint: "Dan open je het met één tik, zoals een app.",
+    button: "Installeren",
+    iphoneStep1: "Tik op de Deel-knop",
+    iphoneStep2: "Scrol naar beneden en kies Zet op beginscherm",
+    iphoneStep3: "Open Vendly vanaf je beginscherm en log één keer in",
+    later: "Niet nu",
+  },
+  offline: {
+    title: "Geen verbinding",
+    body: "Vendly vindt geen internet. Zodra je weer bereik hebt, gaat het vanzelf verder.",
+    kept: "Wat je in een ronde al aanduidde, blijft op deze gsm bewaard.",
+    retry: "Opnieuw proberen",
+  },
   errors: {
     title: "Er liep iets mis",
     hint: "Probeer het nog eens. Lukt het dan nog niet, laad de pagina opnieuw.",
