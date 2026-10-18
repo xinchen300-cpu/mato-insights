@@ -7,10 +7,14 @@ import { ClipboardList } from "lucide-react";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
 import { cheapestWith } from "@/lib/plans";
+import { cn } from "@/lib/utils";
 import { createRefillSheet } from "../actions";
 
-/** One tap from the vullijst to a round with every machine on it that needs something. */
-export function StartRound({ machineIds }: { machineIds: string[] }) {
+/**
+ * One tap to a round with every machine on it that needs something: from the
+ * vullijst, and big at the top of the filler's home ("Begin met vullen").
+ */
+export function StartRound({ machineIds, label, big = false }: { machineIds: string[]; label?: string; big?: boolean }) {
   const { m } = useI18n();
   const [result, setResult] = useState<"empty" | "locked" | "failed" | null>(null);
   const [pending, startTransition] = useTransition();
@@ -52,10 +56,13 @@ export function StartRound({ machineIds }: { machineIds: string[] }) {
         type="button"
         onClick={start}
         disabled={pending}
-        className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-foreground px-4 text-[17px] font-semibold text-background shadow-[var(--shadow-pop)] active:scale-[0.99] disabled:opacity-60"
+        className={cn(
+          "flex w-full items-center justify-center gap-2.5 rounded-2xl bg-foreground px-4 font-semibold text-background shadow-[var(--shadow-pop)] active:scale-[0.99] disabled:opacity-60",
+          big ? "h-20 text-[20px] tracking-[-0.01em]" : "h-14 text-[17px]",
+        )}
       >
-        <ClipboardList className="size-5" aria-hidden="true" />
-        {pending ? m.fillList.starting : m.fillList.start}
+        <ClipboardList className={big ? "size-6" : "size-5"} aria-hidden="true" />
+        {pending ? m.fillList.starting : (label ?? m.fillList.start)}
       </button>
     </div>
   );

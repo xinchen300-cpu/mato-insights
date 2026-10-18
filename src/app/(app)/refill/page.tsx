@@ -21,6 +21,7 @@ import { LiveSold } from "@/components/filler/live-sold";
 import { MachineGrid, gridMachines } from "@/components/filler/machine-grid";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
 import { MachinePicker } from "./machine-picker";
+import { StartRound } from "./list/start-round";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -75,9 +76,17 @@ export default async function RefillPage() {
       <>
         <PageHeader title={name ? fmt(m.round.hello, { name }) : m.refill.title} />
         <div className="flex flex-col gap-8">
-          {/* The round to do as one slim bar, so it is never scrolled away; then every machine, how full
-              each is (Xin, 17-10-2026), and what sells, without amounts. */}
-          {next && <NextRound round={next} m={m} />}
+          {/* One big button first (Xin, 18-10-2026): go on with the round, or begin one with every
+              machine that needs something. Then every machine, how full each is, and what sells. */}
+          {next ? (
+            <NextRound round={next} m={m} />
+          ) : choices.length > 0 ? (
+            <StartRound
+              big
+              label={m.refill.beginFilling}
+              machineIds={orderByRoute(choices.filter((c) => !c.note).map((c) => c.id), settings.route)}
+            />
+          ) : null}
           {grid.length > 0 && (
             <Section title={m.refill.machinesTitle}>
               <MachineGrid machines={grid} m={m} />
@@ -88,8 +97,17 @@ export default async function RefillPage() {
           {stats.rounds > 0 ? <FiguresCard stats={stats} /> : <HowItWorks />}
           <OpenRounds rounds={rounds.filter((round) => round.id !== next?.id)} m={m} f={f} />
           {choices.length > 0 ? (
-            // In the owner's route order: a filler's round follows it.
-            <MachinePicker machines={orderByRoute(choices.map((c) => c.id), settings.route).map((id) => choices.find((c) => c.id === id)!)} />
+            // Choosing machines one by one is still there, folded away under the big button's way.
+            <details className="group">
+              <summary className="flex h-12 cursor-pointer list-none items-center gap-1.5 px-1 text-[15px] font-semibold text-muted-foreground [&::-webkit-details-marker]:hidden">
+                <ChevronRight className="size-4 transition-transform group-open:rotate-90" aria-hidden="true" />
+                {m.refill.pickOwn}
+              </summary>
+              <div className="pt-2">
+                {/* In the owner's route order: a filler's round follows it. */}
+                <MachinePicker machines={orderByRoute(choices.map((c) => c.id), settings.route).map((id) => choices.find((c) => c.id === id)!)} />
+              </div>
+            </details>
           ) : (
             <EmptyState title={m.team.fillerWelcome} hint={m.team.fillerWelcomeHint} icon={<ClipboardList className="size-5" />} />
           )}
@@ -226,15 +244,15 @@ function NextRound({ round, m }: { round: OpenRound; m: Awaited<ReturnType<typeo
   return (
     <Link
       href={`/vullen/${round.id}`}
-      className="flex min-h-16 items-center gap-3.5 rounded-2xl bg-foreground px-4 py-3 text-background shadow-[var(--shadow-pop)] transition-transform active:scale-[0.99]"
+      className="flex min-h-20 items-center gap-3.5 rounded-2xl bg-foreground px-4 py-3.5 text-background shadow-[var(--shadow-pop)] transition-transform active:scale-[0.99]"
     >
       <span
-        className={cn("grid size-10 shrink-0 place-items-center rounded-full", underway ? "bg-positive text-white" : "bg-background/15")}
+        className={cn("grid size-12 shrink-0 place-items-center rounded-full", underway ? "bg-positive text-white" : "bg-background/15")}
       >
-        <ClipboardList className="size-5" aria-hidden="true" />
+        <ClipboardList className="size-6" aria-hidden="true" />
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="text-[17px] font-semibold tracking-[-0.01em]">{underway ? m.me.nextContinue : m.me.nextBegin}</span>
+        <span className="text-[20px] font-semibold tracking-[-0.01em]">{underway ? m.refill.continueFilling : m.me.nextBegin}</span>
         <span className="truncate text-[13.5px] opacity-75">
           {fmt(round.machines.length === 1 ? m.me.nextSubOne : m.me.nextSub, { n: round.machines.length, done })}
         </span>
