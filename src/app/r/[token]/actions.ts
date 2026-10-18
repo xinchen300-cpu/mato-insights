@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getRefillSheetByToken } from "@/lib/data";
+import { isBlockedOrg } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { lineKey } from "@/lib/refill";
 import type { RefillLine } from "@/lib/types";
@@ -19,6 +20,8 @@ import type { RefillLine } from "@/lib/types";
  * is brought up to date by the sheet itself, which knows what is in the box.
  */
 export async function startRun(token: string) {
+  // Only a link this deployment serves: getRefillSheetByToken says no for a blocked organisation.
+  if (!(await getRefillSheetByToken(token))) return;
   await createAdminClient().rpc("start_run", { sheet_token: token });
 }
 
@@ -44,7 +47,7 @@ async function recompute(token: string, packed: string[]): Promise<RefillLine[] 
     .eq("share_token", token)
     .eq("flow_version", 1)
     .maybeSingle();
-  if (!sheet || sheet.completed_at) return null;
+  if (!sheet || sheet.completed_at || isBlockedOrg(sheet.org_id as string)) return null;
 
   const { data: fresh } = await admin.rpc("refill_plan", {
     target_org: sheet.org_id,
@@ -69,6 +72,7 @@ async function recompute(token: string, packed: string[]): Promise<RefillLine[] 
 
 /** What the filler has put in the cool box so far, kept on the run itself. */
 export async function saveBox(token: string, box: Record<string, number>) {
+  if (!(await getRefillSheetByToken(token))) return;
   const clean = Object.fromEntries(
     Object.entries(box).filter(([, v]) => Number.isInteger(v) && v > 0 && v <= 999),
   );

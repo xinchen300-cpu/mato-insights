@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { denyFillerAccess, getScope, getSessionUser, isFiller, isOperator, requireOperator, requireRefillAccess, type Role } from "@/lib/org";
+import { denyFillerAccess, getScope, getSessionUser, isFiller, isOperator, requireOperator, requireRefillAccess, type Role, isBlockedOrg } from "@/lib/org";
 import { displayName } from "@/lib/people";
 import { cleanRoundSettings, type RoundSettings } from "@/lib/round-settings";
 import { onlyMine, roundOrder, roundTimings, slotKey, type Average, type FlowLine, type RoundTimings, type ShopView, type StopRecord } from "@/lib/refill-flow";
@@ -1145,7 +1145,7 @@ export async function getBusinessByToken(
     .select("id, name, logo_path, org_id")
     .eq("share_token", token)
     .maybeSingle();
-  return data ?? null;
+  return data && !isBlockedOrg(data.org_id) ? data : null;
 }
 
 /** Which machines each business sells from — both businesses of a shared machine. */
@@ -1418,12 +1418,15 @@ export async function getRefillSheetByToken(token: string): Promise<RefillSheet 
   if (!/^[A-Za-z0-9_-]{20,}$/.test(token)) return null;
   const { data } = await createAdminClient()
     .from("refill_sheets")
-    .select("id, number, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box, flow_version, stops, returns")
+    .select("id, org_id, number, share_token, machine_ids, notes, lines, created_at, started_at, completed_at, filled_by, km, box, flow_version, stops, returns")
     .eq("share_token", token)
     // A step-by-step round (flow 2) is filled in Vendly itself, never through a link.
     .eq("flow_version", 1)
     .maybeSingle();
-  return (data as RefillSheet) ?? null;
+  // A link of an organisation this deployment does not serve opens nothing (see isBlockedOrg).
+  if (!data || isBlockedOrg(data.org_id as string)) return null;
+  const { org_id: _org, ...sheet } = data;
+  return sheet as unknown as RefillSheet;
 }
 
 export async function getLastSyncedAt(orgId: string): Promise<string | null> {

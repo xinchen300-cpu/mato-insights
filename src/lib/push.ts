@@ -30,7 +30,8 @@ export async function notifyOperators(orgId: string, message: Message): Promise<
         try {
           await webpush.sendNotification(
             { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-            JSON.stringify(message),
+            // From the test site the phone says so, next to the live site's own.
+            JSON.stringify(process.env.VENDLY_ENV === "test" ? { ...message, title: `${message.title} (test)` } : message),
           );
         } catch (error) {
           const status = (error as { statusCode?: number }).statusCode;

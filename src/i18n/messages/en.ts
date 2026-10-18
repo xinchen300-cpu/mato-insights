@@ -2,6 +2,7 @@
 // missing or misspelled key in either translation fails the build.
 export const en = {
   common: {
+    testVersion: "Test version",
     save: "Save",
     saving: "Saving…",
     loading: "One moment…",

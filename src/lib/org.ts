@@ -20,6 +20,24 @@ export type Scope = {
   role: Role | null;
 };
 
+/**
+ * Organisations this deployment must never serve, from VENDLY_BLOCKED_ORGS
+ * (ids, comma-separated). The test site shares the live database: a customer
+ * whose real figures run on the live site is kept out of a version still being
+ * built, so a mistake there can never touch their data. Their account sees
+ * nothing at all here, as if it had no membership. Empty on the live site.
+ */
+const BLOCKED_ORGS = new Set(
+  (process.env.VENDLY_BLOCKED_ORGS ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean),
+);
+
+export function isBlockedOrg(orgId: string | null | undefined): boolean {
+  return Boolean(orgId && BLOCKED_ORGS.has(orgId));
+}
+
 /** The narrowest first: a business beats a filler, a filler beats the operator. */
 const narrowness = (row: { business_id: unknown; role: unknown }) => (row.business_id ? 0 : row.role === "filler" ? 1 : 2);
 
@@ -90,7 +108,7 @@ async function resolveScope(): Promise<Scope> {
       .select("org_id, business_id, role")
       .eq("user_id", user.id);
     const membership = [...(memberships ?? [])].sort((a, b) => narrowness(a) - narrowness(b))[0];
-    return membership
+    return membership && !isBlockedOrg(membership.org_id as string)
       ? {
           orgId: membership.org_id as string,
           businessId: (membership.business_id as string | null) ?? null,
@@ -107,7 +125,8 @@ async function resolveScope(): Promise<Scope> {
     .limit(1)
     .maybeSingle();
 
-  return { orgId: (org?.id as string) ?? null, businessId: null, role: "owner" };
+  const fallback = (org?.id as string) ?? null;
+  return isBlockedOrg(fallback) ? { orgId: null, businessId: null, role: null } : { orgId: fallback, businessId: null, role: "owner" };
 }
 
 export async function getCurrentOrgId(): Promise<string | null> {
