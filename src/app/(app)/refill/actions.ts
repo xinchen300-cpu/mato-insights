@@ -170,11 +170,11 @@ export async function saveRoundSettings(input: RoundSettings): Promise<RoundSett
   const orgId = await requireOrgId();
   await requireOperator();
   const admin = createAdminClient();
-  // The route and its distances are set on the Route tab and when a round is
-  // made, never here: what is stored stays.
+  // The route, its distances, drive times and the start address are set on the
+  // Route tab and when a round is made, never here: what is stored stays.
   const { data: stored } = await admin.from("organizations").select("refill_settings").eq("id", orgId).maybeSingle();
   const kept = cleanRoundSettings(stored?.refill_settings);
-  const settings = { ...cleanRoundSettings(input), route: kept.route, legs: kept.legs };
+  const settings = { ...cleanRoundSettings(input), route: kept.route, legs: kept.legs, drive: kept.drive, depotAddress: kept.depotAddress };
   const { error } = await admin
     .from("organizations")
     .update({ refill_settings: settings })

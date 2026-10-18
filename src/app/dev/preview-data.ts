@@ -64,6 +64,9 @@ export function previewRound(scenario: Scenario, now: number): RefillRound {
     photoPath: null,
     status: machine.id === "m-gits" ? ("offline" as const) : ("online" as const),
     lastSale: iso(now - minutes(25 + i * 40)),
+    // Gits is a snack machine in the preview: no question about dates there.
+    type: machine.id === "m-gits" ? ("spiral" as const) : ("lift" as const),
+    address: `${machine.name.split(" ")[0]}, België`,
   });
   const picked = Object.fromEntries(
     plan.reduce((sum, line) => sum.set(`${line.machineId}:${line.productId}`, (sum.get(`${line.machineId}:${line.productId}`) ?? 0) + line.take), new Map<string, number>()),
@@ -126,7 +129,7 @@ export function previewRound(scenario: Scenario, now: number): RefillRound {
     ],
     picked: scenario === "pick" ? {} : picked,
     stops,
-    settings: { ...DEFAULT_ROUND_SETTINGS, checks: ["Ruit gepoetst"] },
+    settings: { ...DEFAULT_ROUND_SETTINGS, checks: ["Ruit gepoetst"], depotAddress: "Roeselaarseweg 69, 8820 Torhout" },
     notes: scenario === "pick" ? "Diksmuide: de deur klemt, even duwen." : null,
   };
 }

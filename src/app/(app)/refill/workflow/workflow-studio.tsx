@@ -15,7 +15,6 @@ import {
   Plus,
   Timer,
   TriangleAlert,
-  Undo2,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -36,7 +35,7 @@ const STEPS: { key: Step; icon: LucideIcon | typeof MachineIcon; who: "you" | "f
   { key: "pick", icon: PackageOpen, who: "filler" },
   { key: "start", icon: Play, who: "filler" },
   { key: "stop", icon: MachineIcon, who: "filler" },
-  { key: "back", icon: Undo2, who: "filler" },
+  // No "Terugbrengen" step since 19-10-2026: the round closes with one tap.
   { key: "finish", icon: Flag, who: "filler" },
 ];
 const PLAY_MS = 3600;
@@ -240,7 +239,7 @@ const stepKey = (step: Step) =>
     step
   ];
 
-/** The six steps in a row, joined by a line that fills in as the round goes, with the machine step branching into what happens there. */
+/** The steps in a row, joined by a line that fills in as the round goes, with the machine step branching into what happens there. */
 function RoundMap({
   active,
   playing,

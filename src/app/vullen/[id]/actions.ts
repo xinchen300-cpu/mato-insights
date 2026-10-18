@@ -120,7 +120,7 @@ export async function startRound(sheetId: string, picked: Record<string, number>
   if (round.settings.notify.start) {
     after(() =>
       notifyOperators(orgId, {
-        title: "Vendly",
+        title: "MATO Info",
         body: fmt(round.machines.length === 1 ? PUSH.pushStartedOne : PUSH.pushStarted, {
           name: who ?? PUSH.pushSomeone,
           count: round.machines.length,
@@ -268,7 +268,7 @@ export async function completeStop(sheetId: string, machineId: string, input: St
     const machine = round.machines.find((mc) => mc.id === machineId)?.name ?? "";
     after(() =>
       notifyOperators(orgId, {
-        title: "Vendly",
+        title: "MATO Info",
         body: fmt(PUSH.pushStopDone, { name: who ?? PUSH.pushSomeone, machine }),
         url: `/refill/${sheetId}`,
         tag: `round-${sheetId}`,
@@ -470,7 +470,7 @@ export async function completeRound(
   if (round.settings.notify.finish) {
     after(() =>
       notifyOperators(orgId, {
-        title: "Vendly",
+        title: "MATO Info",
         body: fmt(visited === 1 ? PUSH.pushDoneOne : PUSH.pushDone, { name: who, count: visited, minutes }),
         url: `/refill/${sheetId}`,
         tag: `round-${sheetId}`,

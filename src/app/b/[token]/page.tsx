@@ -22,7 +22,7 @@ const PERIODS: Period[] = ["month", "week", "today", "last30"];
 export async function generateMetadata({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const business = await getBusinessByToken(token);
-  return { title: business?.name ?? "Vendly", robots: { index: false, follow: false } };
+  return { title: business?.name ?? "MATO Info", robots: { index: false, follow: false } };
 }
 
 // A customer's own page: only the sales of its own products, nothing of the

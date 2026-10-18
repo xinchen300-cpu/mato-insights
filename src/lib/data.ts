@@ -33,6 +33,7 @@ import type {
   UnassignedGroup,
   WasteRow,
   PriceMismatch,
+  MachineType,
 } from "@/lib/types";
 
 // Server-only data access. Every query is scoped to an org id that the caller
@@ -137,6 +138,10 @@ export type RoundMachine = {
   lastSale: string | null;
   /** The tile photo, so the filler recognises the machine at a glance. */
   photoPath: string | null;
+  /** A snack machine gets no question about dishes past their date. */
+  type: MachineType | null;
+  /** Where it stands, for "Navigeer". */
+  address: string | null;
 };
 /** Every slot of a machine on the round, for "something is wrong here" on any slot, planned or not. */
 export type RoundSlot = {
@@ -205,7 +210,7 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
   const [{ data: machineRows }, stock, lastSales, { data: org }] = await Promise.all([
     admin
       .from("machines")
-      .select("id, name, photo_path, last_connected_at, last_disconnected_at")
+      .select("id, name, photo_path, last_connected_at, last_disconnected_at, type, address")
       .eq("org_id", orgId)
       .in("id", order.length ? order : [NOTHING]),
     getMachineStock(orgId, order.length ? order : [NOTHING]),
@@ -222,6 +227,8 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
       status: terminalStatus(row.last_connected_at as string | null, row.last_disconnected_at as string | null),
       lastSale: lastSales.get(id) ?? null,
       photoPath: (row.photo_path as string | null) ?? null,
+      type: (row.type as MachineType | null) ?? null,
+      address: (row.address as string | null) ?? null,
     };
   };
 
@@ -605,7 +612,7 @@ export async function getMonthlyReport(
 
 // One literal: Supabase types the result by parsing this string.
 const MACHINE_COLUMNS =
-  "id, name, type, payter_serial_number, business_id, shared_business_id, data_since, km_round_trip, photo_path, last_connected_at, last_disconnected_at, terminal_model, terminal_network, terminal_flags, refill_manual, businesses!machines_business_id_fkey(name, logo_path)";
+  "id, name, type, payter_serial_number, business_id, shared_business_id, data_since, km_round_trip, photo_path, last_connected_at, last_disconnected_at, terminal_model, terminal_network, terminal_flags, refill_manual, address, businesses!machines_business_id_fkey(name, logo_path)";
 
 export async function getMachines(orgId: string): Promise<Machine[]> {
   const { businessId } = await getScope();
@@ -655,6 +662,7 @@ type MachineRow = {
   terminal_network: string | null;
   terminal_flags: string[] | null;
   refill_manual: boolean | null;
+  address: string | null;
   businesses: { name: string; logo_path: string | null } | { name: string; logo_path: string | null }[] | null;
 };
 
@@ -678,6 +686,7 @@ function toMachine(row: MachineRow): Machine {
     terminal_network: row.terminal_network,
     terminal_flags: row.terminal_flags ?? [],
     refill_manual: row.refill_manual === true,
+    address: row.address ?? null,
   };
 }
 

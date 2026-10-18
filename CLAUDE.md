@@ -1,8 +1,8 @@
 @AGENTS.md
 
-# Vendly — dashboard voor vending-uitbaters
+# MATO Info — dashboard voor vending-uitbaters
 
-**Naam:** naar de gebruiker toe heet dit **Vendly**. Van 30-09 tot 11-10-2026 heette het "MATO Insights", en op 14-10 even opnieuw (commit 5fbd0a3, logo `[mato insights]`); op 16-10-2026 koos Xin "laat voorlopig Vendly", dus dat is teruggedraaid (logo `[vendly]`, merk `[v]`). De naam staat in `src/app/layout.tsx`, `src/app/manifest.ts`, het logo `src/components/brand/vendly-mark.tsx`, de app-iconen (`src/app/icon.svg`, `src/app/pwa-icon`), `public/brand/vendly-*.svg` en als `m.brand.name` / op ±30 plaatsen in elk `messages/*.ts`. Schrijf "MATO Insights" nergens in tekst die een gebruiker leest zolang Xin niet anders beslist. De repo heet `mato-insights`; het Vercel-project heet `vendly`.
+**Naam:** naar de gebruiker toe heet dit **MATO Info** (Xin, 19-10-2026: "change name vendly to mato info"; logo `[mato info]`, merk `[m]`). Eerder: "MATO Insights" van 30-09 tot 11-10-2026 en even op 14-10 (commit 5fbd0a3), daarna "Vendly" (logo `[vendly]`, merk `[v]`) van 16-10 tot 19-10. De naam staat in `src/app/layout.tsx`, `src/app/manifest.ts`, het logo `src/components/brand/vendly-mark.tsx` (bestand en componentnamen bleven), de app-iconen (`src/app/icon.svg`, `src/app/pwa-icon`), de offline-pagina, de titels van pushmeldingen (ook in `public/sw.js` en de edge-functie `vendly-notify`), de Mollie-omschrijvingen in `src/lib/subscription.ts`, de mails van `vendly-billing` en als `m.brand.name` / op ±30 plaatsen in elk `messages/*.ts`. Schrijf "Vendly" of "MATO Insights" nergens meer in tekst die een gebruiker leest zolang Xin niet anders beslist. `public/brand/vendly-*.svg` (drukwerk) zijn nog de oude bestanden. De repo heet `mato-insights`; het Vercel-project heet `vendly`.
 
 **Drie dingen moeten `vendly` blijven heten, hernoemen breekt ze** (ook `vendly:hide-numbers` in localStorage hoort daarbij):
 - `LOCALE_COOKIE = "vendly-locale"` in `src/i18n/config.ts` — hernoemen wist ieders taalkeuze.
