@@ -138,6 +138,33 @@ export async function cancelRound(sheetId: string): Promise<"cancelled" | "start
   return "cancelled";
 }
 
+/**
+ * "Rondes verwijderen" on Bijvullen (Xin, 19-10-2026): open rounds go, by the
+ * filler as much as the operator, also once machines were done in them. What
+ * went into those machines stays counted (the stock keeps, it only loses its
+ * link to the round); the round itself, its plan and its timings, goes. A
+ * finished round is history and stays.
+ */
+export async function deleteOpenRounds(sheetIds: string[]): Promise<number> {
+  const orgId = await requireRefillAccess();
+  const ids = [...new Set(Array.isArray(sheetIds) ? sheetIds : [])]
+    .filter((id): id is string => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id))
+    .slice(0, 50);
+  if (ids.length === 0) return 0;
+  // Their shortages go with them (on delete cascade).
+  const { data, error } = await createAdminClient()
+    .from("refill_sheets")
+    .delete()
+    .eq("org_id", orgId)
+    .is("completed_at", null)
+    .in("id", ids)
+    .select("id");
+  if (error) throw new Error(error.message);
+  revalidatePath("/refill");
+  revalidatePath("/");
+  return data?.length ?? 0;
+}
+
 /** How rounds go for this organisation's fillers, from the Werkwijze page. */
 export async function saveRoundSettings(input: RoundSettings): Promise<RoundSettings> {
   const orgId = await requireOrgId();

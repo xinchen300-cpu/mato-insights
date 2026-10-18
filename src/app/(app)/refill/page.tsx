@@ -24,6 +24,7 @@ import { DISPLAY_TIME_ZONE } from "@/i18n/format";
 import { MachinePicker } from "./machine-picker";
 import { StartRound } from "./list/start-round";
 import { InstallApp } from "@/components/install-app";
+import { DeleteRounds, type DeletableRound } from "@/components/refill/delete-rounds";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -92,6 +93,8 @@ export default async function RefillPage() {
               machineIds={orderByRoute(choices.filter((c) => !c.note).map((c) => c.id), settings.route)}
             />
           ) : null}
+          {/* Every open round can go, from here, always (Xin, 19-10-2026). */}
+          <DeleteRounds rounds={deletable(rounds, m, f)} />
           {/* Vendly on the home screen, one tap to open (Xin, 18-10-2026). Only on a phone, until it is there or closed. */}
           <InstallApp />
           {grid.length > 0 && (
@@ -157,6 +160,7 @@ export default async function RefillPage() {
           </Link>
         )}
         <LiveRounds rounds={openRounds} />
+        <DeleteRounds rounds={deletable(openRounds, m, f)} />
         {!operator && <p className="max-w-[60ch] px-1 text-[15px] text-muted-foreground">{m.refill.operatorOnly}</p>}
 
         <Section
@@ -267,6 +271,22 @@ function NextRound({ round, m }: { round: OpenRound; m: Awaited<ReturnType<typeo
       <ChevronRight className="size-6 shrink-0" aria-hidden="true" />
     </Link>
   );
+}
+
+/** The open rounds as "Rondes verwijderen" lists them: when made, how far, and where it goes. */
+function deletable(
+  rounds: OpenRound[],
+  m: Awaited<ReturnType<typeof getI18n>>["m"],
+  f: Awaited<ReturnType<typeof getI18n>>["f"],
+): DeletableRound[] {
+  return rounds.map((round) => ({
+    id: round.id,
+    title: f.dateTime(round.createdAt),
+    subtitle: [
+      fmt(m.refill.roundProgress, { done: round.machines.filter((machine) => machine.done).length, total: round.machines.length }),
+      round.machines.map((machine) => machine.name).join(", "),
+    ].join(" · "),
+  }));
 }
 
 /** Machines that a round still open will fill: a second round for them would fill them twice. */

@@ -300,13 +300,12 @@ export async function skipStop(sheetId: string, machineId: string, doneAgo: numb
 }
 
 /**
- * "Ronde verwijderen" (Xin, 19-10-2026): a round nothing was filled on yet
- * goes, by the filler as much as by the operator. Once a machine is done its
- * stock is written, and the round stays.
+ * "Ronde verwijderen" (Xin, 19-10-2026): an open round goes, by the filler as
+ * much as by the operator, at any point. What went into machines already done
+ * stays counted: the stock keeps, only its link to the round goes.
  */
-export async function deleteRound(sheetId: string): Promise<"deleted" | "started"> {
-  const { orgId, round } = await openRound(sheetId);
-  if (Object.values(round.stops).some((stop) => stop?.completedAt)) return "started";
+export async function deleteRound(sheetId: string): Promise<void> {
+  const { orgId } = await openRound(sheetId);
   // Its shortages go with it (on delete cascade).
   const { error } = await createAdminClient()
     .from("refill_sheets")
@@ -317,7 +316,6 @@ export async function deleteRound(sheetId: string): Promise<"deleted" | "started
   if (error) throw new Error(error.message);
   revalidatePath("/refill");
   revalidatePath("/");
-  return "deleted";
 }
 
 /**
