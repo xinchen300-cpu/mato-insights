@@ -27,7 +27,7 @@ import {
   type StopRecord,
 } from "@/lib/refill-flow";
 import { DEFAULT_MACHINE_PHOTO, mediaUrl } from "@/lib/media";
-import { legKey, wazeLink } from "@/lib/round-settings";
+import { legKey, samePlace, wazeLink } from "@/lib/round-settings";
 import { bandBg, machineFill, machineTotals, type FillBand } from "@/lib/stock";
 import { cn } from "@/lib/utils";
 import { completeRound, completeStop, deleteRound, reopenStop, savePicked, skipStop, startRound, type StopInput } from "./actions";
@@ -457,6 +457,16 @@ export function RoundFlow({
   const visits = initial.machines.filter((mc) => !isFull(mc.id));
   const openStops = visits.filter((mc) => !isDone(mc.id));
   const nextStop = openStops[0] ?? null;
+  const lastDone =
+    Object.entries(stops)
+      .filter(([, stop]) => stop.completedAt && !stop.skipped)
+      .map(([machineId, stop]) => ({ machineId, at: stop.completedAt as string }))
+      .sort((a, b) => b.at.localeCompare(a.at))[0] ?? null;
+  // Two machines at one address are one stop on the road (Xin, 19-10-2026: the
+  // snack machine stands with Diksmuide): no drive and no Waze between them.
+  const addressOf = (stop: string) =>
+    stop === "start" || stop === "end" ? initial.settings.depotAddress : (initial.machines.find((mc) => mc.id === stop)?.address ?? null);
+  const hereAddress = addressOf(lastDone?.machineId ?? "start");
 
   function openStop(machineId: string) {
     // A machine may be opened before the drive there: the first thing done at
@@ -1039,7 +1049,7 @@ export function RoundFlow({
               </button>
             )}
             {/* The way there in Waze, also once the machine is open. */}
-            {current.address && (
+            {current.address && !samePlace(hereAddress, current.address) && (
               <a href={wazeLink(current.address) ?? undefined} target="_blank" rel="noopener noreferrer" className={chip}>
                 <Navigation className="size-4 text-[#05c8f7]" aria-hidden="true" />
                 {t.waze}
@@ -1397,12 +1407,6 @@ export function RoundFlow({
         : machineId === nextStop?.id
           ? "now"
           : "later";
-  const lastDone =
-    Object.entries(stops)
-      .filter(([, stop]) => stop.completedAt && !stop.skipped)
-      .map(([machineId, stop]) => ({ machineId, at: stop.completedAt as string }))
-      .sort((a, b) => b.at.localeCompare(a.at))[0] ?? null;
-
   // The drive into each step, as earlier rounds measured it: from the start to
   // the first machine, between machines (either way round), and back; until
   // then, as worked out from the addresses. It comes from the last step before
@@ -1413,6 +1417,7 @@ export function RoundFlow({
     while (back > 0 && steps[back].state === "full") back -= 1;
     const from = endOf(steps[back].key);
     const to = endOf(steps[index].key);
+    if (samePlace(addressOf(from), addressOf(to))) return t.samePlace;
     const measured = times.legs[`${from}→${to}`] ?? (from !== "start" && to !== "end" ? times.legs[`${to}→${from}`] : undefined);
     const minutes = measured?.minutes ?? initial.settings.drive[legKey(from, to)];
     if (!minutes) return null;
@@ -1611,7 +1616,7 @@ export function RoundFlow({
           </button>
         ) : nextStop ? (
           <div className="flex gap-2">
-            <NavigateButton address={nextStop.address} place={nextStop.name} />
+            <NavigateButton address={samePlace(hereAddress, nextStop.address) ? null : nextStop.address} place={nextStop.name} />
             <button type="button" className={cn(primary, "min-w-0 flex-1")} disabled={pending || settling} onClick={() => openStop(nextStop.id)}>
               <span className="truncate">{fmt(t.goTo, { machine: nextStop.name })}</span>
               <ChevronRight className="size-5 shrink-0" />

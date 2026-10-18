@@ -1061,6 +1061,7 @@ export const en = {
     routeTitle: "Your route",
     drive: "about {time} drive",
     driveBack: "about {time} back",
+    samePlace: "same place, no drive",
     running: "started {time}",
     backToRound: "Round",
     now: "Now",

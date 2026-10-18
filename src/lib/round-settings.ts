@@ -116,6 +116,13 @@ export function wazeLink(address: string | null): string | null {
   return address ? `https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes` : null;
 }
 
+/** Two stops at one address, written the same way give or take case, commas and spaces. */
+export function samePlace(a: string | null, b: string | null): boolean {
+  const key = (address: string | null) => address?.toLocaleLowerCase("nl-BE").replace(/[\s,.]+/g, " ").trim() || null;
+  const first = key(a);
+  return first !== null && first === key(b);
+}
+
 /** One key per pair of stops, whichever way round: the depot or a machine on either end. */
 export function legKey(from: string, to: string): string {
   const a = from === "start" || from === "end" ? DEPOT : from;
@@ -125,14 +132,17 @@ export function legKey(from: string, to: string): string {
 
 const isStop = (end: string) => end === DEPOT || MACHINE_ID.test(end);
 
-/** Distances as stored or sent, made safe: known pairs only, 0.1 to 1000 km, to one decimal. */
+/**
+ * Distances as stored or sent, made safe: known pairs only, 0 to 1000 km, to
+ * one decimal. 0 is two machines at one place (since 19-10-2026).
+ */
 function cleanLegs(raw: unknown): Record<string, number> {
   const legs: Record<string, number> = {};
   if (!raw || typeof raw !== "object") return legs;
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
     const ends = key.split("|");
     const km = typeof value === "number" ? Math.round(value * 10) / 10 : NaN;
-    if (ends.length !== 2 || ends[0] === ends[1] || !ends.every(isStop) || !(km > 0 && km <= 1000)) continue;
+    if (ends.length !== 2 || ends[0] === ends[1] || !ends.every(isStop) || !(km >= 0 && km <= 1000)) continue;
     legs[legKey(ends[0], ends[1])] = km;
     if (Object.keys(legs).length === MAX_LEGS) break;
   }
