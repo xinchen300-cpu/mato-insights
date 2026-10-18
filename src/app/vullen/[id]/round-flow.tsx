@@ -158,7 +158,6 @@ export function RoundFlow({
   const [skipAsk, setSkipAsk] = useState(false);
   const [reopenAsk, setReopenAsk] = useState(false);
   const [deleteAsk, setDeleteAsk] = useState(false);
-  const [deleteRefused, setDeleteRefused] = useState(false);
   const [fullAsk, setFullAsk] = useState<{ open: "empty" | "planned"; selections: string[] } | null>(null);
   // The last question before a machine is done (Xin, 19-10-2026): anything over date? And if so, which.
   const [expiredAsk, setExpiredAsk] = useState<{
@@ -505,15 +504,11 @@ export function RoundFlow({
     );
   }
 
-  /** "Ronde verwijderen": only while nothing was filled; then back to Bijvullen. */
+  /** "Ronde verwijderen", at any point; then back to Bijvullen. */
   function removeRound() {
     run(
       () =>
-        api.deleteRound(initial.id).then((outcome) => {
-          if (outcome === "started") {
-            setDeleteRefused(true);
-            return;
-          }
+        api.deleteRound(initial.id).then(() => {
           try {
             localStorage.removeItem(storageKey(initial.id));
           } catch {
@@ -1383,8 +1378,9 @@ export function RoundFlow({
     },
   ];
 
-  // Nothing filled yet, nothing on its way: the round may still be deleted.
-  const nothingDone = countdown === null && !pendingId && Object.values(stops).every((stop) => !stop.completedAt);
+  // The round can always go (Xin, 19-10-2026), just not while a machine is on its way to being saved.
+  const canDelete = countdown === null && !pendingId;
+  const doneCount = Object.values(stops).filter((stop) => stop.completedAt && !stop.skipped).length;
 
   // The round as a bar, one segment per machine, and where the filler was
   // last done, for the estimate: the latest machine filled (a skip says
@@ -1562,20 +1558,21 @@ export function RoundFlow({
             );
           })}
         </ol>
-        {/* A round nothing was filled on yet can go (Xin, 19-10-2026): quiet, at the end of the route. */}
-        {nothingDone && (
+        {/* The round can go (Xin, 19-10-2026): quiet, at the end of the route. */}
+        {canDelete && (
           <button type="button" className={cn(ghost, "mt-4 gap-2 text-negative")} onClick={() => setDeleteAsk(true)}>
             <Trash2 className="size-4" aria-hidden="true" />
             {t.deleteRound}
           </button>
         )}
-        {deleteRefused && <p className="px-2 pt-2 text-center text-[14px] font-medium text-muted-foreground">{t.deleteStarted}</p>}
       </div>
 
       {deleteAsk && (
         <Sheet onClose={() => setDeleteAsk(false)}>
           <h2 className="text-[22px] font-bold tracking-[-0.02em]">{t.deleteTitle}</h2>
-          <p className="text-[15.5px] text-muted-foreground">{t.deleteHint}</p>
+          <p className="text-[15.5px] text-muted-foreground">
+            {doneCount === 0 ? t.deleteHint : fmt(doneCount === 1 ? t.deleteHintStartedOne : t.deleteHintStarted, { n: doneCount })}
+          </p>
           <button type="button" className={cn(primary, "bg-negative")} disabled={pending} onClick={removeRound}>
             {pending ? t.sending : t.deleteConfirm}
           </button>
