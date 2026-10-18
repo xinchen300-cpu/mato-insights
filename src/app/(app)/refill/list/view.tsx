@@ -1,16 +1,17 @@
-import Link from "next/link";
-import { ChevronRight, PackageCheck } from "lucide-react";
+import { PackageCheck } from "lucide-react";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
 import { fmt } from "@/i18n/format";
 import type { Messages } from "@/i18n/messages";
 import { mediaUrl } from "@/lib/media";
-import { StartRound } from "./start-round";
 
 export type BoxItem = { productId: string; name: string; photoPath: string | null; take: number; slots: string[] };
 export type Box = { machineId: string; name: string; items: BoxItem[]; take: number };
 
-/** The vullijst as it is shown: a numbered box per machine, the full ones after, and the button at the thumb. */
-export function FillListView({ m, boxes, full, openId }: { m: Messages; boxes: Box[]; full: string[]; openId: string | null }) {
+/**
+ * The vullijst as it is shown: a numbered box per machine, the full ones after.
+ * Only what to pack: a round starts on Bijvullen, never from here (Xin, 19-10-2026).
+ */
+export function FillListView({ m, boxes, full }: { m: Messages; boxes: Box[]; full: string[] }) {
   const total = boxes.reduce((sum, box) => sum + box.take, 0);
   const pieces = (n: number) => (n === 1 ? m.fillList.pieceOne : fmt(m.fillList.pieces, { n }));
 
@@ -20,7 +21,7 @@ export function FillListView({ m, boxes, full, openId }: { m: Messages; boxes: B
       {boxes.length === 0 ? (
         <EmptyState title={m.fillList.empty} hint={m.fillList.emptyHint} icon={<PackageCheck className="size-5" />} />
       ) : (
-        <div className="flex flex-col gap-6 pb-28 lg:pb-0">
+        <div className="flex flex-col gap-6">
           <p className="tabular px-1 text-[15px] font-semibold">
             {boxes.length === 1
               ? fmt(m.fillList.totalOne, { n: total })
@@ -61,23 +62,6 @@ export function FillListView({ m, boxes, full, openId }: { m: Messages; boxes: B
             <Section title={m.fillList.full} hint={m.fillList.fullHint}>
               <p className="px-1 text-[15px] text-muted-foreground">{full.join(" · ")}</p>
             </Section>
-          )}
-        </div>
-      )}
-
-      {/* At the thumb, above the tab bar: go on with the round, or start one with this list. */}
-      {(openId || boxes.length > 0) && (
-        <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 mt-6 lg:bottom-4">
-          {openId ? (
-            <Link
-              href={`/vullen/${openId}`}
-              className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-foreground px-4 text-[17px] font-semibold text-background shadow-[var(--shadow-pop)] active:scale-[0.99]"
-            >
-              {m.fillList.continue}
-              <ChevronRight className="size-5" aria-hidden="true" />
-            </Link>
-          ) : (
-            <StartRound machineIds={boxes.map((box) => box.machineId)} />
           )}
         </div>
       )}

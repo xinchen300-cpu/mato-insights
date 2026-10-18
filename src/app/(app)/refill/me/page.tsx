@@ -3,9 +3,11 @@ import { FillerFigures } from "@/components/filler/figures";
 import { PageHeader } from "@/components/page-header";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
+import { cleanLook } from "@/lib/avatar";
 import { getMachines, getMyRounds } from "@/lib/data";
 import { fillerStats } from "@/lib/filler-stats";
 import { requireRefillAccess } from "@/lib/org";
+import { createClient } from "@/lib/supabase/server";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -21,7 +23,11 @@ export default async function MyFiguresPage() {
   const orgId = await requireRefillAccess().catch(() => null);
   if (!orgId) notFound();
   const { m } = await getI18n();
-  const [rounds, machines] = await Promise.all([getMyRounds(orgId), getMachines(orgId)]);
+  const [rounds, machines, me] = await Promise.all([
+    getMyRounds(orgId),
+    getMachines(orgId),
+    createClient().then((client) => client.auth.getUser()),
+  ]);
   const stats = fillerStats(rounds, DISPLAY_TIME_ZONE);
   // Only the names of machines on this person's own routes go to the page.
   const onRoutes = new Set(stats.routes.flatMap((route) => route.machineIds));
@@ -31,6 +37,7 @@ export default async function MyFiguresPage() {
       <FillerFigures
         stats={stats}
         names={Object.fromEntries(machines.filter((machine) => onRoutes.has(machine.id)).map((machine) => [machine.id, machine.name]))}
+        look={cleanLook(me.data.user?.user_metadata?.avatar)}
       />
     </>
   );

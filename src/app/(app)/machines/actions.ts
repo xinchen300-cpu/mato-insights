@@ -49,6 +49,8 @@ export async function updateMachineDetails(
     sharedBusinessId?: string | null;
     dataSince: string | null;
   kmRoundTrip: number | null;
+    /** Filled by hand, outside Vendly; left out by a form from before the switch, and then kept. */
+    refillManual?: boolean;
   },
 ) {
   const orgId = await requireOrgId();
@@ -106,6 +108,7 @@ export async function updateMachineDetails(
       ...(assigns ? { business_id: businessId, shared_business_id: sharedBusinessId } : {}),
       data_since: input.dataSince,
       km_round_trip: input.kmRoundTrip,
+      ...(input.refillManual !== undefined ? { refill_manual: input.refillManual === true } : {}),
     })
     .eq("id", machineId)
     .eq("org_id", orgId);

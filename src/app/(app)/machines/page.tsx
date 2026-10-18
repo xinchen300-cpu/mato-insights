@@ -10,7 +10,7 @@ import { getBusinesses, getLastSales, getMachines, getMachineStock, getRoundSett
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
 import { orderByRoute } from "@/lib/round-settings";
 import { MachineOrder } from "@/components/machine/machine-order";
-import { bandBg, fillLevel, machineFill, needsAttention } from "@/lib/stock";
+import { bandBg, filledByVendly, fillLevel, machineFill, needsAttention, slotsFilledByVendly } from "@/lib/stock";
 import { terminalStatus } from "@/lib/terminal-status";
 import { MachinePhoto } from "@/components/machine/machine-photo";
 import { MachineGrid, gridMachines } from "@/components/filler/machine-grid";
@@ -27,8 +27,9 @@ export async function generateMetadata() {
  */
 async function FillerMachines({ orgId }: { orgId: string }) {
   const { m } = await getI18n();
-  const [fleet, slots, settings] = await Promise.all([getMachines(orgId), getMachineStock(orgId), getRoundSettings(orgId)]);
-  const grid = gridMachines(fleet, slots, settings.route, { withoutLayout: true });
+  const [everyMachine, everySlot, settings] = await Promise.all([getMachines(orgId), getMachineStock(orgId), getRoundSettings(orgId)]);
+  // A machine filled by hand is not the filler's to fill here.
+  const grid = gridMachines(filledByVendly(everyMachine), slotsFilledByVendly(everySlot, everyMachine), settings.route, { withoutLayout: true });
   return (
     <>
       <PageHeader title={m.machines.title} />
@@ -120,11 +121,12 @@ export default async function MachinesPage() {
               const s = summary.get(mc.id);
               const lastSale = lastSales.get(mc.id);
               const status = terminalStatus(mc.last_connected_at, mc.last_disconnected_at);
-              const tracked = Boolean(s && s.slots > 0 && mc.type !== "other");
+              // Filled by hand, a machine's stock is never brought up to date: no percentage, no warning.
+              const tracksStock = mc.type !== "other" && !mc.refill_manual;
+              const tracked = Boolean(s && s.slots > 0 && tracksStock);
               const fill = tracked && s ? machineFill(s.stock, s.capacity, s.counted) : null;
               // One line under the name: red when slots run low, grey for what is
               // missing, otherwise the last sale.
-              const tracksStock = mc.type !== "other";
               const line =
                 tracksStock && s && s.low > 0
                   ? { text: fmt(m.overview.slotsLow, { count: s.low }), alert: true }

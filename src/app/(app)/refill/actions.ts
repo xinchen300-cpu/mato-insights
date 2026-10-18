@@ -23,8 +23,13 @@ export async function createRefillSheet(
   if (machineIds.length === 0) return { empty: true };
   // The list comes from a checkbox on a page, so it comes from the client:
   // asking for a machine that is not yours must not put it on your sheet.
-  const own = new Set((await getMachines(orgId)).map((machine) => machine.id));
+  const machines = await getMachines(orgId);
+  const own = new Set(machines.map((machine) => machine.id));
   if (machineIds.some((machineId) => !own.has(machineId))) throw new Error("Not found");
+  // A machine filled by hand never goes on a round, whatever a page sent (one opened before it was set so).
+  const byHand = new Set(machines.filter((machine) => machine.refill_manual).map((machine) => machine.id));
+  const asked = machineIds.filter((machineId) => !byHand.has(machineId));
+  if (asked.length === 0) return { empty: true };
   const admin = createAdminClient();
 
   // The route: the owner puts the machines in order while making the round,
@@ -32,10 +37,10 @@ export async function createRefillSheet(
   const operator = await isOperator();
   const { data: org } = await admin.from("organizations").select("refill_settings").eq("id", orgId).maybeSingle();
   const settings = cleanRoundSettings(org?.refill_settings);
-  const chosen = [...new Set(machineIds)];
+  const chosen = [...new Set(asked)];
   const order = operator ? chosen : orderByRoute(chosen, settings.route);
 
-  const lines = await getRefillPlan(orgId, machineIds);
+  const lines = await getRefillPlan(orgId, asked);
   if (lines.length === 0) return { empty: true };
   // A machine with nothing to fill is not visited: nobody drives to a full machine.
   const planned = new Set(lines.map((line) => line.machine_id));

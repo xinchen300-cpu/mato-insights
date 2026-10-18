@@ -53,6 +53,8 @@ export type Machine = {
   terminal_model: string | null;
   terminal_network: string | null;
   terminal_flags: string[];
+  /** Filled by hand, outside Vendly: in the sales, never in a round, the vullijst or a stock warning. */
+  refill_manual: boolean;
 };
 
 export type SlotStock = {

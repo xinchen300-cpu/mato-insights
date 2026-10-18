@@ -605,7 +605,7 @@ export async function getMonthlyReport(
 
 // One literal: Supabase types the result by parsing this string.
 const MACHINE_COLUMNS =
-  "id, name, type, payter_serial_number, business_id, shared_business_id, data_since, km_round_trip, photo_path, last_connected_at, last_disconnected_at, terminal_model, terminal_network, terminal_flags, businesses!machines_business_id_fkey(name, logo_path)";
+  "id, name, type, payter_serial_number, business_id, shared_business_id, data_since, km_round_trip, photo_path, last_connected_at, last_disconnected_at, terminal_model, terminal_network, terminal_flags, refill_manual, businesses!machines_business_id_fkey(name, logo_path)";
 
 export async function getMachines(orgId: string): Promise<Machine[]> {
   const { businessId } = await getScope();
@@ -654,6 +654,7 @@ type MachineRow = {
   terminal_model: string | null;
   terminal_network: string | null;
   terminal_flags: string[] | null;
+  refill_manual: boolean | null;
   businesses: { name: string; logo_path: string | null } | { name: string; logo_path: string | null }[] | null;
 };
 
@@ -676,6 +677,7 @@ function toMachine(row: MachineRow): Machine {
     terminal_model: row.terminal_model,
     terminal_network: row.terminal_network,
     terminal_flags: row.terminal_flags ?? [],
+    refill_manual: row.refill_manual === true,
   };
 }
 

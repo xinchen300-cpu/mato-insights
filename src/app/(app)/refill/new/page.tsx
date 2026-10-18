@@ -9,7 +9,7 @@ import { getMachines, getMachineStock, getOpenRounds, getRefillSheets, getStatsR
 import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
 import { cleanRoundSettings, orderByRoute } from "@/lib/round-settings";
 import { lastFullWeeks } from "@/lib/stats";
-import { fillLevel, needsAttention } from "@/lib/stock";
+import { fillLevel, needsAttention, slotsFilledByVendly } from "@/lib/stock";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MachinePicker } from "../machine-picker";
 
@@ -77,7 +77,8 @@ export default async function NewRoundPage() {
     string,
     { low: number; toAdd: number; value: number; filled: number; capacity: number; priced: number; prices: number; counted: number }
   >();
-  for (const s of stock) {
+  // A machine filled by hand is never put on a round.
+  for (const s of slotsFilledByVendly(stock, machines)) {
     if (!s.product_id) continue;
     const entry =
       perMachine.get(s.machine_id) ?? { low: 0, toAdd: 0, value: 0, filled: 0, capacity: 0, priced: 0, prices: 0, counted: 0 };

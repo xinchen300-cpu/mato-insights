@@ -13,6 +13,7 @@ const api: RoundApi = {
   completeStop: () => wait(250),
   skipStop: () => wait(250),
   completeRound: () => wait(400),
+  reopenStop: () => wait(300),
 };
 
 export function RoundPreview({ scenario }: { scenario: Scenario }) {
