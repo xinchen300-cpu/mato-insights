@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarCheck, Check, ChevronLeft, ChevronRight, MessageSquareText, Timer, TriangleAlert, Truck } from "lucide-react";
+import { CalendarCheck, CalendarX, Check, ChevronLeft, ChevronRight, MessageSquareText, Timer, TriangleAlert, Truck } from "lucide-react";
 import Link from "next/link";
 import { FrontView, type FrontSlot } from "@/components/machine/front-view";
 import { RefillTips } from "@/components/refill/refill-tips";
@@ -130,7 +130,7 @@ export function RoundFlow({
 
   const [view, setView] = useState<View>("home");
   const [stopId, setStopId] = useState<string | null>(null);
-  const [report, setReport] = useState<{ selection: string | null } | null>(null);
+  const [report, setReport] = useState<{ selection: string | null; only?: ReportKind } | null>(null);
   const [lineSheet, setLineSheet] = useState<string | null>(null);
   const [countSheet, setCountSheet] = useState<string | null>(null);
   const [showShort, setShowShort] = useState(false);
@@ -501,14 +501,14 @@ export function RoundFlow({
   const header = (back?: () => void) => (
     <div className="flex min-h-11 items-center justify-between gap-3">
       {back ? (
-        <button type="button" onClick={back} className="-ml-2 flex h-11 items-center gap-1 rounded-full px-2 text-[15px] font-semibold">
+        <button type="button" onClick={back} className="flex h-11 items-center gap-1 rounded-full bg-surface pl-2 pr-4 text-[15px] font-semibold active:scale-95">
           <ChevronLeft className="size-5" />
           {t.backToRound}
         </button>
       ) : countdown === null ? (
         // Out of the round, back to the app: the round keeps where it was and is there to pick up again.
         // Not while a machine waits out its three seconds: leaving then would never send it.
-        <Link href="/refill" className="-ml-2 flex h-11 items-center gap-1 rounded-full px-2 text-[15px] font-semibold">
+        <Link href="/refill" className="flex h-11 items-center gap-1 rounded-full bg-surface pl-2 pr-4 text-[15px] font-semibold active:scale-95">
           <ChevronLeft className="size-5" />
           {m.nav.refill}
         </Link>
@@ -556,6 +556,7 @@ export function RoundFlow({
         rows={returnsFor(initial.lines, initial.slots, picked, stops)}
         busy={pending}
         header={header(() => setView("home"))}
+        onBack={() => setView("home")}
         visited={Object.values(stops).filter((stop) => !stop.skipped).length}
         skipped={Object.values(stops).filter((stop) => stop.skipped).length}
         onFinish={(choices) =>
@@ -704,14 +705,17 @@ export function RoundFlow({
         </div>
 
         <BottomBar>
-          <button
-            type="button"
-            className={primary}
-            disabled={pending || totalPicked === 0}
-            onClick={() => (shortTotal > 0 ? setShowShort(true) : start())}
-          >
-            {pending ? t.sending : t.start}
-          </button>
+          <div className="flex gap-2">
+            <BackButton onClick={() => setView("home")} />
+            <button
+              type="button"
+              className={cn(primary, "flex-1")}
+              disabled={pending || totalPicked === 0}
+              onClick={() => (shortTotal > 0 ? setShowShort(true) : start())}
+            >
+              {pending ? t.sending : t.start}
+            </button>
+          </div>
         </BottomBar>
 
         {countRow && (
@@ -816,6 +820,11 @@ export function RoundFlow({
             <button type="button" className={chip} onClick={() => setReport({ selection: null })}>
               <TriangleAlert className="size-4 text-warning" />
               {t.reportShort}
+            </button>
+            {/* Straight to "how many over date", the one he needs most (Xin, 18-10-2026). */}
+            <button type="button" className={chip} onClick={() => setReport({ selection: null, only: "expired" })}>
+              <CalendarX className="size-4 text-negative" />
+              {t.reasonExpired}
             </button>
             {initial.settings.allowSkip && (
               <button
@@ -936,14 +945,18 @@ export function RoundFlow({
         </div>
 
         <BottomBar>
-          <button
-            type="button"
-            className={cn(primary, open.length === 0 && "ready-shine")}
-            onClick={() => (open.length > 0 ? setUnchecked(open.length) : requestFinish(current.id, "planned"))}
-          >
-            {open.length === 0 && <Check className="size-5" strokeWidth={3} aria-hidden="true" />}
-            <span className="truncate">{fmt(t.doneWith, { machine: current.name })}</span>
-          </button>
+          <div className="flex gap-2">
+            {/* Back to the route: what is tapped here stays, the machine is not done until "Klaar". */}
+            <BackButton onClick={() => setView("home")} />
+            <button
+              type="button"
+              className={cn(primary, "min-w-0 flex-1", open.length === 0 && "ready-shine")}
+              onClick={() => (open.length > 0 ? setUnchecked(open.length) : requestFinish(current.id, "planned"))}
+            >
+              {open.length === 0 && <Check className="size-5" strokeWidth={3} aria-hidden="true" />}
+              <span className="truncate">{fmt(t.doneWith, { machine: current.name })}</span>
+            </button>
+          </div>
         </BottomBar>
 
         {unchecked !== null && (
@@ -1036,6 +1049,7 @@ export function RoundFlow({
           <ReportSheet
             slots={machineSlots}
             preset={report.selection}
+            only={report.only}
             startFor={(kind, selection) => startFor(current.id, kind, selection)}
             onClose={() => setReport(null)}
             onSave={(kind, selection, value, note) => {
@@ -1501,6 +1515,7 @@ function ReturnsScreen({
   rows,
   busy,
   header,
+  onBack,
   onFinish,
   visited,
   skipped,
@@ -1508,6 +1523,7 @@ function ReturnsScreen({
   rows: ReturnRow[];
   busy: boolean;
   header: React.ReactNode;
+  onBack: () => void;
   onFinish: (choices: { productId: string; source: "leftover" | "removed"; reason: string | null; disposition: string; qty: number }[]) => void;
   visited: number;
   skipped: number;
@@ -1621,20 +1637,23 @@ function ReturnsScreen({
         )}
       </div>
       <BottomBar>
-        <button
-          type="button"
-          className={primary}
-          disabled={busy}
-          onClick={() =>
-            onFinish(
-              rows.flatMap((row) =>
-                partsOf(row).map(([disposition, qty]) => ({ productId: row.productId, source: row.source, reason: row.reason, disposition, qty })),
-              ),
-            )
-          }
-        >
-          {busy ? t.sending : t.finish}
-        </button>
+        <div className="flex gap-2">
+          <BackButton onClick={onBack} disabled={busy} />
+          <button
+            type="button"
+            className={cn(primary, "flex-1")}
+            disabled={busy}
+            onClick={() =>
+              onFinish(
+                rows.flatMap((row) =>
+                  partsOf(row).map(([disposition, qty]) => ({ productId: row.productId, source: row.source, reason: row.reason, disposition, qty })),
+                ),
+              )
+            }
+          >
+            {busy ? t.sending : t.finish}
+          </button>
+        </div>
       </BottomBar>
       {splitting && (
         <SplitSheet
@@ -1803,6 +1822,17 @@ function BottomBar({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** "Terug", next to the big button at every step: one step back, nothing lost. */
+function BackButton({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
+  const { m } = useI18n();
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} className={cn(outline, "w-auto shrink-0 gap-1 pl-3 pr-4 disabled:opacity-50")}>
+      <ChevronLeft className="size-5" aria-hidden="true" />
+      {m.round.back}
+    </button>
+  );
+}
+
 function Sheet({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   const panel = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
@@ -1895,12 +1925,15 @@ function LineSheet({
 function ReportSheet({
   slots,
   preset,
+  only,
   startFor,
   onClose,
   onSave,
 }: {
   slots: RefillRound["slots"];
   preset: string | null;
+  /** Opened for one kind only ("Over datum"): no choice of kind, straight to the slot and the number. */
+  only?: ReportKind;
   /** Where the stepper starts for a kind of report on a slot: what is noted already, or what Vendly expects. */
   startFor: (kind: ReportKind, selection: string | null) => number;
   onClose: () => void;
@@ -1908,9 +1941,9 @@ function ReportSheet({
 }) {
   const { m } = useI18n();
   const t = m.round;
-  const [kind, setKind] = useState<ReportKind>("expired");
+  const [kind, setKind] = useState<ReportKind>(only ?? "expired");
   const [selection, setSelection] = useState<string | null>(preset);
-  const [value, setValue] = useState(() => startFor("expired", preset));
+  const [value, setValue] = useState(() => startFor(only ?? "expired", preset));
   const [note, setNote] = useState("");
   const slot = slots.find((s) => s.selection === selection) ?? null;
   const kinds: { id: ReportKind; label: string }[] = [
@@ -1925,26 +1958,28 @@ function ReportSheet({
 
   return (
     <Sheet onClose={onClose}>
-      <h2 className="text-[22px] font-bold tracking-[-0.02em]">{t.whatIsIt}</h2>
-      <div className="flex flex-wrap gap-2">
-        {kinds.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            aria-pressed={kind === option.id}
-            onClick={() => {
-              setKind(option.id);
-              setValue(startFor(option.id, selection));
-            }}
-            className={cn(
-              "h-11 rounded-full px-4 text-[14.5px] font-semibold",
-              kind === option.id ? "bg-foreground text-background" : "bg-surface",
-            )}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
+      <h2 className="text-[22px] font-bold tracking-[-0.02em]">{only === "expired" ? t.expiredTitle : t.whatIsIt}</h2>
+      {!only && (
+        <div className="flex flex-wrap gap-2">
+          {kinds.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              aria-pressed={kind === option.id}
+              onClick={() => {
+                setKind(option.id);
+                setValue(startFor(option.id, selection));
+              }}
+              className={cn(
+                "h-11 rounded-full px-4 text-[14.5px] font-semibold",
+                kind === option.id ? "bg-foreground text-background" : "bg-surface",
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {kind === "technical" ? (
         <label className="flex flex-col gap-1.5 text-[14px] font-semibold">
