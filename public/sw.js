@@ -1,10 +1,10 @@
-// Vendly's service worker. It shows a notification when something needs a
-// decision, keeps Vendly's own files on the phone so the app opens fast on a
+// MATO Info's service worker. It shows a notification when something needs a
+// decision, keeps the app's own files on the phone so the app opens fast on a
 // weak signal, and shows a page of its own when there is no connection at all.
 // It never keeps a page with someone's data in it: those always come fresh.
 
 // Raise when this file changes how it caches, so the old caches go.
-const VERSION = "v2";
+const VERSION = "v3";
 const STATIC_CACHE = `vendly-static-${VERSION}`;
 const PAGE_CACHE = `vendly-pages-${VERSION}`;
 const OFFLINE_URL = "/offline";
@@ -38,7 +38,7 @@ function isBuildFile(url) {
   return url.pathname.startsWith("/_next/static/");
 }
 
-/** Vendly's own pictures and icons: shown from the phone, refreshed behind it. */
+/** The app's own pictures and icons: shown from the phone, refreshed behind it. */
 function isOwnPicture(url) {
   return url.pathname.startsWith("/pwa-icon/") || url.pathname.startsWith("/brand/") || url.pathname.startsWith("/machines/") || url.pathname === "/icon.svg";
 }
@@ -102,7 +102,7 @@ self.addEventListener("push", (event) => {
     payload = { body: event.data ? event.data.text() : "" };
   }
 
-  const title = payload.title || "Vendly";
+  const title = payload.title || "MATO Info";
   event.waitUntil(
     self.registration.showNotification(title, {
       body: payload.body || "",
@@ -118,7 +118,7 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = event.notification.data?.url || "/";
 
-  // Bring an open Vendly tab forward rather than opening another one.
+  // Bring an open app tab forward rather than opening another one.
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       for (const client of clients) {

@@ -7,8 +7,8 @@ import { nl } from "@/i18n/messages/nl";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Vendly · Vending Data Solutions",
-    short_name: "Vendly",
+    name: "MATO Info · Vending Data Solutions",
+    short_name: "MATO Info",
     description: "Statistics Won't Lie",
     lang: "nl-BE",
     start_url: "/",

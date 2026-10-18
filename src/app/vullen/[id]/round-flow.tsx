@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarCheck, CalendarX, Check, ChevronLeft, ChevronRight, MessageSquareText, Timer, Trash2, TriangleAlert, Truck } from "lucide-react";
+import { CalendarCheck, CalendarX, Check, ChevronLeft, ChevronRight, MessageSquareText, Navigation, Timer, Trash2, TriangleAlert, Truck } from "lucide-react";
 import Link from "next/link";
 import { FillerAvatar } from "@/components/filler/avatar";
 import { FrontView, type FrontSlot } from "@/components/machine/front-view";
@@ -22,13 +22,12 @@ import {
   slotTally,
   stillMissing,
   tapOnce,
-  type Disposition,
   type FlowLine,
   type RemovalReason,
-  type ReturnRow,
   type StopRecord,
 } from "@/lib/refill-flow";
 import { DEFAULT_MACHINE_PHOTO, mediaUrl } from "@/lib/media";
+import { legKey, wazeLink } from "@/lib/round-settings";
 import { bandBg, machineFill, machineTotals, type FillBand } from "@/lib/stock";
 import { cn } from "@/lib/utils";
 import { completeRound, completeStop, deleteRound, reopenStop, savePicked, skipStop, startRound, type StopInput } from "./actions";
@@ -79,7 +78,7 @@ type StopDraft = {
 };
 type Saved = { picked: Record<string, number>; touched: boolean; drafts: Record<string, StopDraft> };
 type ReportKind = RemovalReason | "count" | "technical";
-type View = "home" | "pick" | "stop" | "returns";
+type View = "home" | "pick" | "stop";
 /** A stop as it is sent; when it happened is added at the moment of sending. */
 type StopWork = Omit<StopInput, "checkedAgo" | "doneAgo">;
 /** A machine just finished or skipped, waiting out its moment to be taken back. */
@@ -504,6 +503,27 @@ export function RoundFlow({
     );
   }
 
+  /**
+   * "Ronde afronden": the round closes as it stands (Xin, 19-10-2026: no
+   * "Terugbrengen" step). What was taken along and not used goes back to stock,
+   * what came out over date counts as waste, as the round always reckoned it.
+   */
+  function finishRound() {
+    run(
+      () => api.completeRound(initial.id, []),
+      () => {
+        setCompleted(true);
+        setCompletedAt(new Date().toISOString());
+        try {
+          localStorage.removeItem(storageKey(initial.id));
+        } catch {
+          // Nothing to clean up then.
+        }
+        router.refresh();
+      },
+    );
+  }
+
   /** "Ronde verwijderen", at any point; then back to Bijvullen. */
   function removeRound() {
     run(
@@ -565,6 +585,8 @@ export function RoundFlow({
   function askExpired(machineId: string, open: "empty" | "planned", full?: Set<string>) {
     setUnchecked(null);
     setFullAsk(null);
+    // A snack machine holds no dishes to ask about (Xin, 19-10-2026): done at once.
+    if (initial.machines.find((mc) => mc.id === machineId)?.type === "spiral") return finishStop(machineId, open, full);
     const counts: Record<string, number> = {};
     for (const [selection, line] of Object.entries(draftFor(machineId).lines)) {
       const qty = line.removed.find((r) => r.reason === "expired")?.qty ?? 0;
@@ -659,35 +681,6 @@ export function RoundFlow({
           tomorrow={stillMissing(initial.lines, picked, stops)}
         />
       </Screen>
-    );
-  }
-
-  // ——— Bring back and close ———
-  if (view === "returns" && readyAt && openStops.length === 0 && countdown === null) {
-    return (
-      <ReturnsScreen
-        rows={returnsFor(initial.lines, initial.slots, picked, stops)}
-        busy={pending}
-        header={header(() => setView("home"))}
-        onBack={() => setView("home")}
-        visited={Object.values(stops).filter((stop) => !stop.skipped).length}
-        skipped={Object.values(stops).filter((stop) => stop.skipped).length}
-        onFinish={(choices) =>
-          run(
-            () => api.completeRound(initial.id, choices),
-            () => {
-              setCompleted(true);
-              setCompletedAt(new Date().toISOString());
-              try {
-                localStorage.removeItem(storageKey(initial.id));
-              } catch {
-                // Nothing to clean up then.
-              }
-              router.refresh();
-            },
-          )
-        }
-      />
     );
   }
 
@@ -1038,11 +1031,20 @@ export function RoundFlow({
               <TriangleAlert className="size-4 text-warning" />
               {t.reportShort}
             </button>
-            {/* Straight to "how many over date", the one he needs most (Xin, 18-10-2026). */}
-            <button type="button" className={chip} onClick={() => setReport({ selection: null, only: "expired" })}>
-              <CalendarX className="size-4 text-negative" />
-              {t.reasonExpired}
-            </button>
+            {/* Straight to "how many over date", the one he needs most (Xin, 18-10-2026); not for snacks (19-10). */}
+            {current.type !== "spiral" && (
+              <button type="button" className={chip} onClick={() => setReport({ selection: null, only: "expired" })}>
+                <CalendarX className="size-4 text-negative" />
+                {t.reasonExpired}
+              </button>
+            )}
+            {/* The way there in Waze, also once the machine is open. */}
+            {current.address && (
+              <a href={wazeLink(current.address) ?? undefined} target="_blank" rel="noopener noreferrer" className={chip}>
+                <Navigation className="size-4 text-[#05c8f7]" aria-hidden="true" />
+                {t.waze}
+              </a>
+            )}
             {initial.settings.allowSkip && (
               <button
                 type="button"
@@ -1060,11 +1062,13 @@ export function RoundFlow({
             )}
             {removedHere > 0 && <span className={cn(chip, "ring-warning/40")}>{fmt(t.removedBadge, { n: removedHere })}</span>}
           </div>
-          {/* The dates are the filler's to check by eye: one line at every machine, nothing to tap (Xin, 18-10-2026). */}
-          <p className="mt-3 flex items-center gap-2.5 rounded-xl bg-surface px-3 py-2.5 text-[14.5px] font-medium">
-            <CalendarCheck className="size-5 shrink-0" aria-hidden="true" />
-            {t.checkDates}
-          </p>
+          {/* The dates are the filler's to check by eye: one line at every machine with dishes, nothing to tap (Xin, 18-10-2026). */}
+          {current.type !== "spiral" && (
+            <p className="mt-3 flex items-center gap-2.5 rounded-xl bg-surface px-3 py-2.5 text-[14.5px] font-medium">
+              <CalendarCheck className="size-5 shrink-0" aria-hidden="true" />
+              {t.checkDates}
+            </p>
+          )}
           <div className="mt-2 flex items-center justify-between">
             <p className="text-[14.5px] text-muted-foreground">{t.fillHint}</p>
             {open.length > 0 && (
@@ -1369,12 +1373,12 @@ export function RoundFlow({
         machine: { photoPath: machine.photoPath, id: machine.id },
       };
     }),
+    // Back to where the round began (Xin, 19-10-2026: no "Terugbrengen" step any more).
     {
       key: "finish",
-      title: t.stepFinish,
-      sub: t.stepFinishSub,
+      title: t.stepBackStart,
+      sub: initial.settings.depotAddress ?? t.stepBackStartSub,
       state: readyAt && openStops.length === 0 && countdown === null ? "now" : "later",
-      onOpen: readyAt && openStops.length === 0 && countdown === null ? () => setView("returns") : undefined,
     },
   ];
 
@@ -1400,8 +1404,9 @@ export function RoundFlow({
       .sort((a, b) => b.at.localeCompare(a.at))[0] ?? null;
 
   // The drive into each step, as earlier rounds measured it: from the start to
-  // the first machine, between machines (either way round), and back. It comes
-  // from the last step before it with work: a full machine is driven past.
+  // the first machine, between machines (either way round), and back; until
+  // then, as worked out from the addresses. It comes from the last step before
+  // it with work: a full machine is driven past.
   const endOf = (key: string) => (key === "pick" ? "start" : key === "finish" ? "end" : key);
   const driveInto = (index: number) => {
     let back = index - 1;
@@ -1409,8 +1414,9 @@ export function RoundFlow({
     const from = endOf(steps[back].key);
     const to = endOf(steps[index].key);
     const measured = times.legs[`${from}→${to}`] ?? (from !== "start" && to !== "end" ? times.legs[`${to}→${from}`] : undefined);
-    if (!measured) return null;
-    const time = duration(Math.max(1, measured.minutes), m.refill.runTime, m.refill.runTimeHours);
+    const minutes = measured?.minutes ?? initial.settings.drive[legKey(from, to)];
+    if (!minutes) return null;
+    const time = duration(Math.max(1, minutes), m.refill.runTime, m.refill.runTimeHours);
     return fmt(to === "end" ? t.driveBack : t.drive, { time });
   };
 
@@ -1604,22 +1610,26 @@ export function RoundFlow({
             {touched ? t.continuePicking : t.beginPicking}
           </button>
         ) : nextStop ? (
-          <button type="button" className={primary} disabled={pending || settling} onClick={() => openStop(nextStop.id)}>
-            {fmt(t.goTo, { machine: nextStop.name })}
-            <ChevronRight className="size-5" />
-          </button>
+          <div className="flex gap-2">
+            <NavigateButton address={nextStop.address} place={nextStop.name} />
+            <button type="button" className={cn(primary, "min-w-0 flex-1")} disabled={pending || settling} onClick={() => openStop(nextStop.id)}>
+              <span className="truncate">{fmt(t.goTo, { machine: nextStop.name })}</span>
+              <ChevronRight className="size-5 shrink-0" />
+            </button>
+          </div>
         ) : (
-          <button
-            type="button"
-            className={primary}
-            disabled={pending || settling}
-            onClick={() => {
-              if (countdown !== null) setCountdown(0);
-              setView("returns");
-            }}
-          >
-            {pending ? t.sending : t.finish}
-          </button>
+          // Every machine done: the round closes with one tap; what came back goes back to stock.
+          <div className="flex gap-2">
+            <NavigateButton address={initial.settings.depotAddress} place={t.stepBackStart} />
+            <button
+              type="button"
+              className={cn(primary, "min-w-0 flex-1")}
+              disabled={pending || settling || countdown !== null || pendingId !== null}
+              onClick={finishRound}
+            >
+              {pending ? t.sending : t.finishRound}
+            </button>
+          </div>
         )}
       </BottomBar>
     </Screen>
@@ -1800,271 +1810,6 @@ function CountSheet({
   );
 }
 
-function ReturnsScreen({
-  rows,
-  busy,
-  header,
-  onBack,
-  onFinish,
-  visited,
-  skipped,
-}: {
-  rows: ReturnRow[];
-  busy: boolean;
-  header: React.ReactNode;
-  onBack: () => void;
-  onFinish: (choices: { productId: string; source: "leftover" | "removed"; reason: string | null; disposition: string; qty: number }[]) => void;
-  visited: number;
-  skipped: number;
-}) {
-  const { m } = useI18n();
-  const t = m.round;
-  // Per product, how many go where: everything to one place, or split (1 Too Good To Go, the rest away).
-  const [parts, setParts] = useState<Record<string, Partial<Record<Disposition, number>>>>({});
-  const [splitting, setSplitting] = useState<ReturnRow | null>(null);
-  const keyOf = (row: ReturnRow) => `${row.productId}|${row.source}|${row.reason ?? ""}`;
-  const partsOf = (row: ReturnRow): [Disposition, number][] =>
-    (Object.entries(parts[keyOf(row)] ?? { [row.disposition]: row.qty }) as [Disposition, number][]).filter(([, qty]) => qty > 0);
-  const label: Record<Disposition, string> = {
-    stock: t.dispStock,
-    waste: t.dispWaste,
-    promo: t.dispPromo,
-    staff: t.dispStaff,
-    other: t.dispOther,
-  };
-  const reasonLabel: Record<RemovalReason, string> = {
-    expired: t.reasonExpired,
-    damaged: t.reasonDamaged,
-    nearExpiry: t.reasonNear,
-    other: t.reasonOther,
-  };
-  const leftover = rows.filter((row) => row.source === "leftover");
-  const removed = rows.filter((row) => row.source === "removed");
-
-  const list = (items: ReturnRow[]) => (
-    <ul className="surface-card flex flex-col px-3 py-1">
-      {items.map((row) => {
-        const where = partsOf(row);
-        const split = where.length > 1;
-        return (
-          <li key={keyOf(row)} className="flex flex-col gap-2 border-b border-border/60 py-3 last:border-0">
-            <div className="flex items-center gap-3">
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-[15.5px] font-semibold">{row.productName}</span>
-                {row.reason && <span className="text-[13px] text-muted-foreground">{reasonLabel[row.reason]}</span>}
-              </span>
-              <span className="tabular shrink-0 text-[17px] font-bold">{fmt(t.splitPieces, { n: row.qty })}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {split ? (
-                // Split over several places: the parts, and a tap to change them.
-                <button
-                  type="button"
-                  onClick={() => setSplitting(row)}
-                  className="flex min-h-10 min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-surface px-3 py-2 text-left text-[13.5px] font-semibold"
-                >
-                  {where.map(([to, qty]) => (
-                    <span key={to} className="tabular">
-                      {qty} {label[to]}
-                    </span>
-                  ))}
-                </button>
-              ) : (
-                <select
-                  aria-label={row.productName}
-                  className="h-10 min-w-0 flex-1 rounded-xl bg-surface px-2 text-base font-semibold md:text-[13.5px]"
-                  value={where[0]?.[0] ?? row.disposition}
-                  onChange={(event) => setParts((all) => ({ ...all, [keyOf(row)]: { [event.target.value]: row.qty } }))}
-                >
-                  {(Object.keys(label) as Disposition[]).map((option) => (
-                    <option key={option} value={option}>
-                      {label[option]}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {row.qty > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setSplitting(row)}
-                  className="h-10 shrink-0 rounded-xl px-3 text-[13.5px] font-semibold ring-1 ring-border transition-transform active:scale-95"
-                >
-                  {t.split}
-                </button>
-              )}
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
-
-  return (
-    <Screen padded={false}>
-      <div className="flex flex-col gap-3 px-4 pt-4">
-        {header}
-        <h1 className="mt-2 text-[32px] font-bold tracking-[-0.03em]">{t.returnsTitle}</h1>
-        <p className="text-[14px] text-muted-foreground">
-          {skipped
-            ? fmt(t.machinesDoneSkipped, { n: visited, skipped })
-            : fmt(visited === 1 ? t.machinesDoneOne : t.machinesDone, { n: visited })}
-        </p>
-      </div>
-      <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-3 pb-36 pt-4">
-        {rows.length === 0 && <p className="surface-card p-5 text-[15px]">{t.nothingBack}</p>}
-        {leftover.length > 0 && (
-          <>
-            <p className="px-2 text-[16px] font-semibold">{t.stillWithYou}</p>
-            {list(leftover)}
-          </>
-        )}
-        {removed.length > 0 && (
-          <>
-            <p className="mt-2 px-2 text-[16px] font-semibold">{t.removedFromMachine}</p>
-            {list(removed)}
-          </>
-        )}
-      </div>
-      <BottomBar>
-        <div className="flex gap-2">
-          <BackButton onClick={onBack} disabled={busy} />
-          <button
-            type="button"
-            className={cn(primary, "flex-1")}
-            disabled={busy}
-            onClick={() =>
-              onFinish(
-                rows.flatMap((row) =>
-                  partsOf(row).map(([disposition, qty]) => ({ productId: row.productId, source: row.source, reason: row.reason, disposition, qty })),
-                ),
-              )
-            }
-          >
-            {busy ? t.sending : t.finish}
-          </button>
-        </div>
-      </BottomBar>
-      {splitting && (
-        <SplitSheet
-          row={splitting}
-          start={Object.fromEntries(partsOf(splitting))}
-          label={label}
-          onClose={() => setSplitting(null)}
-          onSave={(next) => {
-            setParts((all) => ({ ...all, [keyOf(splitting)]: next }));
-            setSplitting(null);
-          }}
-        />
-      )}
-    </Screen>
-  );
-}
-
-/**
- * One product that came back, split over places: a number for each, and the
- * rest to the place chosen at the bottom. The pieces always add up, so there
- * is nothing to get wrong: a plus takes one from the rest, a minus gives it back.
- */
-function SplitSheet({
-  row,
-  start,
-  label,
-  onClose,
-  onSave,
-}: {
-  row: ReturnRow;
-  start: Partial<Record<Disposition, number>>;
-  label: Record<Disposition, string>;
-  onClose: () => void;
-  onSave: (parts: Partial<Record<Disposition, number>>) => void;
-}) {
-  const { m } = useI18n();
-  const t = m.round;
-  // The rest goes where most of it went until now; its own number is whatever is left.
-  const firstRest = (Object.entries(start) as [Disposition, number][]).sort((a, b) => b[1] - a[1])[0]?.[0] ?? row.disposition;
-  const [rest, setRest] = useState<Disposition>(firstRest);
-  const [count, setCount] = useState<Record<Disposition, number>>(() => ({
-    stock: 0,
-    waste: 0,
-    promo: 0,
-    staff: 0,
-    other: 0,
-    ...start,
-    [firstRest]: 0,
-  }));
-  // Too Good To Go and the bin first: that is what a split is usually about.
-  const order: Disposition[] = ["promo", "waste", "stock", "staff", "other"];
-  const others = order.filter((where) => where !== rest);
-  const given = others.reduce((sum, where) => sum + count[where], 0);
-  const left = row.qty - given;
-
-  return (
-    <Sheet onClose={onClose}>
-      <h2 className="text-[22px] font-bold tracking-[-0.02em]">{row.productName}</h2>
-      <p className="-mt-2 text-[15px] text-muted-foreground">{fmt(t.splitHint, { n: row.qty })}</p>
-      <ul className="flex flex-col">
-        {others.map((where) => (
-          <li key={where} className="flex min-h-14 items-center gap-3 border-b border-border/60 last:border-0">
-            <span className="min-w-0 flex-1 text-[15.5px] font-semibold">{label[where]}</span>
-            <button
-              type="button"
-              aria-label={`${t.less}: ${label[where]}`}
-              className={cn(stepper, "size-11 text-2xl")}
-              disabled={count[where] === 0}
-              onClick={() => setCount((all) => ({ ...all, [where]: all[where] - 1 }))}
-            >
-              −
-            </button>
-            <span className="tabular w-8 text-center text-[22px] font-bold">{count[where]}</span>
-            <button
-              type="button"
-              aria-label={`${t.more}: ${label[where]}`}
-              className={cn(stepper, "size-11 text-2xl")}
-              disabled={left === 0}
-              onClick={() => setCount((all) => ({ ...all, [where]: all[where] + 1 }))}
-            >
-              +
-            </button>
-          </li>
-        ))}
-      </ul>
-      <div className="flex items-center gap-3 rounded-2xl bg-surface px-4 py-3">
-        <span className="text-[15px] font-semibold">{t.splitRest}</span>
-        <select
-          aria-label={t.splitRest}
-          value={rest}
-          onChange={(event) => {
-            const next = event.target.value as Disposition;
-            // What was counted for the new place becomes part of the rest, and the old rest starts at 0.
-            setCount((all) => ({ ...all, [next]: 0, [rest]: 0 }));
-            setRest(next);
-          }}
-          className="h-10 min-w-0 flex-1 rounded-xl bg-card px-2 text-base font-semibold md:text-[14px]"
-        >
-          {order.map((where) => (
-            <option key={where} value={where}>
-              {label[where]}
-            </option>
-          ))}
-        </select>
-        <span className="tabular w-8 shrink-0 text-right text-[22px] font-bold">{left}</span>
-      </div>
-      <button
-        type="button"
-        className={primary}
-        onClick={() =>
-          onSave({
-            ...Object.fromEntries(others.filter((where) => count[where] > 0).map((where) => [where, count[where]])),
-            ...(left > 0 ? { [rest]: left } : {}),
-          })
-        }
-      >
-        {t.save}
-      </button>
-    </Sheet>
-  );
-}
-
 /**
  * How long the round has been going, from "Start ronde" on. It runs by itself:
  * a timer the filler has to start and stop gets forgotten, and then the
@@ -2182,6 +1927,25 @@ function ExpiredPick({
         {t.back}
       </button>
     </Sheet>
+  );
+}
+
+/** "Waze": the way to an address, on a phone in the Waze app (Xin, 19-10-2026). Nothing without an address. */
+function NavigateButton({ address, place }: { address: string | null; place: string }) {
+  const { m } = useI18n();
+  const href = wazeLink(address);
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={fmt(m.round.navigateTo, { place })}
+      className={cn(outline, "w-auto shrink-0 gap-1.5 px-4")}
+    >
+      <Navigation className="size-5 text-[#05c8f7]" aria-hidden="true" />
+      {m.round.waze}
+    </a>
   );
 }
 

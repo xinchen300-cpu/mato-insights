@@ -19,7 +19,7 @@ export async function GET() {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#f6f6f7">
-<title>${escape(t.title)} · Vendly</title>
+<title>${escape(t.title)} · MATO Info</title>
 <style>
   html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
   body { margin: 0; min-height: 100svh; display: flex; align-items: center; justify-content: center; background: #f6f6f7; color: #0e0e10;
@@ -38,7 +38,7 @@ export async function GET() {
   <svg viewBox="14 15 92 60" aria-hidden="true">
     <path d="M34,20 L20,20 L20,70 L34,70" fill="none" stroke="#A6752C" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
     <path d="M86,20 L100,20 L100,70 L86,70" fill="none" stroke="#A6752C" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-    <polygon points="48.2,36.5 54,36.5 60,54.5 66,36.5 71.8,36.5 63.1,61 56.9,61" fill="#2A2520"/>
+    <path d="M45 37.3 V61 M45 46 C45 41.5 48 39.3 52.5 39.3 C57 39.3 60 41.5 60 46 V61 M60 46 C60 41.5 63 39.3 67.5 39.3 C72 39.3 75 41.5 75 46 V61" fill="none" stroke="#2A2520" stroke-width="5.6"/>
   </svg>
   <h1>${escape(t.title)}</h1>
   <p>${escape(t.body)}</p>

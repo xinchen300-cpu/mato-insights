@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cleanAddress } from "@/lib/round-settings";
 import { isOperator, requireOperator, requireOrgId } from "@/lib/org";
 import {
   getMachine,
@@ -51,6 +52,8 @@ export async function updateMachineDetails(
   kmRoundTrip: number | null;
     /** Filled by hand, outside Vendly; left out by a form from before the switch, and then kept. */
     refillManual?: boolean;
+    /** Where it stands, for navigating there; left out by a form from before the field, and then kept. */
+    address?: string;
   },
 ) {
   const orgId = await requireOrgId();
@@ -109,6 +112,7 @@ export async function updateMachineDetails(
       data_since: input.dataSince,
       km_round_trip: input.kmRoundTrip,
       ...(input.refillManual !== undefined ? { refill_manual: input.refillManual === true } : {}),
+      ...(input.address !== undefined ? { address: cleanAddress(input.address) } : {}),
     })
     .eq("id", machineId)
     .eq("org_id", orgId);

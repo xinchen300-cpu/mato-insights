@@ -20,10 +20,10 @@ const TEST = process.env.VENDLY_ENV === "test";
 export async function generateMetadata(): Promise<Metadata> {
   const { m } = await getI18n();
   return {
-    title: TEST ? { default: "Vendly test", template: "%s · Vendly test" } : { default: "Vendly", template: "%s · Vendly" },
+    title: TEST ? { default: "MATO Info test", template: "%s · MATO Info test" } : { default: "MATO Info", template: "%s · MATO Info" },
     description: `${m.brand.subtitle}. ${m.brand.tagline}.`,
-    applicationName: "Vendly",
-    appleWebApp: { capable: true, title: "Vendly", statusBarStyle: "default" },
+    applicationName: "MATO Info",
+    appleWebApp: { capable: true, title: "MATO Info", statusBarStyle: "default" },
     icons: { apple: "/pwa-icon/180" },
   };
 }

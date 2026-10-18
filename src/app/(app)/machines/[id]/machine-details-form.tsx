@@ -39,6 +39,7 @@ export function MachineDetailsForm({
   const [dataSince, setDataSince] = useState(machine.data_since ?? "");
   const [km, setKm] = useState(machine.km_round_trip === null ? "" : String(machine.km_round_trip));
   const [byHand, setByHand] = useState(machine.refill_manual);
+  const [address, setAddress] = useState(machine.address ?? "");
   const [newBusiness, setNewBusiness] = useState("");
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [isPending, startTransition] = useTransition();
@@ -65,6 +66,7 @@ export function MachineDetailsForm({
           dataSince: dataSince || null,
           kmRoundTrip: km.trim() === "" ? null : Number(km.replace(",", ".")),
           refillManual: byHand,
+          address,
         });
         setStatus("saved");
         if (businessId === NEW_BUSINESS) setBusinessId("");
@@ -179,6 +181,17 @@ export function MachineDetailsForm({
         <p className={hintClass}>{m.machines.dataSinceHint}</p>
       </div>
 
+      <div className="grid gap-2 sm:col-span-2">
+        <Label htmlFor="machine-address">{m.machines.address}</Label>
+        <Input
+          id="machine-address"
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          autoComplete="street-address"
+          placeholder={m.machines.addressPlaceholder}
+        />
+        <p className={hintClass}>{m.machines.addressHint}</p>
+      </div>
       <div className="grid gap-2">
         <Label htmlFor="machine-km">{m.machines.kmRoundTrip}</Label>
         <Input
