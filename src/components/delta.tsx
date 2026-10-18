@@ -63,6 +63,8 @@ export function Delta({
       )}
     >
       <Icon className="size-3.5" strokeWidth={2.5} />
+      {/* The arrow is drawn only; a screen reader gets the sign. */}
+      {!flat && <span className="sr-only">{ratio > 0 ? "+" : "−"}</span>}
       {f.percent(flat ? 0 : Math.abs(ratio))}
     </span>
   );

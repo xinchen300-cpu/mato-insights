@@ -302,3 +302,19 @@ const figures = roundFigures(itemReport(
   [{ productId: "eend", qty: 1 }],
 ));
 ok("figures: taken, filled, Too Good To Go, thrown away and short", figures.taken === 5 && figures.filled === 3 && figures.went.promo === 1 && figures.went.waste === 1 && figures.went.stock === 0 && figures.short === 1);
+
+// ── What to bring tomorrow (src/lib/refill-flow.ts, 18-10-2026) ──
+import { stillMissing } from "../src/lib/refill-flow.ts";
+const stopAt = (filled: Record<string, number>, skipped = false): StopRecord => ({ checkedAt: null, completedAt: "x", skipped, technical: false, note: null,
+  lines: Object.entries(filled).map(([selection, n]) => ({ selection, prepared: n, filled: n, removed: [], countAfter: null, full: false })) });
+// bami: 3 to take, 2 in the box, slot 63 stayed empty → 1 tomorrow. nasi: all in the box, slot 3 got 1 (fuller than thought) → the other came back, nothing tomorrow.
+const missing = stillMissing(lines, { [pickKey("m1", "bami")]: 2, [pickKey("m1", "nasi")]: 2 }, { m1: stopAt({ "1": 2, "63": 0, "3": 1 }) });
+ok("tomorrow: what the box lacked and the slot missed", missing.length === 1 && missing[0].productId === "bami" && missing[0].n === 1);
+ok("tomorrow: a machine passed by brings its pieces back, nothing to make", stillMissing(lines, { [pickKey("m1", "bami")]: 3, [pickKey("m1", "nasi")]: 2 }, { m1: stopAt({}, true) }).length === 0);
+ok("tomorrow: never more than the box was short", stillMissing(lines, { [pickKey("m1", "bami")]: 2, [pickKey("m1", "nasi")]: 2 }, { m1: stopAt({ "1": 0, "63": 0, "3": 2 }) })[0]?.n === 1);
+
+// ── What a slot takes on a round (src/lib/refill-flow.ts) ──
+import { lineTake } from "../src/lib/refill-flow.ts";
+ok("take: what the slot lacks", lineTake({ capacity: 6, to_add: 2 }) === 2);
+ok("take: never more than fits, never below none", lineTake({ capacity: 4, to_add: 7 }) === 4 && lineTake({ capacity: 4, to_add: -1 }) === 0);
+

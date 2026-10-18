@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { denyFillerAccess, getScope, getSessionUser, isFiller, isOperator, requireOperator, requireRefillAccess, type Role, isBlockedOrg } from "@/lib/org";
 import { displayName } from "@/lib/people";
 import { cleanRoundSettings, type RoundSettings } from "@/lib/round-settings";
-import { onlyMine, roundOrder, roundTimings, slotKey, type Average, type FlowLine, type RoundTimings, type ShopView, type StopRecord } from "@/lib/refill-flow";
+import { lineTake, onlyMine, roundOrder, roundTimings, slotKey, type Average, type FlowLine, type RoundTimings, type ShopView, type StopRecord } from "@/lib/refill-flow";
 import type { MyRound } from "@/lib/filler-stats";
 import { terminalStatus, type TerminalStatus } from "@/lib/terminal-status";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
@@ -239,7 +239,7 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
         photoPath: line.photo_path,
         capacity: now?.capacity ?? line.capacity,
         stock: now ? knownStock(now) : null,
-        take: Math.min(line.capacity, line.to_add + (line.qty_expired ?? 0)),
+        take: lineTake(line),
         expired: line.qty_expired ?? 0,
       };
     });
@@ -273,6 +273,19 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
     settings: cleanRoundSettings(org?.refill_settings),
     notes: (sheet.notes as string | null)?.trim() || null,
   };
+}
+
+/**
+ * What a round made now would carry, slot by slot: what each slot lacks. A
+ * new round and the vullijst read this one plan, so they never disagree.
+ */
+export async function getRefillPlan(orgId: string, machineIds: string[]): Promise<RefillLine[]> {
+  if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
+  // No machines asked for is nothing to plan, never every machine.
+  if (machineIds.length === 0) return [];
+  const { data, error } = await createAdminClient().rpc("refill_plan", { target_org: orgId, machine_filter: machineIds });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as RefillLine[];
 }
 
 /** How this organisation wants its rounds to go, for whoever runs them: the operator or a filler. */
@@ -924,6 +937,60 @@ export async function getLiveSold(orgId: string, options: { after?: string | nul
     productName: sale.productName,
     selection: sale.selection,
   }));
+}
+
+/** What sold over the last 30 days and when, as a filler sees it: pieces only, never an amount. */
+export type SoldReport = {
+  from: string;
+  to: string;
+  /** Linked products that sold, most pieces first. */
+  products: { productId: string; name: string | null; photoPath: string | null; units: number }[];
+  hours: { hour: number; units: number }[];
+  /**
+   * Machines where one slot takes several prices: several products go through
+   * one number there, so what sold per product is not certain (see getPriceMismatches).
+   */
+  mixed: string[];
+};
+
+/**
+ * The best sellers and busiest hours for whoever fills (the operator or a
+ * filler, never a shop): the statistics' own report, with every amount taken
+ * out here, on the server, so none reaches the phone.
+ */
+export async function getSoldReport(orgId: string): Promise<SoldReport> {
+  if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
+  const admin = createAdminClient();
+  const [report, mismatches] = await Promise.all([
+    admin.rpc("stats_report", {
+      target_org: orgId,
+      period: "last30",
+      custom_from: null,
+      custom_to: null,
+      machine_filter: null,
+      business_filter: null,
+      product_filter: null,
+    }),
+    admin.rpc("price_mismatch", { target_org: orgId, days_back: 90 }),
+  ]);
+  if (report.error) throw new Error(report.error.message);
+  if (mismatches.error) throw new Error(mismatches.error.message);
+  const data = report.data as StatsReport;
+  return {
+    from: data.cur_start,
+    to: data.cur_end,
+    // By pieces, as the statistics rank them; the revenue that breaks a tie there is not for this screen.
+    products: data.by_product
+      .filter((row) => row.product_id && row.units > 0)
+      .sort((a, b) => b.units - a.units)
+      .map((row) => ({ productId: row.product_id!, name: row.product_name, photoPath: row.photo_path, units: row.units })),
+    hours: data.by_hour.map((row) => ({ hour: row.hour, units: row.units })),
+    mixed: [
+      ...new Set(
+        ((mismatches.data ?? []) as PriceMismatch[]).filter((row) => Number(row.spread) > 0).map((row) => row.machine_name),
+      ),
+    ],
+  };
 }
 
 async function liveSales(
@@ -1633,6 +1700,36 @@ const sharedSelections = cache(async (orgId: string): Promise<Map<string, Set<st
  * The slots of a machine the caller may change, for the screens that offer
  * it: null for all of them, else a shop's own slots on a shared machine.
  */
+/** A product as whoever fills sees it while laying out a machine: its name and photo, never a price. */
+export type Dish = { id: string; name: string; photoPath: string | null };
+
+/**
+ * Refuses unless whoever fills (the operator or a filler, never a shop) may lay
+ * out this machine from its refill page (Xin, 17-10-2026): one of the
+ * organisation's own machines, and not a shared one, whose slots belong to two
+ * businesses; that layout stays the operator's, in the builder.
+ */
+export async function requireRefillLayoutAccess(orgId: string, machineId: string): Promise<Machine> {
+  if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
+  const machine = await getMachine(orgId, machineId);
+  if (!machine || machine.shared_business_id) throw new Error("Not found");
+  return machine;
+}
+
+/**
+ * The products that may go in this machine, for whoever lays it out from its
+ * refill page: the machine's business's own, or the organisation's for a
+ * machine of no business, as a new product made from a machine is. No prices.
+ */
+export async function getDishes(orgId: string, machineId: string): Promise<Dish[]> {
+  const machine = await requireRefillLayoutAccess(orgId, machineId);
+  let query = createAdminClient().from("products").select("id, name, photo_path").eq("org_id", orgId).eq("archived", false);
+  query = machine.business_id ? query.eq("business_id", machine.business_id) : query.is("business_id", null);
+  const { data, error } = await query.order("name");
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => ({ id: row.id as string, name: row.name as string, photoPath: (row.photo_path as string | null) ?? null }));
+}
+
 export async function getOwnSelections(orgId: string, machineId: string): Promise<string[] | null> {
   await requireMachineAccess(orgId, machineId);
   const own = (await sharedSelections(orgId))?.get(machineId);

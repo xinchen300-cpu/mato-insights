@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Medal, TriangleAlert } from "lucide-react";
+import { ClipboardList, Medal, TriangleAlert } from "lucide-react";
 import { RollingNumber } from "@/components/motion/rolling-number";
 import { SuccessCheck } from "@/components/motion/success";
 import { useI18n } from "@/i18n/client";
@@ -168,10 +168,13 @@ export function RoundDone({
   reward,
   minutes,
   summary,
+  tomorrow = [],
 }: {
   reward: RoundReward | null;
   minutes: number | null;
   summary: string;
+  /** What the box was short of and the slots missed: for the kitchen and the next round. */
+  tomorrow?: { productId: string; name: string; n: number }[];
 }) {
   const { m, f } = useI18n();
   const t = m.round;
@@ -205,7 +208,7 @@ export function RoundDone({
               <span className="flex min-w-0 flex-col">
                 <span className="text-[16px] font-semibold">{t.recordTitle}</span>
                 {reward.previousBest !== null && (
-                  <span className="text-[13.5px] text-muted-foreground">{fmt(t.recordSub, { time: time(reward.previousBest) })}</span>
+                  <span className="text-[13.5px] text-foreground/70">{fmt(t.recordSub, { time: time(reward.previousBest) })}</span>
                 )}
               </span>
             </div>
@@ -242,6 +245,25 @@ export function RoundDone({
           </div>
 
         </div>
+      )}
+
+      {/* Written down for tomorrow, so it is not on a scrap of paper (Xin, 18-10-2026). A fact, not a fault: no red. */}
+      {tomorrow.length > 0 && (
+        <section className="rise mt-7 flex flex-col gap-3 rounded-2xl bg-surface px-4 py-4" style={next()}>
+          <h2 className="flex items-center gap-2.5 text-[17px] font-bold">
+            <ClipboardList className="size-5 shrink-0" aria-hidden="true" />
+            {t.bringTomorrow}
+          </h2>
+          <p className="-mt-1.5 text-[14px] text-muted-foreground">{t.bringTomorrowHint}</p>
+          <ul className="flex flex-col gap-2">
+            {tomorrow.map((item) => (
+              <li key={item.productId} className="flex items-baseline gap-3 text-[16px]">
+                <span className="tabular w-[30px] shrink-0 text-right font-bold">{item.n}</span>
+                <span className="min-w-0 flex-1 truncate">{item.name}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <div className="mt-auto flex flex-col gap-1.5 pt-8">

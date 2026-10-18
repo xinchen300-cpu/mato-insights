@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronLeft, ChevronRight, MessageSquareText, Timer, TriangleAlert, Truck } from "lucide-react";
-import { VendlyWordmark } from "@/components/brand/vendly-mark";
+import { CalendarCheck, Check, ChevronLeft, ChevronRight, MessageSquareText, Timer, TriangleAlert, Truck } from "lucide-react";
+import Link from "next/link";
 import { FrontView, type FrontSlot } from "@/components/machine/front-view";
 import { RefillTips } from "@/components/refill/refill-tips";
 import { useI18n } from "@/i18n/client";
@@ -18,6 +18,7 @@ import {
   shortages,
   slotKey,
   slotTally,
+  stillMissing,
   tapOnce,
   type Disposition,
   type FlowLine,
@@ -169,6 +170,27 @@ export function RoundFlow({
     }
   }, [restored, initial.id, picked, touched, drafts]);
 
+  // The screen stays on while the round is on: a phone that locks between two machines costs a filler time.
+  useEffect(() => {
+    if (!readyAt || completed || !("wakeLock" in navigator)) return;
+    let lock: WakeLockSentinel | null = null;
+    const hold = () => {
+      if (document.visibilityState !== "visible") return;
+      navigator.wakeLock.request("screen").then(
+        (sentinel) => {
+          lock = sentinel;
+        },
+        () => undefined,
+      );
+    };
+    hold();
+    document.addEventListener("visibilitychange", hold);
+    return () => {
+      document.removeEventListener("visibilitychange", hold);
+      void lock?.release().catch(() => undefined);
+    };
+  }, [readyAt, completed]);
+
   const rows = useMemo(() => pickList(initial.lines), [initial.lines]);
   const totalTake = rows.reduce((sum, row) => sum + row.take, 0);
   const totalPicked = rows.reduce((sum, row) => sum + Math.min(row.take, picked[row.key] ?? 0), 0);
@@ -241,14 +263,11 @@ export function RoundFlow({
   }
 
   /**
-   * What came out of a slot as it will be written: what the filler entered,
-   * and for a slot they filled, the units the plan says are past their date,
-   * unless they said how many there really were.
+   * What came out of a slot as it will be written: what the filler entered.
+   * Vendly adds nothing by date: the filler checks the dates by eye (Xin, 18-10-2026).
    */
-  function removalsOf(line: FlowLine | undefined, edit: LineDraft, filled: boolean) {
-    const entered = edit.removed.filter((r) => r.qty > 0);
-    if (!line || !filled || line.expired <= 0 || edit.removed.some((r) => r.reason === "expired")) return entered;
-    return [...entered, { reason: "expired" as const, qty: line.expired }];
+  function removalsOf(edit: LineDraft) {
+    return edit.removed.filter((r) => r.qty > 0);
   }
 
   /** Where the steppers of "something is wrong here" start: what is already noted, or what Vendly expects. */
@@ -263,13 +282,12 @@ export function RoundFlow({
       if (edit.countAfter !== null) return edit.countAfter;
       if (edit.full) return capacity;
       const filled = edit.filled ?? 0;
-      const out = removalsOf(line, edit, edit.filled !== undefined).reduce((sum, r) => sum + r.qty, 0);
+      const out = removalsOf(edit).reduce((sum, r) => sum + r.qty, 0);
       const stock = line ? line.stock : (slot?.stock ?? null);
       return Math.min(capacity, stock === null ? filled : Math.max(0, stock - out) + filled);
     }
     const entered = edit.removed.find((r) => r.reason === kind);
     if (entered) return entered.qty;
-    if (kind === "expired" && line && line.expired > 0) return line.expired;
     return 1;
   }
 
@@ -290,12 +308,11 @@ export function RoundFlow({
         const line = planned.find((l) => l.selection === selection);
         const edit = draft.lines[selection] ?? emptyLine();
         const prep = prepared[slotKey(machineId, selection)] ?? 0;
-        const filledIt = edit.filled !== undefined || (line !== undefined && open === "planned");
         const unfinished = line !== undefined && !slotTally(prep, edit.filled, edit.typed).done;
         return {
           selection,
           filled: unfinished && open === "planned" ? prep : (edit.filled ?? 0),
-          removed: removalsOf(line, edit, filledIt),
+          removed: removalsOf(edit),
           countAfter: edit.countAfter,
           full: edit.full || Boolean(full?.has(selection)),
         };
@@ -488,8 +505,15 @@ export function RoundFlow({
           <ChevronLeft className="size-5" />
           {t.backToRound}
         </button>
+      ) : countdown === null ? (
+        // Out of the round, back to the app: the round keeps where it was and is there to pick up again.
+        // Not while a machine waits out its three seconds: leaving then would never send it.
+        <Link href="/refill" className="-ml-2 flex h-11 items-center gap-1 rounded-full px-2 text-[15px] font-semibold">
+          <ChevronLeft className="size-5" />
+          {m.nav.refill}
+        </Link>
       ) : (
-        <VendlyWordmark className="h-[24px] w-auto text-[#2a2520]" />
+        <span />
       )}
       {error ? (
         <span className="text-[13px] font-semibold text-negative">{error}</span>
@@ -519,6 +543,7 @@ export function RoundFlow({
           reward={reward}
           minutes={readyAt && completedAt ? (Date.parse(completedAt) - Date.parse(readyAt)) / 60000 : null}
           summary={fmt(visited === 1 ? t.thanksSummaryOne : t.thanksSummary, { machines: visited, filled, removed, back: leftover })}
+          tomorrow={stillMissing(initial.lines, picked, stops)}
         />
       </Screen>
     );
@@ -555,6 +580,16 @@ export function RoundFlow({
   // ——— Packing ———
   if (view === "pick" && !readyAt) {
     const short = shortages(rows, picked);
+    // Which slots a product goes in at a machine, so a box can be packed slot by slot.
+    const slotsOf = (machineId: string, productId: string) =>
+      initial.lines
+        .filter((line) => line.machineId === machineId && line.productId === productId && line.take > 0)
+        .map((line) => line.selection)
+        .join(" · ");
+    const boxes = initial.machines.flatMap((machine) => {
+      const boxRows = rows.filter((row) => row.machineId === machine.id);
+      return boxRows.length > 0 ? [{ machine, rows: boxRows, take: boxRows.reduce((sum, row) => sum + row.take, 0) }] : [];
+    });
     const shortTotal = short.reduce((sum, item) => sum + item.n, 0);
     const countRow = rows.find((row) => row.key === countSheet) ?? null;
     return (
@@ -586,20 +621,42 @@ export function RoundFlow({
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 pb-36 pt-1">
-          {initial.machines.map((machine) => {
-            const machineRows = rows.filter((row) => row.machineId === machine.id);
-            if (machineRows.length === 0) return null;
+        <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 pb-36 pt-3">
+          {/* One box per machine, in the order of the round (Xin, 18-10-2026): each is packed on its own. */}
+          {boxes.map((box, index) => {
+            const have = box.rows.reduce((sum, row) => sum + Math.min(row.take, picked[row.key] ?? 0), 0);
+            const boxDone = have >= box.take;
             return (
-              <section key={machine.id} className="flex flex-col gap-2">
-                {/* The machine, and above the two numbers what they mean: first what to take, then what is with you. */}
-                <div className="flex items-end gap-1 px-2">
-                  <p className="min-w-0 flex-1 truncate text-[14px] font-semibold text-muted-foreground">{machine.name}</p>
-                  <span className="w-16 text-center text-[12px] font-semibold text-muted-foreground">{t.pickTakeCol}</span>
-                  <span className="w-16 text-center text-[12px] font-semibold text-muted-foreground">{t.pickHaveCol}</span>
+              <section key={box.machine.id} className="flex flex-col gap-2">
+                <div className="flex items-center gap-1 px-1">
+                  {/* The box's number; a tap ticks the whole box, or clears it. */}
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={boxDone}
+                    aria-label={fmt(t.boxAll, { n: index + 1, machine: box.machine.name })}
+                    onClick={() => {
+                      haptic();
+                      setPicks((current) => ({ ...current, ...Object.fromEntries(box.rows.map((row) => [row.key, boxDone ? 0 : row.take])) }));
+                    }}
+                    className={cn(
+                      "tabular grid size-11 shrink-0 place-items-center rounded-full text-[17px] font-bold transition-colors",
+                      boxDone ? "bg-positive text-white" : "bg-foreground text-background",
+                    )}
+                  >
+                    {boxDone ? <Check className="size-5" strokeWidth={3} aria-hidden="true" /> : index + 1}
+                  </button>
+                  <span className="flex min-w-0 flex-1 flex-col pl-2">
+                    <span className="truncate text-[17px] font-bold tracking-[-0.01em]">{box.machine.name}</span>
+                    <span className={cn("tabular text-[13.5px]", boxDone ? "font-semibold text-positive" : "text-muted-foreground")}>
+                      {fmt(t.boxProgress, { n: have, total: box.take })}
+                    </span>
+                  </span>
+                  <span className="w-16 self-end text-center text-[12px] font-semibold text-muted-foreground">{t.pickTakeCol}</span>
+                  <span className="w-16 self-end text-center text-[12px] font-semibold text-muted-foreground">{t.pickHaveCol}</span>
                 </div>
                 <ul className="surface-card flex flex-col px-2 py-1">
-                  {machineRows.map((row) => {
+                  {box.rows.map((row) => {
                     const n = Math.min(row.take, picked[row.key] ?? 0);
                     const done = n >= row.take;
                     return (
@@ -616,8 +673,13 @@ export function RoundFlow({
                         >
                           <Tick done={done} />
                           <ProductPhoto path={row.photoPath} />
-                          <span className={cn("min-w-0 flex-1 truncate text-[16px] font-semibold", done && "text-muted-foreground line-through")}>
-                            {row.productName}
+                          <span className="flex min-w-0 flex-1 flex-col">
+                            <span className={cn("truncate text-[16px] font-semibold", done && "text-muted-foreground line-through")}>
+                              {row.productName}
+                            </span>
+                            <span className="tabular truncate text-[13px] text-muted-foreground">
+                              {fmt(t.boxSlots, { slots: slotsOf(row.machineId, row.productId) })}
+                            </span>
                           </span>
                         </button>
                         <span className="tabular w-16 shrink-0 text-center text-[18px] font-bold">{row.take}</span>
@@ -772,6 +834,11 @@ export function RoundFlow({
             )}
             {removedHere > 0 && <span className={cn(chip, "ring-warning/40")}>{fmt(t.removedBadge, { n: removedHere })}</span>}
           </div>
+          {/* The dates are the filler's to check by eye: one line at every machine, nothing to tap (Xin, 18-10-2026). */}
+          <p className="mt-3 flex items-center gap-2.5 rounded-xl bg-surface px-3 py-2.5 text-[14.5px] font-medium">
+            <CalendarCheck className="size-5 shrink-0" aria-hidden="true" />
+            {t.checkDates}
+          </p>
           <div className="mt-2 flex items-center justify-between">
             <p className="text-[14.5px] text-muted-foreground">{t.fillHint}</p>
             {open.length > 0 && (
@@ -799,11 +866,8 @@ export function RoundFlow({
               // Typed below what was set aside: done, but not the plan.
               const fewer = tally.done && edit?.typed === true && tally.n < prep;
               const shortHere = line.take - prep;
-              // Past-date units first, as the plan counted them, until the filler says how many there were.
-              const pullFirst = line.expired > 0 && !edit?.removed.some((r) => r.reason === "expired");
               const out = (edit?.removed ?? []).reduce((sum, r) => sum + r.qty, 0);
               const notes = [
-                ...(pullFirst ? [{ text: fmt(t.pullFirst, { n: line.expired }), warn: true }] : []),
                 ...(out > 0 ? [{ text: fmt(t.removedBadge, { n: out }), warn: false }] : []),
                 ...(shortHere > 0 ? [{ text: fmt(t.shortHere, { n: shortHere }), warn: true }] : []),
               ];
@@ -1176,13 +1240,13 @@ export function RoundFlow({
                       : step.state === "full"
                         ? "border-2 border-dashed border-border bg-transparent"
                         : "bg-card/70",
-                    step.state === "later" && "opacity-70",
                   )}
                 >
                   {step.machine && (
                     <MachineThumb
                       path={step.machine.photoPath}
-                      className={cn("size-12 rounded-xl", (passed || step.state === "full") && "opacity-60")}
+                      // Only the picture fades for what comes later: faded text would no longer read outdoors.
+                      className={cn("size-12 rounded-xl", (passed || step.state === "full" || step.state === "later") && "opacity-60")}
                     />
                   )}
                   <span className="flex min-w-0 flex-1 flex-col">
@@ -1725,9 +1789,9 @@ function RoundClock({ since }: { since: string }) {
 
 function Screen({ children, padded = true }: { children: React.ReactNode; padded?: boolean }) {
   return (
-    <div className="show-numbers mx-auto flex min-h-svh w-full max-w-md flex-col bg-background">
+    <main className="show-numbers mx-auto flex min-h-svh w-full max-w-md flex-col bg-background">
       <div className={cn("flex flex-1 flex-col", padded && "px-4 pb-7 pt-4")}>{children}</div>
-    </div>
+    </main>
   );
 }
 
@@ -1740,12 +1804,32 @@ function BottomBar({ children }: { children: React.ReactNode }) {
 }
 
 function Sheet({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  const panel = useRef<HTMLDivElement>(null);
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  });
+  // A keyboard or screen reader lands in the sheet, Escape closes it, and focus goes back where it was.
+  useEffect(() => {
+    const before = document.activeElement as HTMLElement | null;
+    panel.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      before?.focus?.();
+    };
+  }, []);
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-foreground/35" onClick={onClose}>
       <div
+        ref={panel}
         role="dialog"
         aria-modal="true"
-        className="flex max-h-[92svh] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-t-[28px] bg-card px-5 pb-[calc(1.75rem+env(safe-area-inset-bottom))] pt-3"
+        tabIndex={-1}
+        className="flex max-h-[92svh] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-t-[28px] bg-card px-5 pb-[calc(1.75rem+env(safe-area-inset-bottom))] pt-3 outline-none"
         onClick={(event) => event.stopPropagation()}
       >
         <span className="mx-auto h-1.5 w-10 rounded-full bg-border" aria-hidden="true" />

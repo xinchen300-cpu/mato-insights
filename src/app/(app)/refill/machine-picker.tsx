@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { unstable_rethrow } from "next/navigation";
 import Link from "next/link";
 import { Check, ChevronDown, ChevronUp, ClipboardList } from "lucide-react";
 import { Avatar, RowList} from "@/components/list-row";
@@ -45,6 +46,7 @@ export function MachinePicker({
   }
   const [empty, setEmpty] = useState(false);
   const [locked, setLocked] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   function toggle(id: string) {
@@ -59,10 +61,17 @@ export function MachinePicker({
 
   function make() {
     setEmpty(false);
+    setFailed(false);
     startTransition(async () => {
-      const result = await createRefillSheet(chosen);
-      if (result && "empty" in result) setEmpty(true);
-      if (result && "locked" in result) setLocked(true);
+      try {
+        const result = await createRefillSheet(chosen);
+        if (result && "empty" in result) setEmpty(true);
+        if (result && "locked" in result) setLocked(true);
+      } catch (error) {
+        // The new round opens by redirecting, which arrives here as an error too: let that one through.
+        unstable_rethrow(error);
+        setFailed(true);
+      }
     });
   }
 
@@ -159,6 +168,11 @@ export function MachinePicker({
         </div>
       )}
       {empty && <p className="px-1 text-sm text-muted-foreground">{m.refill.nothingToRefill}</p>}
+      {failed && (
+        <p role="alert" className="px-1 text-sm font-medium text-negative">
+          {m.common.error}
+        </p>
+      )}
       <Button
         size="lg"
         onClick={make}
