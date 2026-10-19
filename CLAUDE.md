@@ -89,14 +89,23 @@ niet uit `lastConnected` (dat is geen heartbeat). Een geweigerde betaling zit in
 Gits Chens Garden (`9e523217-1488-4e3a-a02e-9f7ad642489e`, Nieuwplaats 11 Hooglede) betaalt nog via
 Worldline met Televend-telemetrie; Payter komt ten vroegste eind oktober 2026. Indeling: rijen 11–19
 … 71–79, vakken 1/5/9, 2 per vak (19-10-2026 overgenomen uit Televend, startstand als `correction`).
-Xin stuurt elke dag de verkooplijst uit Televend. Elke verkoop wordt één rij in `transactions`:
-`machine_id` = Gits, `item_ref` = Televends "Col", `amount` = de Televend-prijs, `disposition` =
-`'APPROVED'`, `payment_method` = `'TELEVEND'`, `occurred_at` = het tijdstip uit de lijst
-(Europe/Brussels), `raw_json` = `{"source":"televend","by_hand":true}` en `payter_transaction_id` =
-`'TELEVEND:GITS:<yyyy-mm-ddThh:mm>:<col>:<n>'` (uniek per org, dus nooit dubbel). Vraag om tijdstippen:
-een verkoop zonder uur kan na Alus' vulbeurt vallen en zijn voorraad te laag maken. Komt de
-Payter-lezer: zet zijn serienummer in `machines.payter_serial_number` van Gits **voordat** hij aangaat,
-anders maakt de sync een tweede automaat aan.
+**Geschiedenis (1 jan – 18 okt 2026):** Televends dagrapport (stuks en omzet per dag, geen uur, geen
+product) staat in `machine_day_totals` (bron `'televend'`, 285 dagen, 2193 stuks, € 21 821). Alleen
+`stats_report` leest die tabel: per stuk één rij om 12:00 van die dag, mee in totalen, dagen, weekdagen
+en automaten, **niet** in de uren (`hourless`) en niet in de producten (`day_total`). Betaallijsten,
+voorraad en "niet gekoppeld" zien ze nooit. Opnieuw inlezen kan: `on conflict (machine_id, day, source)`.
+
+**Elke dag tot Payter er is:** Xin stuurt Televends productrapport van gisteren (`GROUP_BY` Product,
+`TELEVEND_DATE` = gisteren). Elk verkocht stuk wordt één rij in `transactions`: `machine_id` = Gits,
+`item_ref` = het vak van dat product (staat het in meer vakken, verdeel dan om de beurt), `amount` =
+omzet ÷ stuks van die regel, `disposition` = `'APPROVED'`, `payment_method` = **`'TELEVEND_DAY'`** (zo
+blijft het uit de uren), `occurred_at` = 12:00 Europe/Brussels van die dag, `raw_json` =
+`{"source":"televend","by_hand":true}` en `payter_transaction_id` =
+`'TELEVEND:GITS:<yyyy-mm-dd>:<vak>:<n>'` (uniek per org, dus nooit dubbel). Zo zakt de voorraad per vak
+voor Alus' paklijst. Stuurt Televend ooit losse verkopen mét uur en kolom, gebruik dan dat uur en
+`payment_method` = `'TELEVEND'`. Komt de Payter-lezer: zet zijn serienummer in
+`machines.payter_serial_number` van Gits **voordat** hij aangaat, anders maakt de sync een tweede
+automaat aan.
 
 ## Rondes uit de cijfers gehaald (19-10-2026)
 Xin liet Alus opnieuw beginnen op niveau 1: zijn 20 oefenrondes (17–19 okt) staan in
