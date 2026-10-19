@@ -5,8 +5,7 @@ import { RefillTabs } from "@/components/refill/refill-tabs";
 import { getI18n } from "@/i18n/server";
 import { getProductionLists } from "@/lib/data";
 import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
-import { writeProducerStock } from "./actions";
-import { KitchenLink } from "./kitchen-link";
+import { countFridge, passOrder } from "./actions";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -14,8 +13,9 @@ export async function generateMetadata() {
 }
 
 /**
- * The kitchen list in the operator's app (Xin, 19-10-2026): per producer what
- * to make tonight for tomorrow's round, and the link the kitchen opens itself.
+ * The kitchen list (Xin, 19-10-2026): per producer what to make tonight for
+ * tomorrow's round. Only on the owner's account; the operator passes it on to
+ * the kitchen as a message, and the kitchen itself types nothing.
  */
 export default async function KitchenPage() {
   await denyFiller();
@@ -32,10 +32,11 @@ export default async function KitchenPage() {
         <div className="flex max-w-2xl flex-col gap-10">
           {lists.map((list) => (
             <Section key={list.producerId} title={list.producerName}>
-              <div className="flex flex-col gap-5">
-                <KitchenLink producerId={list.producerId} initialToken={list.token} title={`${m.kitchen.title} · ${list.producerName}`} />
-                <ProductionListView list={list} write={writeProducerStock.bind(null, list.producerId)} />
-              </div>
+              <ProductionListView
+                list={list}
+                passOrder={passOrder.bind(null, list.producerId)}
+                countFridge={countFridge.bind(null, list.producerId)}
+              />
             </Section>
           ))}
         </div>

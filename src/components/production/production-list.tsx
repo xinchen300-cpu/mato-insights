@@ -2,49 +2,95 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Minus, Plus, Refrigerator, TrendingDown, TrendingUp } from "lucide-react";
+import { Check, Copy, MessageCircle, Minus, Plus, Refrigerator, Send, Share2, TrendingDown, TrendingUp } from "lucide-react";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
-import type { ProductionList } from "@/lib/data";
+import type { OrderLine, ProductionList } from "@/lib/data";
 import type { ProductionLine } from "@/lib/production";
 import { mediaUrl } from "@/lib/media";
 import { cn } from "@/lib/utils";
 
-export type ProducerWrite = (productId: string, kind: "made" | "count", qty: number) => Promise<void>;
-
 /**
- * The production list as the kitchen reads it (Xin, 19-10-2026): what to make
- * tonight, biggest first, each with why; then what is not needed. "Gemaakt"
- * writes what was really made, "Koelkast" what was counted: both feed the
- * fridge the next list starts from. Big targets: it is used with busy hands.
+ * The kitchen list in the operator's own app (Xin, 19-10-2026: only on the
+ * owner's account, and the kitchen types nothing). What to make tonight,
+ * biggest first, each with why. "Bestelling doorgeven" writes it down as made
+ * and hands the operator a message for the kitchen, instead of the paper.
+ * "Koelkast" is the operator's correction when the fridge holds something else.
  */
-export function ProductionListView({ list, write }: { list: ProductionList; write: ProducerWrite }) {
+export function ProductionListView({
+  list,
+  passOrder,
+  countFridge,
+}: {
+  list: ProductionList;
+  passOrder: () => Promise<OrderLine[]>;
+  countFridge: (productId: string, qty: number) => Promise<void>;
+}) {
   const { m, f } = useI18n();
   const t = m.kitchen;
+  const router = useRouter();
+  const [order, setOrder] = useState<OrderLine[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [pending, startTransition] = useTransition();
   const fillAt = new Date(list.fillAt);
   const toMake = list.lines.filter((line) => line.make > 0);
   // Needed, but the fridge was never counted: the list asks for a count before it says "make".
   const toCount = list.lines.filter((line) => line.make === 0 && line.inFridge === null && line.need > 0);
   const rest = list.lines.filter((line) => line.make === 0 && !toCount.includes(line));
   const total = toMake.reduce((sum, line) => sum + line.make, 0);
+  // What was passed on today: the message can be sent again.
+  const passed =
+    order ??
+    list.lines
+      .filter((line) => line.madeToday > 0)
+      .map((line) => ({ name: line.name, qty: line.madeToday }))
+      .sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name));
+  const passedTotal = passed.reduce((sum, line) => sum + line.qty, 0);
 
   if (list.lines.length === 0) return <p className="surface-card px-5 py-5 text-[15px] text-muted-foreground">{t.empty}</p>;
 
+  function pass() {
+    setFailed(false);
+    startTransition(async () => {
+      try {
+        setOrder(await passOrder());
+        router.refresh();
+      } catch {
+        setFailed(true);
+      }
+    });
+  }
+
   return (
     <div className="flex flex-col gap-5">
-      <div className="surface-card p-4 sm:p-5">
-        <p className="text-[13px] font-semibold uppercase tracking-[0.06em] text-muted-foreground first-letter:uppercase">
-          {fmt(t.forRound, { day: f.weekdayDay(fillAt), time: f.time(fillAt) })}
-        </p>
-        <p className="mt-1 text-[24px] font-semibold leading-tight tracking-[-0.02em]">
-          {total > 0 ? fmt(t.total, { n: f.number(total) }) : toCount.length > 0 ? t.countFirst : t.totalNone}
-        </p>
+      <div className="surface-card flex flex-col gap-4 p-4 sm:p-5">
+        <div>
+          <p className="text-[13px] font-semibold uppercase tracking-[0.06em] text-muted-foreground first-letter:uppercase">
+            {fmt(t.forRound, { day: f.weekdayDay(fillAt), time: f.time(fillAt) })}
+          </p>
+          <p className="mt-1 text-[24px] font-semibold leading-tight tracking-[-0.02em]">
+            {total > 0 ? fmt(t.total, { n: f.number(total) }) : toCount.length > 0 ? t.countFirst : t.totalNone}
+          </p>
+        </div>
+        {total > 0 && (
+          <button
+            type="button"
+            onClick={pass}
+            disabled={pending}
+            className="flex h-12 items-center justify-center gap-2 rounded-full bg-foreground px-5 text-[15.5px] font-semibold text-background disabled:opacity-50 active:scale-[0.98] sm:w-fit"
+          >
+            <Send className="size-[18px]" aria-hidden="true" />
+            {pending ? t.passing : t.passOrder}
+          </button>
+        )}
+        {failed && <p className="text-[14px] font-medium text-negative">{m.common.error}</p>}
+        {passedTotal > 0 && <OrderMessage order={passed} total={passedTotal} day={f.weekdayDay(fillAt)} />}
       </div>
 
       {toMake.length > 0 && (
         <ul className="flex flex-col gap-3">
           {toMake.map((line) => (
-            <DishRow key={line.productId} line={line} write={write} />
+            <DishRow key={line.productId} line={line} countFridge={countFridge} />
           ))}
         </ul>
       )}
@@ -57,7 +103,7 @@ export function ProductionListView({ list, write }: { list: ProductionList; writ
           </div>
           <ul className="flex flex-col gap-2">
             {toCount.map((line) => (
-              <DishRow key={line.productId} line={line} write={write} />
+              <DishRow key={line.productId} line={line} countFridge={countFridge} />
             ))}
           </ul>
         </section>
@@ -68,7 +114,7 @@ export function ProductionListView({ list, write }: { list: ProductionList; writ
           <h2 className="px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">{t.notNeeded}</h2>
           <ul className="flex flex-col gap-2">
             {rest.map((line) => (
-              <DishRow key={line.productId} line={line} write={write} quiet />
+              <DishRow key={line.productId} line={line} countFridge={countFridge} quiet />
             ))}
           </ul>
         </section>
@@ -79,11 +125,81 @@ export function ProductionListView({ list, write }: { list: ProductionList; writ
   );
 }
 
-function DishRow({ line, write, quiet = false }: { line: ProductionLine; write: ProducerWrite; quiet?: boolean }) {
+/** Today's order as a message for the kitchen: by WhatsApp, the phone's own share, or copied. */
+function OrderMessage({ order, total, day }: { order: OrderLine[]; total: number; day: string }) {
+  const { m, f } = useI18n();
+  const t = m.kitchen;
+  const [copied, setCopied] = useState(false);
+  const text = [fmt(t.orderTitle, { day }), ...order.map((line) => fmt(t.orderLine, { n: f.number(line.qty), dish: line.name }))].join("\n");
+
+  async function copy() {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function share() {
+    if (navigator.share) {
+      await navigator.share({ text }).catch(() => {});
+      return;
+    }
+    await copy();
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-xl bg-positive/8 p-3.5">
+      <div className="flex flex-col gap-0.5">
+        <p className="flex items-center gap-1.5 text-[15px] font-semibold text-positive">
+          <Check className="size-4" aria-hidden="true" />
+          {fmt(t.passedToday, { n: f.number(total) })}
+        </p>
+        <p className="text-[13px] leading-snug text-muted-foreground">{t.passedHint}</p>
+      </div>
+      <pre className="whitespace-pre-wrap rounded-lg bg-card px-3 py-2.5 font-sans text-[14.5px] leading-relaxed">{text}</pre>
+      <div className="flex flex-wrap gap-2">
+        <a
+          href={`https://wa.me/?text=${encodeURIComponent(text)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex h-11 items-center gap-1.5 rounded-full bg-[#25D366] px-4 text-[15px] font-semibold text-white active:scale-[0.98]"
+        >
+          <MessageCircle className="size-4" aria-hidden="true" />
+          {t.whatsapp}
+        </a>
+        <button
+          type="button"
+          onClick={share}
+          className="flex h-11 items-center gap-1.5 rounded-full border border-border bg-card px-4 text-[15px] font-semibold active:scale-[0.98]"
+        >
+          <Share2 className="size-4" aria-hidden="true" />
+          {t.share}
+        </button>
+        <button
+          type="button"
+          onClick={copy}
+          className="flex h-11 items-center gap-1.5 rounded-full border border-border bg-card px-4 text-[15px] font-semibold active:scale-[0.98]"
+        >
+          {copied ? <Check className="size-4 text-positive" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
+          {copied ? t.copied : t.copyText}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DishRow({
+  line,
+  countFridge,
+  quiet = false,
+}: {
+  line: ProductionLine;
+  countFridge: (productId: string, qty: number) => Promise<void>;
+  quiet?: boolean;
+}) {
   const { m, f } = useI18n();
   const t = m.kitchen;
   const router = useRouter();
-  const [editing, setEditing] = useState<"made" | "count" | null>(null);
+  const [editing, setEditing] = useState(false);
   const [qty, setQty] = useState(0);
   const [failed, setFailed] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -96,19 +212,17 @@ function DishRow({ line, write, quiet = false }: { line: ProductionLine; write: 
   // The batch only explains the number when it rounded it up.
   const roundedUp = line.make > 0 && line.make === line.batchMin && line.need - (line.inFridge ?? 0) < line.batchMin;
 
-  function open(kind: "made" | "count") {
+  function open() {
     setFailed(false);
-    setQty(kind === "made" ? Math.max(line.make, line.batchMin) : (line.inFridge ?? 0));
-    setEditing(kind);
+    setQty(line.inFridge ?? 0);
+    setEditing(true);
   }
 
   function save() {
-    if (!editing) return;
-    const kind = editing;
     startTransition(async () => {
       try {
-        await write(line.productId, kind, qty);
-        setEditing(null);
+        await countFridge(line.productId, qty);
+        setEditing(false);
         router.refresh();
       } catch {
         setFailed(true);
@@ -156,7 +270,7 @@ function DishRow({ line, write, quiet = false }: { line: ProductionLine; write: 
 
       {editing ? (
         <div className="flex flex-col gap-3 rounded-xl bg-surface p-3">
-          <p className="text-[15px] font-semibold">{editing === "made" ? t.madeHow : t.countHow}</p>
+          <p className="text-[15px] font-semibold">{t.countHow}</p>
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -182,7 +296,7 @@ function DishRow({ line, write, quiet = false }: { line: ProductionLine; write: 
           <div className="flex gap-2">
             <button
               type="button"
-              disabled={pending || (editing === "made" && qty === 0)}
+              disabled={pending}
               onClick={save}
               className="h-12 flex-1 rounded-full bg-foreground text-[15.5px] font-semibold text-background disabled:opacity-50 active:scale-[0.98]"
             >
@@ -191,7 +305,7 @@ function DishRow({ line, write, quiet = false }: { line: ProductionLine; write: 
             <button
               type="button"
               disabled={pending}
-              onClick={() => setEditing(null)}
+              onClick={() => setEditing(false)}
               className="h-12 rounded-full px-5 text-[15.5px] font-semibold text-muted-foreground active:scale-[0.98]"
             >
               {t.cancel}
@@ -202,19 +316,8 @@ function DishRow({ line, write, quiet = false }: { line: ProductionLine; write: 
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => open("made")}
-            className={cn(
-              "flex h-11 items-center gap-1.5 rounded-full px-4 text-[15px] font-semibold active:scale-[0.98]",
-              quiet ? "border border-border bg-card" : "bg-foreground text-background",
-            )}
-          >
-            <Check className="size-4" aria-hidden="true" />
-            {t.made}
-          </button>
-          <button
-            type="button"
-            onClick={() => open("count")}
-            className="flex h-11 items-center gap-1.5 rounded-full border border-border bg-card px-4 text-[15px] font-semibold active:scale-[0.98]"
+            onClick={open}
+            className="flex h-10 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 text-[14.5px] font-semibold active:scale-[0.98]"
           >
             <Refrigerator className="size-4" aria-hidden="true" />
             {t.count}
@@ -222,7 +325,7 @@ function DishRow({ line, write, quiet = false }: { line: ProductionLine; write: 
           {line.madeToday > 0 && (
             <span className="inline-flex items-center gap-1 text-[14px] font-semibold text-positive">
               <Check className="size-4" aria-hidden="true" />
-              {fmt(t.madeToday, { n: line.madeToday })}
+              {fmt(t.orderedToday, { n: line.madeToday })}
             </span>
           )}
         </div>

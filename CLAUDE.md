@@ -100,7 +100,10 @@ per vak en weekdag uit 8 weken, verdeeld over de uren) min de koelkast; is er ie
 tellen een dag verkoop. Een trend staat er alleen als `compareSince` hem echt noemt. De koelkast is
 `producer_stock_events` (gemaakt +, geteld =, weggegooid −) min wat er in rondes in de automaten ging
 (`stock_events` refill) min wat Torhout verkocht (`producer_fridge`). Nooit geteld = "tel eerst", geen
-blinde batches. De keuken opent `/p/<list_token>` zonder account (NL/FR), de uitbater Bijvullen → Keuken.
+blinde batches. **Alleen op het account van de uitbater** (Bijvullen → Keuken; Xin: "de keuken tikt niets
+in"): "Bestelling doorgeven" rekent de lijst opnieuw op de server, schrijft hem weg als gemaakt
+(`sendProductionOrder`) en geeft een bericht voor WhatsApp of om te kopiëren. "Koelkast" is de correctie
+van de uitbater. De kolom `producers.list_token` bleef van een eerste versie met een keukenlink; ongebruikt.
 
 ## Rondes uit de cijfers gehaald (19-10-2026)
 Xin liet Alus opnieuw beginnen op niveau 1: zijn 20 oefenrondes (17–19 okt) staan in

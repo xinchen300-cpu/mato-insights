@@ -1,18 +1,20 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { ensureProducerLink, producerStockAsOperator, type ProducerStockKind } from "@/lib/data";
+import { countProducerFridge, sendProductionOrder, type OrderLine } from "@/lib/data";
 import { requireOperator, requireOrgId } from "@/lib/org";
 
-/** The producer's link for the kitchen: made once, the same every day after. */
-export async function producerLink(producerId: string): Promise<string> {
+/** Tonight's list passed on to the kitchen: written down as made, and returned for the message. */
+export async function passOrder(producerId: string): Promise<OrderLine[]> {
   await requireOperator();
-  return ensureProducerLink(await requireOrgId(), producerId);
+  const order = await sendProductionOrder(await requireOrgId(), producerId);
+  revalidatePath("/refill/kitchen");
+  return order;
 }
 
-/** What the kitchen made, or what is in the fridge, written by the operator in the app. */
-export async function writeProducerStock(producerId: string, productId: string, kind: ProducerStockKind, qty: number): Promise<void> {
+/** What the operator counted in the kitchen's fridge for one dish. */
+export async function countFridge(producerId: string, productId: string, qty: number): Promise<void> {
   await requireOperator();
-  await producerStockAsOperator(await requireOrgId(), producerId, productId, kind, qty);
+  await countProducerFridge(await requireOrgId(), producerId, productId, qty);
   revalidatePath("/refill/kitchen");
 }

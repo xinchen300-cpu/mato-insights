@@ -7,9 +7,8 @@ export const REQUIRE_LOGIN =
   (process.env.NODE_ENV === "production" && process.env.VENDLY_REQUIRE_LOGIN !== "false");
 
 // Mollie's webhook arrives without a session; it carries only an id that the
-// route looks up again with our own key. A producer's list (/p/) opens with
-// its own long random link, checked in data.ts, like a round's (/r/).
-const PUBLIC_PREFIXES = ["/login", "/signup", "/auth/", "/r/", "/b/", "/p/", "/pwa-icon/", "/api/mollie/"];
+// route looks up again with our own key.
+const PUBLIC_PREFIXES = ["/login", "/signup", "/auth/", "/r/", "/b/", "/pwa-icon/", "/api/mollie/"];
 // The service worker is fetched by the browser without the session, so a
 // redirect to the login page would stop it registering at all. The offline
 // page it keeps on the phone holds no data, so it is open too.
