@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarCheck, CalendarX, Check, ChevronLeft, ChevronRight, MessageSquareText, Navigation, Tag, Timer, Trash2, TriangleAlert, Truck } from "lucide-react";
+import { CalendarCheck, CalendarX, Check, ChevronLeft, ChevronRight, MessageSquareText, Navigation, Timer, Trash2, TriangleAlert, Truck } from "lucide-react";
 import Link from "next/link";
 import { FillerAvatar } from "@/components/filler/avatar";
 import { FrontView, type FrontSlot } from "@/components/machine/front-view";
@@ -11,7 +11,6 @@ import { useI18n } from "@/i18n/client";
 import { duration, fmt } from "@/i18n/format";
 import type { AvatarLook } from "@/lib/avatar";
 import type { RefillRound, RouteTimes } from "@/lib/data";
-import type { SlotFresh } from "@/lib/freshness";
 import { roundReward, summarizeRound, type MyRound } from "@/lib/filler-stats";
 import { haptic } from "@/lib/haptics";
 import {
@@ -320,10 +319,6 @@ export function RoundFlow({
     }
     const entered = edit.removed.find((r) => r.reason === kind);
     if (entered) return entered.qty;
-    // What the dates say comes out of this slot, as a start.
-    const fresh = initial.freshness[slotKey(machineId, selection)];
-    if (fresh && kind === "expired" && fresh.past > 0) return fresh.past;
-    if (fresh && kind === "nearExpiry" && fresh.pull > fresh.past) return fresh.pull - fresh.past;
     return 1;
   }
 
@@ -1080,15 +1075,12 @@ export function RoundFlow({
             )}
             {removedHere > 0 && <span className={cn(chip, "ring-warning/40")}>{fmt(t.removedBadge, { n: removedHere })}</span>}
           </div>
-          {/* What the dates say comes out here and which labels to read (Xin, 19-10-2026); where
-              they say nothing, the one line at every machine with dishes stays (18-10). */}
+          {/* The dates are the filler's to check by eye: one line at every machine with dishes, nothing to tap (Xin, 18-10-2026). */}
           {current.type !== "spiral" && (
-            <DatesHere
-              slots={machineSlots}
-              freshness={(slot) => initial.freshness[slotKey(current.id, slot)]}
-              noted={(slot, reason) => draft.lines[slot]?.removed.find((r) => r.reason === reason)?.qty ?? 0}
-              onPick={(selection, only) => setReport({ selection, only })}
-            />
+            <p className="mt-3 flex items-center gap-2.5 rounded-xl bg-surface px-3 py-2.5 text-[14.5px] font-medium">
+              <CalendarCheck className="size-5 shrink-0" aria-hidden="true" />
+              {t.checkDates}
+            </p>
           )}
           <div className="mt-2 flex items-center justify-between">
             <p className="text-[14.5px] text-muted-foreground">{t.fillHint}</p>
@@ -2071,105 +2063,6 @@ function LineSheet({
   );
 }
 
-/**
- * At a machine with dishes: the slots the dates say something about. Pieces
- * to take out, past their date or on their last day, one tap each to note them;
- * and pieces whose cooking day nobody knows, to read the label of. Where the
- * dates say nothing, one line asks to look at them by eye.
- */
-function DatesHere({
-  slots,
-  freshness,
-  noted,
-  onPick,
-}: {
-  slots: RefillRound["slots"];
-  freshness: (selection: string) => SlotFresh | undefined;
-  /** What is noted as taken out of a slot for a reason so far. */
-  noted: (selection: string, reason: RemovalReason) => number;
-  onPick: (selection: string, only: "expired" | "nearExpiry") => void;
-}) {
-  const { m } = useI18n();
-  const t = m.round;
-  const out = slots.flatMap((slot) => {
-    const fresh = freshness(slot.selection);
-    return fresh && fresh.pull > 0 ? [{ slot, fresh }] : [];
-  });
-  const read = slots.filter((slot) => (freshness(slot.selection)?.check ?? 0) > 0);
-  if (out.length === 0 && read.length === 0) {
-    return (
-      <p className="mt-3 flex items-center gap-2.5 rounded-xl bg-surface px-3 py-2.5 text-[14.5px] font-medium">
-        <CalendarCheck className="size-5 shrink-0" aria-hidden="true" />
-        {t.checkDates}
-      </p>
-    );
-  }
-  const badge = "min-w-8 rounded-lg bg-surface px-1.5 py-0.5 text-center font-mono text-[12.5px] font-semibold";
-  return (
-    <div className="mt-3 flex flex-col gap-3 rounded-2xl bg-surface/60 p-3">
-      {out.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <p className="flex items-center gap-2 text-[15.5px] font-bold">
-            <CalendarX className="size-5 shrink-0 text-negative" aria-hidden="true" />
-            {t.datesOut}
-          </p>
-          <p className="text-[13px] text-muted-foreground">{t.datesOutHint}</p>
-          <ul className="mt-1 flex flex-col gap-1">
-            {out.map(({ slot, fresh }) => {
-              const today = fresh.pull - fresh.past;
-              const done = noted(slot.selection, "expired") >= fresh.past && noted(slot.selection, "nearExpiry") >= today;
-              return (
-                <li key={slot.selection}>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onPick(slot.selection, fresh.past > noted(slot.selection, "expired") || today === 0 ? "expired" : "nearExpiry")
-                    }
-                    className="flex min-h-12 w-full items-center gap-2.5 rounded-xl bg-card px-2.5 py-2 text-left active:bg-card/70"
-                  >
-                    <span className={badge}>{slot.selection}</span>
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className={cn("truncate text-[15px] font-semibold", done && "text-muted-foreground")}>{slot.productName}</span>
-                      <span className="text-[13px] text-muted-foreground">
-                        {[
-                          ...(fresh.past > 0 ? [fmt(t.datesPast, { n: fresh.past })] : []),
-                          ...(today > 0 ? [fmt(t.datesToday, { n: today })] : []),
-                        ].join(" · ")}
-                      </span>
-                    </span>
-                    {done ? (
-                      <Check className="size-5 shrink-0 text-positive" strokeWidth={3} aria-hidden="true" />
-                    ) : (
-                      <ChevronRight className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                    )}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-      {read.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          <p className="flex items-center gap-2 text-[15.5px] font-bold">
-            <Tag className="size-5 shrink-0 text-warning" aria-hidden="true" />
-            {t.datesLabel}
-          </p>
-          <p className="text-[13px] text-muted-foreground">{t.datesLabelHint}</p>
-          <ul className="flex flex-col gap-1 text-[14.5px]">
-            {read.map((slot) => (
-              <li key={slot.selection} className="flex items-center gap-2.5">
-                <span className={cn(badge, "bg-card")}>{slot.selection}</span>
-                <span className="min-w-0 flex-1 truncate font-medium">{slot.productName}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function ReportSheet({
   slots,
   preset,
@@ -2206,9 +2099,7 @@ function ReportSheet({
 
   return (
     <Sheet onClose={onClose}>
-      <h2 className="text-[22px] font-bold tracking-[-0.02em]">
-        {only === "expired" ? t.expiredTitle : only === "nearExpiry" ? t.nearTitle : t.whatIsIt}
-      </h2>
+      <h2 className="text-[22px] font-bold tracking-[-0.02em]">{only === "expired" ? t.expiredTitle : t.whatIsIt}</h2>
       {!only && (
         <div className="flex flex-wrap gap-2">
           {kinds.map((option) => (

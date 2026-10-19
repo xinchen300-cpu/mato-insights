@@ -5,7 +5,7 @@ import { EmptyState, PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { DISPLAY_TIME_ZONE, fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getMachines, getMachineStock, getOpenRounds, getRefillSheets, getStatsReport, getVisitAdvice } from "@/lib/data";
+import { getMachines, getMachineStock, getOpenRounds, getRefillSheets, getStatsReport } from "@/lib/data";
 import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
 import { cleanRoundSettings, orderByRoute } from "@/lib/round-settings";
 import { lastFullWeeks } from "@/lib/stats";
@@ -30,17 +30,14 @@ export default async function NewRoundPage() {
   const orgId = await requireOrgId();
   const window = lastFullWeeks(4, DISPLAY_TIME_ZONE);
   // All at once, each loader with its own checks.
-  const [openRounds, machines, stock, sheets, { data: org }, weeks, advice] = await Promise.all([
+  const [openRounds, machines, stock, sheets, { data: org }, weeks] = await Promise.all([
     getOpenRounds(orgId),
     getMachines(orgId),
     getMachineStock(orgId),
     getRefillSheets(orgId),
     createAdminClient().from("organizations").select("cost_per_hour, cost_per_km, refill_settings").eq("id", orgId).maybeSingle(),
     getStatsReport(orgId, { period: "custom", ...window }),
-    getVisitAdvice(orgId),
   ]);
-  // Machines not worth today's visit (Xin, 19-10-2026): not ticked, with what leaving them out costs and saves.
-  const skip = new Map(advice.filter((a) => a.skip).map((a) => [a.machineId, a]));
 
   // Whole weeks only, so a half week does not drag the average down, and per
   // day the machine was selling: one that started two weeks ago is not half as
@@ -131,11 +128,10 @@ export default async function NewRoundPage() {
       // pieces are worth the average price in it, not nothing.
       const perPiece = p.toAdd > 0 ? p.value / p.toAdd : p.priced > 0 ? p.prices / p.priced : 0;
 
-      const left = skip.get(mc.id);
       return {
         id: mc.id,
         name: mc.name,
-        low: p.low > 0 && !busy.has(mc.id) && !left,
+        low: p.low > 0 && !busy.has(mc.id),
         hint:
           cost !== null && p.value > 0
             ? fmt(m.refill.worthHint, {
@@ -150,12 +146,6 @@ export default async function NewRoundPage() {
                 : fmt(m.refill.items, { count: p.toAdd }),
         note: busy.has(mc.id)
           ? m.refill.onOpenRound
-          : left?.money
-            ? fmt(m.refill.skipOwner, {
-                n: f.number(Math.round(left.missed * 10) / 10),
-                lost: f.euro(left.money.lost),
-                saves: f.euro(left.money.saves),
-              })
           : cost !== null && p.value > 0 && p.value < cost
             ? m.refill.notWorthIt
             : rate > 0 && weekAhead > p.toAdd
