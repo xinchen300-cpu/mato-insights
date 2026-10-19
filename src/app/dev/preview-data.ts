@@ -3,6 +3,7 @@
 // few weeks of rounds behind him. Nothing here comes from or goes to a database.
 
 import type { RefillRound, RouteTimes } from "@/lib/data";
+import { isoDay } from "@/lib/expiry";
 import { summarizeRound, type MyRound } from "@/lib/filler-stats";
 import type { FlowLine, StopRecord } from "@/lib/refill-flow";
 import { DEFAULT_ROUND_SETTINGS } from "@/lib/round-settings";
@@ -130,6 +131,12 @@ export function previewRound(scenario: Scenario, now: number): RefillRound {
     ],
     picked: scenario === "pick" ? {} : picked,
     stops,
+    // Past its date at the first machine; at the second, two with their last day today and one of unknown age.
+    freshness: {
+      [`${MACHINES[0].id}:13`]: { pull: 1, past: 1, pullBy: isoDay(new Date(now - 86_400_000)), check: 0 },
+      [`${MACHINES[1].id}:12`]: { pull: 2, past: 0, pullBy: isoDay(new Date(now)), check: 0 },
+      [`${MACHINES[1].id}:14`]: { pull: 0, past: 0, pullBy: null, check: 1 },
+    },
     settings: { ...DEFAULT_ROUND_SETTINGS, checks: ["Ruit gepoetst"], depotAddress: "Roeselaarseweg 69, 8820 Torhout" },
     notes: scenario === "pick" ? "Diksmuide: de deur klemt, even duwen." : null,
   };

@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { ChevronRight, ClipboardList, Plus } from "lucide-react";
+import { CalendarClock, ChevronRight, ClipboardList, Plus } from "lucide-react";
 import { FiguresCard, HowItWorks } from "@/components/filler/figures";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getLiveSold, getMachines, getMachineStock, getMyRounds, getOpenRounds, getRefillSheets, getRoundSettings, getShortages, type OpenRound } from "@/lib/data";
+import { getLiveSold, getMachines, getMachineStock, getMyRounds, getOpenRounds, getRefillSheets, getRoundSettings, getShortages, getVisitAdvice, type OpenRound } from "@/lib/data";
 import { orderByRoute } from "@/lib/round-settings";
 import { cleanLook } from "@/lib/avatar";
 import { fillerStats } from "@/lib/filler-stats";
@@ -38,7 +38,7 @@ export default async function RefillPage() {
   // A filler gets their own view of the refill work: rounds and pieces, no money.
   if (await isFiller()) {
     const fillerOrg = await requireRefillAccess();
-    const [rounds, everyMachine, everySlot, mine, me, settings, sold] = await Promise.all([
+    const [rounds, everyMachine, everySlot, mine, me, settings, sold, advice] = await Promise.all([
       getOpenRounds(fillerOrg),
       getMachines(fillerOrg),
       getMachineStock(fillerOrg),
@@ -46,7 +46,10 @@ export default async function RefillPage() {
       createClient().then((client) => client.auth.getUser()),
       getRoundSettings(fillerOrg),
       getLiveSold(fillerOrg),
+      getVisitAdvice(fillerOrg),
     ]);
+    // Machines not worth today's visit (Xin, 19-10-2026): off the big button, on a card that says why.
+    const skip = new Map(advice.filter((a) => a.skip).map((a) => [a.machineId, a]));
     // A machine filled by hand is not this screen's work: no tile, no round, no start button.
     const fleet = filledByVendly(everyMachine);
     const slots = slotsFilledByVendly(everySlot, everyMachine);
@@ -69,11 +72,15 @@ export default async function RefillPage() {
         return {
           id: mc.id,
           name: mc.name,
-          low: p.low > 0 && !busy.has(mc.id),
+          low: p.low > 0 && !busy.has(mc.id) && !skip.has(mc.id),
           hint: p.counted === 0 ? m.overview.stockUnknown : fmt(m.refill.items, { count: p.toAdd }),
-          note: busy.has(mc.id) ? m.refill.onOpenRound : undefined,
+          note: busy.has(mc.id) ? m.refill.onOpenRound : skip.has(mc.id) ? m.refill.skipNote : undefined,
         };
       });
+    const skipped = orderByRoute(
+      choices.filter((c) => skip.has(c.id) && !busy.has(c.id)).map((c) => c.id),
+      settings.route,
+    ).map((id) => ({ name: choices.find((c) => c.id === id)!.name, missed: skip.get(id)!.missed }));
     // Every machine as a tile, in the owner's route order: its photo, how full it is, and online or not.
     const grid = gridMachines(fleet, slots, settings.route);
     const stats = fillerStats(mine, DISPLAY_TIME_ZONE);
@@ -88,13 +95,14 @@ export default async function RefillPage() {
               machine that needs something. Then every machine, how full each is, and what sells. */}
           {next ? (
             <NextRound round={next} m={m} />
-          ) : choices.length > 0 ? (
+          ) : choices.some((c) => !c.note) ? (
             <StartRound
               big
               label={m.refill.beginFilling}
               machineIds={orderByRoute(choices.filter((c) => !c.note).map((c) => c.id), settings.route)}
             />
           ) : null}
+          {!next && skipped.length > 0 && <SkipToday machines={skipped} m={m} />}
           {/* Every open round can go, from here, always (Xin, 19-10-2026). */}
           <DeleteRounds rounds={deletable(rounds, m, f)} />
           {/* Vendly on the home screen, one tap to open (Xin, 18-10-2026). Only on a phone, until it is there or closed. */}
@@ -272,6 +280,32 @@ function NextRound({ round, m }: { round: OpenRound; m: Awaited<ReturnType<typeo
       </span>
       <ChevronRight className="size-6 shrink-0" aria-hidden="true" />
     </Link>
+  );
+}
+
+/**
+ * The machines the big button leaves out today, and what they miss until
+ * tomorrow's round, in dishes only. Going anyway is the picker below.
+ */
+function SkipToday({ machines, m }: { machines: { name: string; missed: number }[]; m: Awaited<ReturnType<typeof getI18n>>["m"] }) {
+  return (
+    <div className="surface-card flex flex-col gap-2 px-4 py-3.5">
+      <p className="flex items-center gap-2 text-[16px] font-semibold">
+        <CalendarClock className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        {m.refill.skipTitle}
+      </p>
+      <ul className="flex flex-col gap-1.5">
+        {machines.map((machine) => (
+          <li key={machine.name} className="flex flex-col">
+            <span className="text-[15px] font-semibold">{machine.name}</span>
+            <span className="text-[13.5px] text-muted-foreground">
+              {machine.missed < 1 ? m.refill.skipMissedLess : fmt(m.refill.skipMissed, { n: Math.round(machine.missed) })}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="text-[13px] text-muted-foreground">{m.refill.skipHint}</p>
+    </div>
   );
 }
 
