@@ -167,6 +167,13 @@ alle producten is ingeklapt en "Gemiddelde verkoop" is weg.
   40–250 ms en de poll van Net verkocht van 170 naar 7 ms. Een nieuwe query op `transactions` die traag is:
   kijk eerst of hij zo'n index kan gebruiken.
 
+## Ledoux (aparte site, zelfde databank)
+https://ledoux-peach.vercel.app (Vercel-project `ledoux`) is het verkoopoverzicht van Delfien (Ledoux
+Chocolaterie), die vakken huurt in Sferio en de broodautomaat. Geen git-repo: de bron staat in de
+Vercel-deployments (CLI-uploads, op te halen met `vercel api /v6/deployments/<id>/files`) en op Xins Mac.
+Sinds 20-10-2026 telt ze er haar eigen voorraad met − en +: tabel **`ledoux_stock_counts`** (RLS aan, alleen
+de servicerol). Die tabel is van die site; Vendly leest of schrijft hem niet.
+
 ## Rondes uit de cijfers gehaald (19-10-2026)
 Xin liet Alus opnieuw beginnen op niveau 1: zijn 20 oefenrondes (17–19 okt) staan in
 `refill_reset_archive` (de ronde als JSON plus zijn tekorten) én zijn verhuisd naar de lege organisatie
