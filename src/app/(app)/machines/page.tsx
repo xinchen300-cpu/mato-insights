@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Store } from "lucide-react";
+import { Package, Store } from "lucide-react";
 import { StatusBadge } from "@/components/machine/status-badge";
 import { PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
@@ -104,13 +104,20 @@ export default async function MachinesPage() {
       <PageHeader
         title={m.machines.title}
         actions={
-          // Businesses are an automatenshop's: a zaak runs its own machines.
-          rents ? (
-            <Link href="/businesses" className={buttonVariants({ variant: "outline" })}>
-              <Store />
-              {m.nav.businesses}
+          <>
+            {/* Products left the menu (Xin, 20-10-2026: a slot's product is set in the layout); prices and photos stay here. */}
+            <Link href="/products" className={buttonVariants({ variant: "outline" })}>
+              <Package />
+              {m.nav.products}
             </Link>
-          ) : undefined
+            {/* Businesses are an automatenshop's: a zaak runs its own machines. */}
+            {rents && (
+              <Link href="/businesses" className={buttonVariants({ variant: "outline" })}>
+                <Store />
+                {m.nav.businesses}
+              </Link>
+            )}
+          </>
         }
       />
 

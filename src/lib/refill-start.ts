@@ -19,3 +19,13 @@ export function startable<M extends { id: string; refill_manual: boolean }>(
   const stocked = fleet.filter((machine) => withProduct.has(machine.id));
   return { ids: orderByRoute(stocked.filter((machine) => !busy.has(machine.id)).map((machine) => machine.id), route), busy, stocked };
 }
+
+/**
+ * The owner's own open round, to carry on with instead of starting another
+ * one beside it: one already under way first, else the newest (the list comes
+ * newest first). Someone else's round is never theirs to go on with.
+ */
+export function ownRound<R extends { mine: boolean; readyAt: string | null }>(rounds: R[]): R | null {
+  const mine = rounds.filter((round) => round.mine);
+  return mine.find((round) => round.readyAt) ?? mine[0] ?? null;
+}

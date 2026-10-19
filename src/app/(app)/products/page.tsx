@@ -31,6 +31,8 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   return (
     <ProductGrid
       title={m.products.title}
+      backHref="/machines"
+      backLabel={m.nav.machines}
       notice={
         recent.length > 0 && (
           <RowList className="mb-6">

@@ -423,7 +423,7 @@ import { PERIODS, revenueByMachine, withoutOrgName } from "../src/lib/overview.t
 }
 
 // ── "Vul route beginnen" for the owner too (src/lib/refill-start.ts) ──
-import { startable } from "../src/lib/refill-start.ts";
+import { ownRound, startable } from "../src/lib/refill-start.ts";
 {
   const mc = (id: string, refill_manual = false) => ({ id, refill_manual });
   const slots = [
@@ -437,4 +437,34 @@ import { startable } from "../src/lib/refill-start.ts";
   ok("start: machines with a product, in the route's order, the rest after", start.ids.join() === "b,a");
   ok("start: none filled by hand, none without a product", !start.ids.includes("d") && !start.ids.includes("c"));
   ok("start: one still on an open round is left off; one done on it is not", start.busy.has("e") && !start.ids.includes("e") && start.ids.includes("a"));
+
+  // Newest first, as getOpenRounds gives them.
+  const round = (id: string, mine: boolean, readyAt: string | null = null) => ({ id, mine, readyAt });
+  ok("own round: the one under way before a newer unstarted one", ownRound([round("new", true), round("out", true, "2026-10-20T08:00:00Z")])?.id === "out");
+  ok("own round: else the newest of one's own", ownRound([round("x", false, "2026-10-20T08:00:00Z"), round("b", true), round("a", true)])?.id === "b");
+  ok("own round: someone else's is never it", ownRound([round("x", false, "2026-10-20T08:00:00Z")]) === null);
+}
+
+// ── "Terugzetten naar …%": what a round's stops changed (src/lib/refill-flow.ts) ──
+import { stopChanges } from "../src/lib/refill-flow.ts";
+{
+  const ev = (selection: string, delta: number, at: string, note: string | null = null) => ({
+    machine_id: "m",
+    selection_number: selection,
+    delta,
+    note,
+    occurred_at: `2026-10-20T${at}:00Z`,
+  });
+  const changed = stopChanges([
+    ev("11", 4, "08:00"),
+    ev("11", -1, "08:00", "expired"),
+    ev("12", 3, "08:00"),
+    ev("12", -3, "08:10", "reopened"),
+    ev("12", 2, "08:20"),
+    ev("13", 5, "08:00"),
+    ev("13", -5, "08:10", "reopened"),
+  ]);
+  ok("revert: every event of the stop counts, a removal too", changed["m:11"] === 3);
+  ok("revert: only what came after the last reopening", changed["m:12"] === 2);
+  ok("revert: a slot put back is nothing to put back again", (changed["m:13"] ?? 0) === 0);
 }

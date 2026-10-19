@@ -11,8 +11,8 @@ import { cleanLook } from "@/lib/avatar";
 import { fillerStats } from "@/lib/filler-stats";
 import { displayName } from "@/lib/people";
 import { createClient } from "@/lib/supabase/server";
-import { cn } from "@/lib/utils";
 import { LiveRounds } from "@/components/refill/live-rounds";
+import { NextRound } from "@/components/refill/next-round";
 import { RoundList } from "@/components/refill/round-list";
 import { RefillTabs } from "@/components/refill/refill-tabs";
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
@@ -24,7 +24,7 @@ import { MachinePicker } from "./machine-picker";
 import { StartRound } from "./list/start-round";
 import { InstallApp } from "@/components/install-app";
 import { DeleteRounds, type DeletableRound } from "@/components/refill/delete-rounds";
-import { startable } from "@/lib/refill-start";
+import { ownRound, startable } from "@/lib/refill-start";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -143,6 +143,9 @@ export default async function RefillPage() {
   // themselves; the machines as tiles; choosing them one by one folded away.
   const route = ownerSettings?.route ?? [];
   const start = startable(machines, slots, openRounds, route);
+  // A round of their own still open is carried on with, not started beside:
+  // its machines count as busy, so the start button alone would vanish.
+  const own = operator ? ownRound(openRounds) : null;
   const ownerGrid = operator ? gridMachines(start.stocked, slotsFilledByVendly(slots, machines), route) : [];
   const ownerChoices = orderByRoute(start.stocked.map((mc) => mc.id), route).map((id) => {
     const mine = slots.filter((slot) => slot.machine_id === id && slot.product_id);
@@ -175,8 +178,12 @@ export default async function RefillPage() {
       <PageHeader title={m.refill.title} actions={operator ? <RefillTabs active="rounds" m={m} /> : undefined} />
 
       <div className="flex flex-col gap-10">
-        {operator && start.ids.length > 0 && <StartRound big fill label={m.refill.beginFilling} machineIds={start.ids} />}
-        <LiveRounds rounds={openRounds} />
+        {own ? (
+          <NextRound round={own} m={m} />
+        ) : (
+          operator && start.ids.length > 0 && <StartRound big fill label={m.refill.beginFilling} machineIds={start.ids} />
+        )}
+        <LiveRounds rounds={openRounds.filter((round) => round.id !== own?.id)} />
         <DeleteRounds rounds={deletable(openRounds, m, f)} />
         {ownerGrid.length > 0 && (
           <Section title={m.refill.machinesTitle}>
@@ -275,35 +282,6 @@ function OpenRounds({
         ))}
       </RowList>
     </Section>
-  );
-}
-
-/**
- * The round a filler should do now, as one big card: where it goes, how far
- * along it is, and one black button. For a filler this is the whole point of
- * the page, so it is the first and largest thing on it.
- */
-function NextRound({ round, m }: { round: OpenRound; m: Awaited<ReturnType<typeof getI18n>>["m"] }) {
-  const underway = Boolean(round.readyAt);
-  const done = round.machines.filter((machine) => machine.done).length;
-  return (
-    <Link
-      href={`/vullen/${round.id}`}
-      className="flex min-h-20 items-center gap-3.5 rounded-2xl bg-foreground px-4 py-3.5 text-background shadow-[var(--shadow-pop)] transition-transform active:scale-[0.99]"
-    >
-      <span
-        className={cn("grid size-12 shrink-0 place-items-center rounded-full", underway ? "bg-positive text-white" : "bg-background/15")}
-      >
-        <ClipboardList className="size-6" aria-hidden="true" />
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="text-[20px] font-semibold tracking-[-0.01em]">{underway ? m.refill.continueFilling : m.me.nextBegin}</span>
-        <span className="truncate text-[13.5px] opacity-75">
-          {fmt(round.machines.length === 1 ? m.me.nextSubOne : m.me.nextSub, { n: round.machines.length, done })}
-        </span>
-      </span>
-      <ChevronRight className="size-6 shrink-0" aria-hidden="true" />
-    </Link>
   );
 }
 

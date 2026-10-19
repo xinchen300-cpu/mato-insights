@@ -159,6 +159,7 @@ export function RoundFlow({
   const [skipArmed, setSkipArmed] = useState(false);
   const [skipAsk, setSkipAsk] = useState(false);
   const [reopenAsk, setReopenAsk] = useState(false);
+  const [revertAsk, setRevertAsk] = useState(false);
   const [deleteAsk, setDeleteAsk] = useState(false);
   const [fullAsk, setFullAsk] = useState<{ open: "empty" | "planned"; selections: string[] } | null>(null);
   // The last question before a machine is done (Xin, 19-10-2026): anything over date? And if so, which.
@@ -231,6 +232,20 @@ export function RoundFlow({
   const fills = useMemo(() => machineTotals(initial.slots.map((slot) => ({ machine_id: slot.machineId, stock: slot.stock, capacity: slot.capacity }))), [initial.slots]);
   const fillOf = (machineId: string) => {
     const total = fills.get(machineId);
+    return total ? machineFill(total.stock, total.capacity, total.counted) : null;
+  };
+  // How full a finished machine was before this round got to it: its stock now
+  // less what its stop changed (sales since then stay off).
+  const fillBefore = (machineId: string) => {
+    const total = machineTotals(
+      initial.slots
+        .filter((slot) => slot.machineId === machineId)
+        .map((slot) => ({
+          machine_id: machineId,
+          stock: slot.stock === null ? null : Math.max(0, slot.stock - (initial.changed[slotKey(machineId, slot.selection)] ?? 0)),
+          capacity: slot.capacity,
+        })),
+    ).get(machineId);
     return total ? machineFill(total.stock, total.capacity, total.counted) : null;
   };
 
@@ -486,6 +501,7 @@ export function RoundFlow({
   function viewStop(machineId: string) {
     if (countdown !== null) setCountdown(0);
     setReopenAsk(false);
+    setRevertAsk(false);
     setStopId(machineId);
     setView("stop");
   }
@@ -511,6 +527,33 @@ export function RoundFlow({
         });
         setDrafts((all) => ({ ...all, [machineId]: draftFrom(record) }));
         openStop(machineId);
+        router.refresh();
+      },
+    );
+  }
+
+  /**
+   * "Terugzetten naar 40%" (Xin, 20-10-2026: for a machine filled by mistake):
+   * the stock goes back as with "Aanpassen", but nothing entered is kept; the
+   * machine is open again on the round, to fill afresh or skip.
+   */
+  function revert(machineId: string) {
+    if (!stops[machineId]) return;
+    run(
+      () => api.reopenStop(initial.id, machineId),
+      () => {
+        setRevertAsk(false);
+        setStops((all) => {
+          const rest = { ...all };
+          delete rest[machineId];
+          return rest;
+        });
+        setDrafts((all) => {
+          const rest = { ...all };
+          delete rest[machineId];
+          return rest;
+        });
+        setView("home");
         router.refresh();
       },
     );
@@ -907,6 +950,10 @@ export function RoundFlow({
       "";
     // Only the slots something happened to.
     const entered = record.lines.filter((line) => line.filled > 0 || line.removed.length > 0 || line.countAfter !== null || line.full);
+    // The owner can put a machine back as it was before (Xin, 20-10-2026); a filler keeps "Aanpassen".
+    const changedHere = initial.slots.some((slot) => slot.machineId === doneMachine.id && (initial.changed[slotKey(doneMachine.id, slot.selection)] ?? 0) !== 0);
+    const was = !filler && !record.skipped && changedHere ? fillBefore(doneMachine.id) : null;
+    const now = was ? fillOf(doneMachine.id) : null;
     return (
       <Screen padded={false}>
         <div className="flex flex-col gap-2 px-4 pt-4">
@@ -929,6 +976,14 @@ export function RoundFlow({
         </div>
 
         <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-3 pb-36 pt-3">
+          {was && now && (
+            <div className="surface-card flex flex-col gap-3 px-4 py-3.5">
+              <p className="tabular text-[16px] font-semibold">{fmt(t.revertLine, { before: was.percent, after: now.percent })}</p>
+              <button type="button" className={outline} disabled={pending} onClick={() => setRevertAsk(true)}>
+                {fmt(t.revertTo, { n: was.percent })}
+              </button>
+            </div>
+          )}
           {entered.length === 0 ? (
             <p className="px-2 text-[15px] text-muted-foreground">{t.nothingEntered}</p>
           ) : (
@@ -971,6 +1026,18 @@ export function RoundFlow({
               {pending ? t.reopening : t.reopenConfirm}
             </button>
             <button type="button" className={ghost} onClick={() => setReopenAsk(false)}>
+              {t.back}
+            </button>
+          </Sheet>
+        )}
+        {revertAsk && was && (
+          <Sheet onClose={() => setRevertAsk(false)}>
+            <h2 className="text-[22px] font-bold tracking-[-0.02em]">{fmt(t.revertTitle, { machine: doneMachine.name, n: was.percent })}</h2>
+            <p className="text-[15.5px] text-muted-foreground">{t.revertHint}</p>
+            <button type="button" className={primary} disabled={pending} onClick={() => revert(doneMachine.id)}>
+              {pending ? t.reverting : t.revertConfirm}
+            </button>
+            <button type="button" className={ghost} onClick={() => setRevertAsk(false)}>
               {t.back}
             </button>
           </Sheet>
