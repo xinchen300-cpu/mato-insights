@@ -117,7 +117,11 @@ Vullijst), de meldingen (4, de rest onder "Nog … meldingen"), dan **Omzet per 
 (`src/components/overview/machine-revenue.tsx`): per automaat geld, stuks, alleen een échte verandering, hoe vol,
 en wanneer gevuld (`last_refills`, `getLastRefills`, alleen voor de uitbater). Het totaal is één regel erboven.
 De eigen bedrijfsnaam valt weg uit de automaatnamen ("Koekelare"). Net verkocht toont 5, "Meer zien" tot 40 per
-dag. Voorbeeld met verzonnen cijfers: `/dev/owner`.
+dag. De cijfers bouwt `revenueByMachine` in `src/lib/overview.ts` (getest in `test:flow`); voorbeeld met
+verzonnen cijfers langs dezelfde weg: `/dev/owner`. **Nooit een waarde (lijst, constante, hulpfunctie) uit een
+`"use client"`-bestand in een serverbestand importeren**: die komt daar als stand-in aan. Zo brak `PERIODS.map`
+op 19-10 het live overzicht (teruggerold naar de vorige versie); `check:guards` vangt dat nu
+(`scripts/check-client-imports.mjs`).
 
 ## Rondes uit de cijfers gehaald (19-10-2026)
 Xin liet Alus opnieuw beginnen op niveau 1: zijn 20 oefenrondes (17–19 okt) staan in

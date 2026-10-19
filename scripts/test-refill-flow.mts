@@ -391,3 +391,33 @@ import { hourShares, localTime, nextFill, productionPlan, salesBetween, type Wee
   ok("production: a trend only when it is real", trend(60, 30, null) === null && trend(100, 40, null) === "up" && trend(40, 100, null) === "down");
   ok("production: a dish new since the earlier weeks has no trend", trend(100, 40, "2026-09-01T00:00:00Z") === null);
 }
+
+// ── Revenue per machine on the owner's overview (src/lib/overview.ts) ──
+import { PERIODS, revenueByMachine, withoutOrgName } from "../src/lib/overview.ts";
+{
+  ok("overview: periods are a real list (not a client stand-in)", Array.isArray(PERIODS) && PERIODS.join() === "today,week,month");
+  ok("overview: the owner's own name drops off a machine's name", withoutOrgName("Koekelare Chens Garden", "Chens Garden") === "Koekelare");
+  ok("overview: a name that is only the org's name stays", withoutOrgName("Chens Garden", "Chens Garden") === "Chens Garden" && withoutOrgName("NATHALIE_SNOEP", "Chens Garden") === "NATHALIE_SNOEP");
+  const row = (id: string, revenue: number, units: number) => ({ machine_id: id, machine_name: id, business_name: null, first_sale: "2026-01-01T00:00:00Z", revenue, units, prev_revenue: revenue, prev_units: units });
+  const report = (rows: ReturnType<typeof row>[]) => ({
+    period: "today", timezone: "Europe/Brussels", cur_start: "", cur_end: "", prev_start: "2026-09-01T00:00:00Z", prev_end: "", first_sale: "2026-01-01T00:00:00Z",
+    totals: { revenue: rows.reduce((s, r) => s + r.revenue, 0), units: rows.reduce((s, r) => s + r.units, 0), prev_revenue: rows.reduce((s, r) => s + r.revenue, 0), prev_units: rows.reduce((s, r) => s + r.units, 0) },
+    by_day: [], by_hour: [], by_weekday: [], by_machine: rows, by_product: [],
+  }) as never;
+  const machine = (id: string, extra: Record<string, unknown> = {}) => ({ id, name: `${id} Chens Garden`, type: "lift", payter_serial_number: "APO1", photo_path: null, last_connected_at: null, last_disconnected_at: null, refill_manual: false, ...extra }) as never;
+  const built = revenueByMachine({
+    reports: { today: report([row("a", 40, 4)]), week: report([row("a", 200, 20), row("b", 90, 9)]), month: report([row("a", 800, 80), row("b", 400, 40)]) },
+    machines: [machine("a"), machine("b", { payter_serial_number: null }), machine("c", { refill_manual: true })],
+    stock: [{ machine_id: "a", selection_number: "1", product_id: "p", capacity: 10, stock: 5 }, { machine_id: "c", selection_number: "1", product_id: "p", capacity: 10, stock: 10 }] as never,
+    refills: new Map([["a", { at: "2026-10-19T07:00:00Z", by: "Alus", pieces: 9 }]]),
+    orgName: "Chens Garden",
+    newSince: () => undefined,
+  });
+  const of = (id: string) => built.machines.find((mc) => mc.id === id)!;
+  ok("overview: each machine has today, week and month", of("a").figures.today.revenue === 40 && of("a").figures.week.revenue === 200 && of("b").figures.month.revenue === 400);
+  ok("overview: a machine without sales in a period has 0, not missing", of("b").figures.today.revenue === 0 && of("c").figures.week.units === 0);
+  ok("overview: the total is all machines together", built.totals.week.revenue === 290 && built.totals.month.units === 120);
+  ok("overview: how full from counted slots; none for one filled by hand", of("a").fill?.percent === 50 && of("c").fill === null);
+  ok("overview: late sales without our terminal; last fill kept", of("b").late && !of("a").late && of("a").lastRefill?.pieces === 9 && of("b").lastRefill === null);
+  ok("overview: names without the org's own name", of("a").name === "a");
+}

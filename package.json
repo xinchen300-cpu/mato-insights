@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "check:guards": "node scripts/check-filler-guards.mjs",
+    "check:guards": "node scripts/check-filler-guards.mjs && node scripts/check-client-imports.mjs",
     "test:flow": "node --experimental-strip-types --no-warnings --import ./scripts/resolve-app-paths.mjs scripts/test-refill-flow.mts"
   },
   "dependencies": {
