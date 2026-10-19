@@ -171,8 +171,9 @@ alle producten is ingeklapt en "Gemiddelde verkoop" is weg.
 https://ledoux-peach.vercel.app (Vercel-project `ledoux`) is het verkoopoverzicht van Delfien (Ledoux
 Chocolaterie), die vakken huurt in Sferio en de broodautomaat. Geen git-repo: de bron staat in de
 Vercel-deployments (CLI-uploads, op te halen met `vercel api /v6/deployments/<id>/files`) en op Xins Mac.
-Sinds 20-10-2026 telt ze er haar eigen voorraad met − en +: tabel **`ledoux_stock_counts`** (RLS aan, alleen
-de servicerol). Die tabel is van die site; Vendly leest of schrijft hem niet.
+Sinds 20-10-2026 telt ze er haar eigen voorraad met − en +: tabel **`ledoux_stock_counts`**, en past ze
+haar vakken zelf aan (naam, hoeveel erin past, prijzen): tabel **`ledoux_slots`** (beide RLS aan, alleen de
+servicerol). Die tabellen zijn van die site; Vendly leest of schrijft ze niet.
 
 ## Rondes uit de cijfers gehaald (19-10-2026)
 Xin liet Alus opnieuw beginnen op niveau 1: zijn 20 oefenrondes (17–19 okt) staan in
