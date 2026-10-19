@@ -24,7 +24,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-svh lg:pl-64">
       {/* Large screens: one calm rail. The pages up top, the rest at the bottom. */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r bg-card/50 px-4 pb-5 pt-6 lg:flex">
-        <Link href={home} aria-label={filler ? m.nav.refill : m.nav.overview} className="px-3">
+        <Link href={home} aria-label={filler ? m.nav.home : m.nav.overview} className="px-3">
           <VendlyWordmark />
         </Link>
         <div className="mt-9">
@@ -54,7 +54,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       {/* Phones and tablets: the brand and three quiet icons, tabs at the bottom. */}
       <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur-xl lg:hidden">
         <div className="mx-auto flex h-14 max-w-5xl items-center gap-2 px-4 sm:px-6">
-          <Link href={home} aria-label={filler ? m.nav.refill : m.nav.overview}>
+          <Link href={home} aria-label={filler ? m.nav.home : m.nav.overview}>
             <VendlyWordmark />
           </Link>
           <div className="ml-auto flex items-center gap-1">

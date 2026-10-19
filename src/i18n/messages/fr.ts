@@ -34,6 +34,7 @@ export const fr: Messages = {
     tagline: "Les chiffres ne mentent pas",
   },
   nav: {
+    home: "Accueil",
     overview: "Aperçu",
     machines: "Distributeurs",
     products: "Produits",

@@ -118,6 +118,7 @@ export function RoundFlow({
   look = null,
   times,
   history = null,
+  filler = false,
   api = serverApi,
 }: {
   round: RefillRound;
@@ -129,6 +130,8 @@ export function RoundFlow({
   times: RouteTimes;
   /** This person's own finished rounds, for what the end of this one earned; null until it ends. */
   history?: MyRound[] | null;
+  /** A filler knows the page the round leaves to as Home. */
+  filler?: boolean;
   api?: RoundApi;
 }) {
   const { m, f } = useI18n();
@@ -655,7 +658,7 @@ export function RoundFlow({
         // Not while a machine waits out its three seconds: leaving then would never send it.
         <Link href="/refill" className="flex h-11 items-center gap-1 rounded-full bg-surface pl-2 pr-4 text-[15px] font-semibold active:scale-95">
           <ChevronLeft className="size-5" />
-          {m.nav.refill}
+          {filler ? m.nav.home : m.nav.refill}
         </Link>
       ) : (
         <span />

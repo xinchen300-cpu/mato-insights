@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   ChartColumn,
   ClipboardList,
+  House,
   LayoutDashboard,
   ListChecks,
   Package,
@@ -32,13 +33,14 @@ const items: NavItem[] = [
 ];
 
 /**
- * What a filler may open: the machines, the refill work, the vullijst (what
- * each machine needs, box by box) and what sells, in pieces. Their machines
- * open in the refill pages, so those count as the machines tab.
+ * What a filler may open: home (their start screen, the refill work), the
+ * machines, the vullijst (what each machine needs, box by box) and what sells,
+ * in pieces. Their machines open in the refill pages, so those count as the
+ * machines tab. Home was "Bijvullen" until Xin asked for a home button (19-10-2026).
  */
 const fillerItems: NavItem[] = [
+  { href: "/refill", label: "home", icon: House },
   { href: "/machines", label: "machines", icon: MachineIcon, also: "/refill/machines" },
-  { href: "/refill", label: "refill", icon: ClipboardList },
   { href: "/refill/list", label: "fillList", icon: ListChecks },
   { href: "/statistics", label: "sales", icon: ChartColumn },
 ];

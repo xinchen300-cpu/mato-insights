@@ -28,7 +28,9 @@ import { DeleteRounds, type DeletableRound } from "@/components/refill/delete-ro
 
 export async function generateMetadata() {
   const { m } = await getI18n();
-  return { title: m.refill.title };
+  // A filler knows this page as Home. Who is looking is read after the same check the page makes.
+  const orgId = await requireRefillAccess().catch(() => null);
+  return { title: orgId && (await isFiller()) ? m.nav.home : m.refill.title };
 }
 
 export default async function RefillPage() {

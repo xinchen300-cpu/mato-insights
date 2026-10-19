@@ -34,6 +34,7 @@ export const nl: Messages = {
     tagline: "Cijfers liegen niet",
   },
   nav: {
+    home: "Home",
     overview: "Overzicht",
     machines: "Automaten",
     products: "Producten",
