@@ -142,7 +142,7 @@ ok("money: too few stays too few", compareMoneySince(10, 8, 50, 20, null, "2026-
 
 // ── A filler's own figures (src/lib/filler-stats.ts) and the time rules in stats.ts ──
 import { compareTimes, isRecord, MIN_ROUNDS } from "../src/lib/stats.ts";
-import { fillerStats, levelFor, progressFrame, roundEta, roundResult, roundReward, summarizeRound, type MyRound } from "../src/lib/filler-stats.ts";
+import { fillerStats, lastMonths, levelFor, monthDays, progressFrame, roundEta, roundResult, roundReward, roundsByMonth, summarizeRound, type MyRound } from "../src/lib/filler-stats.ts";
 import { isDeepStrictEqual } from "node:util";
 
 ok("times: fewer than MIN_ROUNDS earlier rounds is no comparison", MIN_ROUNDS === 3 && compareTimes(30, [60, 62]) === "tooFew");
@@ -318,3 +318,24 @@ import { lineTake } from "../src/lib/refill-flow.ts";
 ok("take: what the slot lacks", lineTake({ capacity: 6, to_add: 2 }) === 2);
 ok("take: never more than fits, never below none", lineTake({ capacity: 4, to_add: 7 }) === 4 && lineTake({ capacity: 4, to_add: -1 }) === 0);
 
+
+// ── Month by month on the filler's Verkoop page ──
+const BXL = "Europe/Brussels";
+ok("months: the last three, newest first", isDeepStrictEqual(lastMonths(3, BXL, new Date("2026-10-19T10:00:00Z")), ["2026-10", "2026-09", "2026-08"]));
+ok("months: across the new year", isDeepStrictEqual(lastMonths(3, BXL, new Date("2026-01-05T10:00:00Z")), ["2026-01", "2025-12", "2025-11"]));
+ok("months: the month where the business stands, not in UTC", lastMonths(1, BXL, new Date("2026-10-31T23:30:00Z"))[0] === "2026-11");
+ok("months: first and last day", isDeepStrictEqual(monthDays("2026-02"), { from: "2026-02-01", to: "2026-02-28" }) && monthDays("2028-02").to === "2028-02-29" && monthDays("2026-10").to === "2026-10-31");
+{
+  const september = { ...R("old", 1, 60), readyAt: "2026-09-30T08:00:00Z", completedAt: "2026-09-30T09:00:00Z" };
+  const rounds = [R("m1", 5, 60), R("m2", 7, 50, { filled: 5 }), R("m3", 7, 40), R("m4", 9, 13 * 60), september];
+  const [oct, sep] = roundsByMonth(rounds, ["2026-10", "2026-09"], BXL);
+  ok("by month: each round in the month it ended", oct.rounds.length === 4 && sep.rounds.length === 1);
+  ok("by month: newest first", oct.rounds[0].id === "m4" && oct.rounds[3].id === "m1");
+  ok("by month: machines and pieces add up", oct.visits === 8 && oct.items === 40 + 20 + 40 + 40);
+  ok("by month: a clock left running adds no time", oct.minutes === 60 + 50 + 40);
+  ok("by month: the busiest day sums its rounds", oct.busiest?.day === "2026-10-07" && oct.busiest.items === 60);
+  const [tie] = roundsByMonth([R("t1", 12, 60), R("t2", 3, 60)], ["2026-10"], BXL);
+  ok("by month: on a tie the first day", tie.busiest?.day === "2026-10-03" && tie.busiest.items === 40);
+  const [empty] = roundsByMonth([], ["2026-08"], BXL);
+  ok("by month: an empty month has no busiest day", empty.rounds.length === 0 && empty.busiest === null && empty.minutes === 0);
+}

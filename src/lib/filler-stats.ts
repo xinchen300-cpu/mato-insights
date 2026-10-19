@@ -326,3 +326,64 @@ export function roundEta(input: {
  * one that motivates (Koo & Fishbach's "small-area" effect).
  */
 export const progressFrame = (done: number, total: number): "done" | "left" => (done * 2 < total ? "done" : "left");
+
+// ── Month by month, on the filler's Verkoop page ─────────────────────────────
+
+/** The last n calendar months where the business stands, newest first: "2026-10", "2026-09", … */
+export function lastMonths(n: number, timeZone: string, now: Date = new Date()): string[] {
+  const [year, month] = reportDay(now, timeZone).split("-").map(Number);
+  return Array.from({ length: n }, (_, back) => {
+    const index = year * 12 + month - 1 - back;
+    return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`;
+  });
+}
+
+/** A calendar month's first and last day: "2026-02" runs from 2026-02-01 to 2026-02-28. */
+export function monthDays(month: string): { from: string; to: string } {
+  const [year, index] = month.split("-").map(Number);
+  const last = new Date(Date.UTC(year, index, 0)).getUTCDate();
+  return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, "0")}` };
+}
+
+export type MonthOfRounds = {
+  month: string;
+  /** The month's rounds, newest first. */
+  rounds: (RoundResult & { readyAt: string })[];
+  visits: number;
+  items: number;
+  /** Minutes on the rounds whose time can be right (see roundResult). */
+  minutes: number;
+  /**
+   * The day the most pieces went in, and how many (Xin, 19-10-2026). A day
+   * that happened, not a pattern: nothing is claimed about the days to come.
+   * The first such day on a tie; null when nothing went in.
+   */
+  busiest: { day: string; items: number } | null;
+};
+
+/** The filler's own rounds, month by month, by the day each round ended where the business stands. */
+export function roundsByMonth(rounds: MyRound[], months: string[], timeZone: string): MonthOfRounds[] {
+  return months.map((month) => {
+    const mine = rounds
+      .filter((round) => reportDay(round.completedAt, timeZone).startsWith(`${month}-`))
+      .sort((a, b) => b.completedAt.localeCompare(a.completedAt))
+      .map((round) => ({ ...roundResult(round), readyAt: round.readyAt }));
+    const perDay = new Map<string, number>();
+    for (const round of mine) {
+      const day = reportDay(round.completedAt, timeZone);
+      perDay.set(day, (perDay.get(day) ?? 0) + round.items);
+    }
+    let busiest: MonthOfRounds["busiest"] = null;
+    for (const [day, items] of [...perDay].sort(([a], [b]) => a.localeCompare(b))) {
+      if (items > 0 && items > (busiest?.items ?? 0)) busiest = { day, items };
+    }
+    return {
+      month,
+      rounds: mine,
+      visits: mine.reduce((sum, round) => sum + round.visited, 0),
+      items: mine.reduce((sum, round) => sum + round.items, 0),
+      minutes: mine.reduce((sum, round) => sum + (round.minutes ?? 0), 0),
+      busiest,
+    };
+  });
+}

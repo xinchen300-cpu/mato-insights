@@ -950,57 +950,45 @@ export async function getLiveSold(orgId: string, options: { after?: string | nul
   }));
 }
 
-/** What sold over the last 30 days and when, as a filler sees it: pieces only, never an amount. */
+/** What sold in a stretch of days and when, as a filler sees it: pieces only, never an amount. */
 export type SoldReport = {
   from: string;
   to: string;
-  /** Linked products that sold, most pieces first. */
-  products: { productId: string; name: string | null; photoPath: string | null; units: number }[];
+  /** Machines that sold, most pieces first (Xin, 19-10-2026: machines instead of products). */
+  machines: { machineId: string; name: string; units: number }[];
   hours: { hour: number; units: number }[];
-  /**
-   * Machines where one slot takes several prices: several products go through
-   * one number there, so what sold per product is not certain (see getPriceMismatches).
-   */
-  mixed: string[];
 };
 
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
 /**
- * The best sellers and busiest hours for whoever fills (the operator or a
- * filler, never a shop): the statistics' own report, with every amount taken
- * out here, on the server, so none reaches the phone.
+ * The best-selling machines and busiest hours for whoever fills (the operator
+ * or a filler, never a shop), from the first to the last day asked: the
+ * statistics' own report, with every amount taken out here, on the server, so
+ * none reaches the phone.
  */
-export async function getSoldReport(orgId: string): Promise<SoldReport> {
+export async function getSoldReport(orgId: string, days: { from: string; to: string }): Promise<SoldReport> {
   if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
-  const admin = createAdminClient();
-  const [report, mismatches] = await Promise.all([
-    admin.rpc("stats_report", {
-      target_org: orgId,
-      period: "last30",
-      custom_from: null,
-      custom_to: null,
-      machine_filter: null,
-      business_filter: null,
-      product_filter: null,
-    }),
-    admin.rpc("price_mismatch", { target_org: orgId, days_back: 90 }),
-  ]);
-  if (report.error) throw new Error(report.error.message);
-  if (mismatches.error) throw new Error(mismatches.error.message);
-  const data = report.data as StatsReport;
+  if (!DAY.test(days.from) || !DAY.test(days.to) || days.to < days.from) throw new Error("invalid range");
+  const { data, error } = await createAdminClient().rpc("stats_report", {
+    target_org: orgId,
+    period: "custom",
+    custom_from: days.from,
+    custom_to: days.to,
+    machine_filter: null,
+    business_filter: null,
+    product_filter: null,
+  });
+  if (error) throw new Error(error.message);
+  const report = data as StatsReport;
   return {
-    from: data.cur_start,
-    to: data.cur_end,
-    // By pieces, as the statistics rank them; the revenue that breaks a tie there is not for this screen.
-    products: data.by_product
-      .filter((row) => row.product_id && row.units > 0)
-      .sort((a, b) => b.units - a.units)
-      .map((row) => ({ productId: row.product_id!, name: row.product_name, photoPath: row.photo_path, units: row.units })),
-    hours: data.by_hour.map((row) => ({ hour: row.hour, units: row.units })),
-    mixed: [
-      ...new Set(
-        ((mismatches.data ?? []) as PriceMismatch[]).filter((row) => Number(row.spread) > 0).map((row) => row.machine_name),
-      ),
-    ],
+    from: report.cur_start,
+    to: report.cur_end,
+    machines: report.by_machine
+      .filter((row) => row.units > 0)
+      .sort((a, b) => b.units - a.units || a.machine_name.localeCompare(b.machine_name))
+      .map((row) => ({ machineId: row.machine_id, name: row.machine_name, units: row.units })),
+    hours: report.by_hour.map((row) => ({ hour: row.hour, units: row.units })),
   };
 }
 
