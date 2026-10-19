@@ -42,7 +42,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
   // A filler gets what sells and when, in pieces and without money.
   if (await isFiller()) {
     const fillerOrg = await requireRefillAccess();
-    return <FillerSales orgId={fillerOrg} />;
+    return <FillerSales orgId={fillerOrg} month={(await searchParams).month} />;
   }
   const raw = await searchParams;
   const { m, f } = await getI18n();

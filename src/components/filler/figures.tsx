@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, ChevronRight, Medal, PackageOpen, Pencil, Route, TriangleAlert, Undo2 } from "lucide-react";
+import { Check, ChevronRight, Flag, Medal, PackageOpen, Pencil, Route, TriangleAlert } from "lucide-react";
 import { Avatar, ListRow, RowList } from "@/components/list-row";
 import { MachineIcon } from "@/components/machine/machine-icon";
 import { ProgressRing } from "@/components/motion/success";
@@ -260,7 +260,7 @@ export function HowItWorks({ className }: { className?: string }) {
   const steps = [
     { icon: PackageOpen, title: t.howPick, hint: t.howPickHint },
     { icon: MachineIcon, title: t.howFill, hint: t.howFillHint },
-    { icon: Undo2, title: t.howBack, hint: t.howBackHint },
+    { icon: Flag, title: t.howBack, hint: t.howBackHint },
   ];
   return (
     <section className={cn("surface-card p-5 sm:p-6", className)}>

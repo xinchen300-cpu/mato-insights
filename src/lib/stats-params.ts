@@ -12,6 +12,8 @@ export type StatsSearchParams = {
   product?: string;
   /** The year the month-by-month overview shows. */
   year?: string;
+  /** A filler's Verkoop page: one of the last three months ("2026-10"), or all three without it. */
+  month?: string;
 };
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
