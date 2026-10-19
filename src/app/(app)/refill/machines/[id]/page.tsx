@@ -34,8 +34,10 @@ export default async function FillMachinePage({
 }) {
   const orgId = await requireRefillAccess();
   const { id } = await params;
-  // Opened from the machines page: back goes there, else to the refill page.
-  const fromMachines = (await searchParams).from === "machines";
+  // Opened from the machines page or (the owner) from the machine's own page: back goes there, else to the refill page.
+  const from = (await searchParams).from;
+  const fromMachines = from === "machines";
+  const fromMachine = from === "machine";
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const { m, f } = await getI18n();
   const [machines, slots, lastSales, open, dishes] = await Promise.all([
@@ -61,8 +63,8 @@ export default async function FillMachinePage({
   return (
     <>
       <PageHeader
-        backHref={fromMachines ? "/machines" : "/refill"}
-        backLabel={fromMachines ? m.machines.title : m.refill.title}
+        backHref={fromMachine ? `/machines/${id}` : fromMachines ? "/machines" : "/refill"}
+        backLabel={fromMachine ? machine.name : fromMachines ? m.machines.title : m.refill.title}
         title={machine.name}
       />
       <div className="flex flex-col gap-8">

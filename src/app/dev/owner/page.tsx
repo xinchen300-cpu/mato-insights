@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { LiveSales } from "@/components/live-sales";
 import { MachineRevenue } from "@/components/overview/machine-revenue";
+import { RefillLog } from "@/components/stats/refill-log";
+import { getI18n } from "@/i18n/server";
 import type { LiveSale } from "@/lib/data";
 import { PERIODS, revenueByMachine, type PeriodKey } from "@/lib/overview";
 import type { Machine, SlotStock, StatsReport } from "@/lib/types";
@@ -11,9 +13,10 @@ import type { Machine, SlotStock, StatsReport } from "@/lib/types";
  * revenueByMachine, so what breaks there breaks here too. Nothing is read from
  * or written to a database. Only on a developer's own machine.
  */
-export default function OwnerPreviewPage() {
+export default async function OwnerPreviewPage() {
   if (process.env.NODE_ENV === "production") notFound();
-  const { reports, machines, stock, refills, sales } = sample();
+  const { m, f } = await getI18n();
+  const { reports, machines, stock, refills, sales, visits } = sample();
   const revenue = revenueByMachine({
     reports,
     machines,
@@ -26,6 +29,7 @@ export default function OwnerPreviewPage() {
     <main className="mx-auto flex max-w-2xl flex-col gap-8 px-4 py-8">
       <MachineRevenue machines={revenue.machines} totals={revenue.totals} />
       <LiveSales initial={sales} />
+      <RefillLog visits={visits} names={new Map(revenue.machines.map((mc) => [mc.id, mc.name]))} m={m} f={f} />
     </main>
   );
 }
@@ -114,5 +118,14 @@ function sample() {
     productName: dishes[i % dishes.length],
     selection: String(11 + (i % 9)),
   }));
-  return { reports, machines, stock, refills, sales };
+  // Three days of rounds: every machine around nine, Torhout by hand in the afternoon.
+  const visits = [0, 1, 2].flatMap((day) =>
+    fleet.map((mc, i) => ({
+      machineId: mc.id,
+      at: iso(day * 24 * 60 + (mc.fill === null ? 60 : 6 * 60 - i * 20)),
+      pieces: 4 + ((i * 7 + day * 3) % 15),
+      by: "Alus",
+    })),
+  );
+  return { reports, machines, stock, refills, sales, visits };
 }

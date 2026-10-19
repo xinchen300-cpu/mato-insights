@@ -107,6 +107,8 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   // A shared machine: every slot belongs to one of its two businesses.
   const shared = Boolean(machine.shared_business_id);
   const operator = await isOperator();
+  // The owner fills and counts on the filler's page, with its big minus and plus (Xin, 20-10-2026); a shop keeps its own form.
+  const refillHref = operator ? `/refill/machines/${id}?from=machine` : `/machines/${id}/refill`;
   // On a shared fridge a shop picks products for its own slots only.
   const ownSlots = shared ? await getOwnSelections(orgId, id) : null;
   const ownerIds = [machine.business_id, machine.shared_business_id].filter((id): id is string => Boolean(id));
@@ -162,7 +164,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
         actions={
           // One action up here; correcting and the layout sit under the slots they change.
           hasLayout && tracksStock ? (
-            <Link href={`/machines/${id}/refill`} className={buttonVariants()}>
+            <Link href={refillHref} className={buttonVariants()}>
               <ClipboardList />
               {m.machines.refill}
             </Link>
@@ -278,7 +280,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
               />
             </div>
             <div className="mt-6 flex flex-wrap gap-2">
-              <Link href={`/machines/${id}/refill?mode=correction`} className={buttonVariants({ variant: "secondary" })}>
+              <Link href={operator ? refillHref : `/machines/${id}/refill?mode=correction`} className={buttonVariants({ variant: "secondary" })}>
                 <Pencil />
                 {m.machines.correct}
               </Link>

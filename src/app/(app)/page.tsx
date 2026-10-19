@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarClock, ChefHat, ChevronRight, CircleDashed, ClipboardList, Link2, ListChecks, PackageOpen, TriangleAlert, WifiOff, type LucideIcon } from "lucide-react";
+import { CalendarClock, ChefHat, ChevronRight, CircleDashed, Link2, ListChecks, PackageOpen, TriangleAlert, WifiOff, type LucideIcon } from "lucide-react";
 import { RevenueChart } from "@/components/charts/revenue-chart";
 import { Avatar, ListRow, RowList } from "@/components/list-row";
 import { MachineRevenue } from "@/components/overview/machine-revenue";
 import { revenueByMachine } from "@/lib/overview";
+import { startable } from "@/lib/refill-start";
+import { StartRound } from "./refill/list/start-round";
 import { InsightsList } from "@/components/insights-list";
 import { SetupGuide, nextSetupStep } from "@/components/setup-guide";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
@@ -24,6 +26,7 @@ import {
   getMachineStock,
   getStatsReport,
   getUnassigned,
+  getRoundSettings,
   getSetupState,
   hasProducerDishes,
   type OpenRound,
@@ -107,6 +110,7 @@ export default async function OverviewPage() {
     getLiveSales(orgId, { limit: LIVE_ROWS }),
     getLastRefills(orgId),
     hasProducerDishes(orgId),
+    operator ? getRoundSettings(orgId) : Promise.resolve(null),
   ]);
   // A redirect below leaves it unawaited: a failure in it must not go unhandled.
   loads.catch(() => undefined);
@@ -124,7 +128,7 @@ export default async function OverviewPage() {
     orgName = (org?.name as string | null) ?? null;
   }
 
-  const [openRounds, today, week, month, weeks, machines, stock, unassigned, expiring, lastSales, syncedAt, setup, recentSales, refills, kitchen] =
+  const [openRounds, today, week, month, weeks, machines, stock, unassigned, expiring, lastSales, syncedAt, setup, recentSales, refills, kitchen, roundSettings] =
     await loads;
   // Only the rounds actually out (started), and only for the operator.
   const liveRounds = openRounds.filter((round) => round.readyAt);
@@ -278,6 +282,8 @@ export default async function OverviewPage() {
   // 19-10-2026: per machine rather than one total), how full it is and when it
   // was last filled; all of them together is one line above.
   const revenue = revenueByMachine({ reports: { today, week, month }, machines, stock, refills, orgName, newSince });
+  // What "Vul route beginnen" puts on a round, as on the filler's home.
+  const roundStart = startable(machines, stock, openRounds, roundSettings?.route ?? []);
 
   return (
     <>
@@ -298,13 +304,11 @@ export default async function OverviewPage() {
       <div className="flex flex-col gap-8">
         {/* A round that is out right now comes first: who, how long, where. */}
         {liveRounds.length > 0 && <LiveRounds rounds={liveRounds} refresh={false} />}
-        {/* The owner's day in three taps: a round, the kitchen's order, what each machine needs. */}
+        {/* The owner's day in a few taps: the filler's start button (Xin, 20-10-2026), the kitchen's order, what each machine needs. */}
         {operator && (
+          <div className="flex flex-col gap-3">
+            {roundStart.ids.length > 0 && <StartRound fill label={m.refill.beginFilling} machineIds={roundStart.ids} />}
           <nav aria-label={m.overview.quick} className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-            <Link href="/refill/new" className={cn(buttonVariants({ size: "lg" }), "shrink-0")}>
-              <ClipboardList />
-              {m.refill.newRound}
-            </Link>
             {kitchen && (
               <Link href="/refill/kitchen" className={cn(buttonVariants({ size: "lg", variant: "outline" }), "shrink-0")}>
                 <ChefHat />
@@ -316,6 +320,7 @@ export default async function OverviewPage() {
               {m.nav.fillList}
             </Link>
           </nav>
+          </div>
         )}
         {/* What needs doing today first, above the money (UX review, 17-10-2026); a long list folds. */}
         {todos.length > 0 && (

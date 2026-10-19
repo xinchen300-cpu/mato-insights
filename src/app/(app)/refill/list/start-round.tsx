@@ -14,7 +14,18 @@ import { createRefillSheet } from "../actions";
  * One tap to a round with every machine on it that needs something: from the
  * vullijst, and big at the top of the filler's home ("Begin met vullen").
  */
-export function StartRound({ machineIds, label, big = false }: { machineIds: string[]; label?: string; big?: boolean }) {
+export function StartRound({
+  machineIds,
+  label,
+  big = false,
+  fill = false,
+}: {
+  machineIds: string[];
+  label?: string;
+  big?: boolean;
+  /** The operator fills it themselves: into the round, as a filler (a filler always is). */
+  fill?: boolean;
+}) {
   const { m } = useI18n();
   const [result, setResult] = useState<"empty" | "locked" | "failed" | null>(null);
   const [pending, startTransition] = useTransition();
@@ -23,7 +34,7 @@ export function StartRound({ machineIds, label, big = false }: { machineIds: str
     setResult(null);
     startTransition(async () => {
       try {
-        const outcome = await createRefillSheet(machineIds);
+        const outcome = await createRefillSheet(machineIds, { fill });
         if (outcome && "empty" in outcome) setResult("empty");
         if (outcome && "locked" in outcome) setResult("locked");
       } catch (error) {
