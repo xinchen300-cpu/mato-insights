@@ -42,6 +42,8 @@ export function ProductGrid({
   producers = [],
   title,
   subtitle,
+  backHref,
+  backLabel,
   actions,
   notice,
 }: {
@@ -54,6 +56,9 @@ export function ProductGrid({
   /** The page header lives here so "add" can sit next to the page's other actions. */
   title: string;
   subtitle?: string;
+  /** Where the page was opened from, now that it is not in the menu. */
+  backHref?: string;
+  backLabel?: string;
   actions?: ReactNode;
   /** Shown between the header and the list, e.g. the unassigned-selections row. */
   notice?: ReactNode;
@@ -96,6 +101,8 @@ export function ProductGrid({
       <PageHeader
         title={title}
         subtitle={subtitle}
+        backHref={backHref}
+        backLabel={backLabel}
         actions={
           <>
             {actions}

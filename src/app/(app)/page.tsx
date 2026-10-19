@@ -1,16 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CalendarClock, ChefHat, ChevronRight, CircleDashed, Link2, ListChecks, PackageOpen, TriangleAlert, WifiOff, type LucideIcon } from "lucide-react";
-import { RevenueChart } from "@/components/charts/revenue-chart";
 import { Avatar, ListRow, RowList } from "@/components/list-row";
 import { MachineRevenue } from "@/components/overview/machine-revenue";
 import { revenueByMachine } from "@/lib/overview";
-import { startable } from "@/lib/refill-start";
+import { ownRound, startable } from "@/lib/refill-start";
 import { StartRound } from "./refill/list/start-round";
 import { InsightsList } from "@/components/insights-list";
 import { SetupGuide, nextSetupStep } from "@/components/setup-guide";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
 import { LiveRounds } from "@/components/refill/live-rounds";
+import { NextRound } from "@/components/refill/next-round";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { DISPLAY_TIME_ZONE, fmt, plural } from "@/i18n/format";
@@ -34,7 +34,7 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { buildInsights } from "@/lib/insights";
-import { fillDays, lastFullWeeks } from "@/lib/stats";
+import { lastFullWeeks } from "@/lib/stats";
 import { terminalStatus } from "@/lib/terminal-status";
 import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
 import { fillLevel, needsAttention, slotsFilledByVendly } from "@/lib/stock";
@@ -266,12 +266,6 @@ export default async function OverviewPage() {
       : []),
   ];
 
-  const chartData = fillDays(month).map((d) => ({
-    key: d.day,
-    label: f.dayMonth(`${d.day}T12:00:00Z`),
-    revenue: d.revenue,
-  }));
-
   // Only a sync that stalled gets a word under the title.
   const stale = isStale(syncedAt);
   // Something that only began selling after the earlier period started gets
@@ -284,12 +278,15 @@ export default async function OverviewPage() {
   const revenue = revenueByMachine({ reports: { today, week, month }, machines, stock, refills, orgName, newSince });
   // What "Vul route beginnen" puts on a round, as on the filler's home.
   const roundStart = startable(machines, stock, openRounds, roundSettings?.route ?? []);
+  // Their own open round holds its machines, so the start button alone would
+  // vanish while it is open: the round to carry on with takes its place.
+  const own = ownRound(openRounds);
 
   return (
     <>
-      {/* New sales arrive within a minute; the page shows them without a reload. */}
-      {/* One timer for the page: quicker while a round is out, so the filler is seen moving on. */}
-      <AutoRefresh every={liveRounds.length ? 20_000 : 30_000} />
+      {/* Only while a round is out, so the filler is seen moving on; new sales come in by themselves
+          (LiveSales), and a page reloading itself every half minute made everything feel slow. */}
+      {liveRounds.length > 0 && <AutoRefresh every={20_000} />}
       <PageHeader
         title={m.overview.title}
         subtitle={
@@ -299,15 +296,26 @@ export default async function OverviewPage() {
         }
       />
 
-      {/* What needs doing, then the money machine by machine, what just sold,
-          the month day by day. One thing per block (Xin, 19-10-2026). */}
+      {/* What needs doing, then the money machine by machine and what just sold.
+          One thing per block (Xin, 19-10-2026); the month's chart went (20-10-2026). */}
       <div className="flex flex-col gap-8">
         {/* A round that is out right now comes first: who, how long, where. */}
-        {liveRounds.length > 0 && <LiveRounds rounds={liveRounds} refresh={false} />}
+        {liveRounds.some((round) => round.id !== own?.id) && (
+          <LiveRounds rounds={liveRounds.filter((round) => round.id !== own?.id)} refresh={false} />
+        )}
         {/* The owner's day in a few taps: the filler's start button (Xin, 20-10-2026), the kitchen's order, what each machine needs. */}
         {operator && (
           <div className="flex flex-col gap-3">
-            {roundStart.ids.length > 0 && <StartRound fill label={m.refill.beginFilling} machineIds={roundStart.ids} />}
+            {own ? (
+              <NextRound round={own} m={m} />
+            ) : roundStart.ids.length > 0 ? (
+              <StartRound fill label={m.refill.beginFilling} machineIds={roundStart.ids} />
+            ) : roundStart.busy.size > 0 ? (
+              // Someone else's round holds every machine: say so, rather than nothing.
+              <Link href="/refill" className="px-1 text-[14.5px] text-muted-foreground underline-offset-4 hover:underline">
+                {m.refill.allOnRound}
+              </Link>
+            ) : null}
           <nav aria-label={m.overview.quick} className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
             {kitchen && (
               <Link href="/refill/kitchen" className={cn(buttonVariants({ size: "lg", variant: "outline" }), "shrink-0")}>
@@ -350,14 +358,6 @@ export default async function OverviewPage() {
 
         {/* What just sold, sliding in as it happens; "Meer zien" opens the day's list. */}
         <LiveSales initial={recentSales} />
-
-        {/* The month, day by day. */}
-        <section className="surface-card px-3 pb-4 pt-5 sm:px-5">
-          <h2 className="px-2 text-[17px] font-semibold tracking-[-0.02em]">{m.overview.revenueChart}</h2>
-          <div className="-mx-1 mt-4">
-            <RevenueChart data={chartData} height={200} />
-          </div>
-        </section>
 
         <InsightsList insights={goodToKnow} m={m} f={f} />
       </div>

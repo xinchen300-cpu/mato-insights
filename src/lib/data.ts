@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { denyFillerAccess, getScope, getSessionUser, isFiller, isOperator, requireOperator, requireRefillAccess, type Role } from "@/lib/org";
 import { displayName } from "@/lib/people";
 import { cleanRoundSettings, type RoundSettings } from "@/lib/round-settings";
-import { lineTake, onlyMine, roundOrder, roundTimings, slotKey, type Average, type FlowLine, type RoundTimings, type ShopView, type StopRecord } from "@/lib/refill-flow";
+import { lineTake, onlyMine, roundOrder, roundTimings, slotKey, stopChanges, type Average, type FlowLine, type RoundTimings, type ShopView, type StopRecord } from "@/lib/refill-flow";
 import type { MyRound } from "@/lib/filler-stats";
 import { terminalStatus, type TerminalStatus } from "@/lib/terminal-status";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
@@ -176,6 +176,11 @@ export type RefillRound = {
   slots: RoundSlot[];
   picked: Record<string, number>;
   stops: Record<string, StopRecord>;
+  /**
+   * What the finished machines changed per slot (slotKey → pieces): stock now
+   * less this is how it stood before, for "Terugzetten naar …%" (20-10-2026).
+   */
+  changed: Record<string, number>;
   /** How the operator wants the round to go (Werkwijze). */
   settings: RoundSettings;
   /** What the operator wrote for this one round, for whoever fills it. */
@@ -208,7 +213,7 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
   const machineIds = (sheet.machine_ids ?? []) as string[];
   // The full ones too: their place on the route and how full they are now.
   const order = roundOrder((sheet.chosen_machine_ids ?? []) as string[], machineIds);
-  const [{ data: machineRows }, stock, lastSales, { data: org }] = await Promise.all([
+  const [{ data: machineRows }, stock, lastSales, { data: org }, { data: events }] = await Promise.all([
     admin
       .from("machines")
       .select("id, name, photo_path, last_connected_at, last_disconnected_at, type, address")
@@ -217,6 +222,15 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
     getMachineStock(orgId, order.length ? order : [NOTHING]),
     getLastSales(orgId),
     admin.from("organizations").select("refill_settings").eq("id", orgId).maybeSingle(),
+    // Only an open round can still be put back.
+    sheet.completed_at
+      ? Promise.resolve({ data: [] })
+      : admin
+          .from("stock_events")
+          .select("machine_id, selection_number, delta, note, occurred_at")
+          .eq("org_id", orgId)
+          .eq("refill_sheet_id", sheetId)
+          .limit(2000),
   ]);
   const byId = new Map((machineRows ?? []).map((row) => [row.id as string, row]));
   const live = new Map(stock.map((slot) => [slotKey(slot.machine_id, slot.selection_number), slot]));
@@ -278,6 +292,15 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
       })),
     picked: (sheet.box ?? {}) as Record<string, number>,
     stops: (sheet.stops ?? {}) as Record<string, StopRecord>,
+    changed: stopChanges(
+      (events ?? []).map((event) => ({
+        machine_id: event.machine_id as string,
+        selection_number: event.selection_number as string,
+        delta: Number(event.delta ?? 0),
+        note: (event.note as string | null) ?? null,
+        occurred_at: event.occurred_at as string,
+      })),
+    ),
     settings: cleanRoundSettings(org?.refill_settings),
     notes: (sheet.notes as string | null)?.trim() || null,
   };
@@ -313,6 +336,8 @@ export type OpenRound = {
   readyAt: string | null;
   /** Who started it ("Start ronde"), as they gave their name. */
   filledBy: string | null;
+  /** Made, or started, by whoever is looking: theirs to carry on with. */
+  mine: boolean;
   machines: { id: string; name: string; done: boolean; doneAt: string | null; skipped: boolean }[];
 };
 
@@ -325,25 +350,30 @@ export async function getOpenRounds(orgId: string): Promise<OpenRound[]> {
   const admin = createAdminClient();
   // The names come alongside the rounds, not after them: every machine of the
   // organisation, of which only the rounds' own are used.
-  const [{ data: sheets }, { data: machines }] = await Promise.all([
+  const [{ data: sheets }, { data: machines }, me] = await Promise.all([
     admin
       .from("refill_sheets")
-      .select("id, created_at, ready_at, machine_ids, stops, filled_by")
+      .select("id, created_at, ready_at, machine_ids, stops, filled_by, created_by")
       .eq("org_id", orgId)
       .eq("flow_version", 2)
       .is("completed_at", null)
       .order("created_at", { ascending: false })
       .limit(20),
     admin.from("machines").select("id, name").eq("org_id", orgId),
+    getSessionUser(),
   ]);
   const name = new Map((machines ?? []).map((row) => [row.id as string, row.name as string]));
+  const myName = displayName(me);
   return (sheets ?? []).map((sheet) => {
     const stops = (sheet.stops ?? {}) as Record<string, StopRecord>;
+    const createdBy = (sheet.created_by as string | null) ?? null;
     return {
       id: sheet.id as string,
       createdAt: sheet.created_at as string,
       readyAt: (sheet.ready_at as string | null) ?? null,
       filledBy: (sheet.filled_by as string | null) ?? null,
+      // Made by this person; a round from before 20-10-2026 knows only who started it.
+      mine: me !== null && (createdBy === me.id || (createdBy === null && myName !== null && sheet.filled_by === myName)),
       machines: ((sheet.machine_ids ?? []) as string[])
         .filter((id) => name.has(id))
         .map((id) => ({

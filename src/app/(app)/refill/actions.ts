@@ -58,6 +58,8 @@ export async function createRefillSheet(
       lines,
       // Filled step by step, machine by machine (/vullen).
       flow_version: 2,
+      // Whose round it is, so they find it back to carry on (20-10-2026).
+      created_by: (await getSessionUser())?.id ?? null,
     })
     .select("id")
     .single();

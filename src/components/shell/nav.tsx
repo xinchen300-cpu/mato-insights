@@ -8,7 +8,6 @@ import {
   House,
   LayoutDashboard,
   ListChecks,
-  Package,
   type LucideIcon,
 } from "lucide-react";
 import { MachineIcon } from "@/components/machine/machine-icon";
@@ -24,10 +23,10 @@ type NavItem = {
   also?: string;
 };
 
+/** Producten left (Xin, 20-10-2026): a slot's product is set in the layout; the page opens from Automaten. */
 const items: NavItem[] = [
   { href: "/", label: "overview", icon: LayoutDashboard },
-  { href: "/machines", label: "machines", icon: MachineIcon },
-  { href: "/products", label: "products", icon: Package },
+  { href: "/machines", label: "machines", icon: MachineIcon, also: "/products" },
   { href: "/refill", label: "refill", icon: ClipboardList },
   { href: "/statistics", label: "statistics", icon: ChartColumn },
 ];
@@ -101,7 +100,7 @@ export function MobileNav({ filler = false }: { filler?: boolean }) {
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
-      <div className={cn("mx-auto grid max-w-xl px-2", filler ? "grid-cols-4" : "grid-cols-5")}>
+      <div className="mx-auto grid max-w-xl grid-cols-4 px-2">
         {list.map(({ href, label, icon: Icon }) => {
           const active = href === current;
           return (

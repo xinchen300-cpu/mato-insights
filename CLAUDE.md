@@ -112,7 +112,7 @@ databank bleef is toevoegend en ongebruikt: `stock_batches.made_on`, `fridge_eve
 zoals ervoor; `organizations.cost_per_hour` bleef €16 (Xin: "ik betaal mijn chauffeur 16 euro per uur").
 
 ## Overzicht van de uitbater (19-10-2026)
-Xin: "omzet per automaat, niet één totaal". Het overzicht toont eerst snelknoppen (Nieuwe ronde, Keukenlijst,
+Xin: "omzet per automaat, niet één totaal". Het overzicht toont eerst snelknoppen (sinds 20-10 Vul route beginnen, Keukenlijst,
 Vullijst), de meldingen (4, de rest onder "Nog … meldingen"), dan **Omzet per automaat** met Vandaag/Week/Maand
 (`src/components/overview/machine-revenue.tsx`): per automaat geld, stuks, alleen een échte verandering, hoe vol,
 en wanneer gevuld (`last_refills`, `getLastRefills`, alleen voor de uitbater). Het totaal is één regel erboven.
@@ -133,6 +133,23 @@ op een automaat openen voor de uitbater Alus' pagina met de grote − en + (`/re
 wordt nergens meer gelinkt. **Statistieken**: per automaat staat nu onder het totaal, daarna **Bijvullingen**
 (`refill_visits`, `getRefillVisits`, alleen de uitbater): per dag wanneer, hoeveel stuks, door wie; de lijst van
 alle producten is ingeklapt en "Gemiddelde verkoop" is weg.
+
+**Daarna (20-10-2026, Xin: "vul route beginnen verdwijnt soms", "alles traag"):**
+- Een eigen open ronde houdt zijn automaten bezet, dus de startknop alleen verdween. Nu staat daar **Ga verder
+  met vullen** (`NextRound` in `src/components/refill/next-round.tsx`, `ownRound`). "Eigen" komt uit
+  `refill_sheets.created_by` (nieuw, toevoegend; oudere rondes vallen terug op `filled_by` = je naam). Houdt
+  andermans ronde alles bezet, dan zegt het overzicht dat.
+- **Terugzetten naar …%** in een ronde, alleen voor de uitbater, op een automaat die klaar is: dezelfde
+  `refill_reopen_stop` als "Aanpassen", maar zonder de ingevulde waarden. "Was X%" = voorraad nu min
+  `RefillRound.changed` (`stopChanges`, de `stock_events` van de ronde sinds de laatste `reopened`). Alleen zolang
+  de ronde open is.
+- Het overzicht heeft geen maandgrafiek meer en ververst zichzelf alleen nog terwijl een ronde loopt (Net verkocht
+  haalt nieuwe verkopen zelf op). **Producten** staat niet meer in het menu: een knop op Automaten.
+- Snelheid zat in de databank: `transactions` is 181 MB door `raw_json`. Smalle, gedeeltelijke indexen
+  (`transactions_sales_slim_idx`, `transactions_recent_slim_idx`, `transactions_new_sales_idx`; alleen
+  `APPROVED` en `amount > 0`, met de gelezen kolommen in `include`) brachten `stats_report` van ±0,9–3,7 s naar
+  40–250 ms en de poll van Net verkocht van 170 naar 7 ms. Een nieuwe query op `transactions` die traag is:
+  kijk eerst of hij zo'n index kan gebruiken.
 
 ## Rondes uit de cijfers gehaald (19-10-2026)
 Xin liet Alus opnieuw beginnen op niveau 1: zijn 20 oefenrondes (17–19 okt) staan in
