@@ -13,6 +13,9 @@ export const intlLocale: Record<Locale, string> = {
   fr: "fr-BE",
 };
 
+/** What a filler reads: Dutch or French, never English (Xin, 19-10-2026). */
+export const fillerLocales = ["nl", "fr"] as const satisfies readonly Locale[];
+
 export function isLocale(value: unknown): value is Locale {
   return typeof value === "string" && (locales as readonly string[]).includes(value);
 }

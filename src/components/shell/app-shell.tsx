@@ -4,7 +4,9 @@ import { VendlyWordmark } from "@/components/brand/vendly-mark";
 import { getI18n } from "@/i18n/server";
 import { isFiller } from "@/lib/org";
 import { createClient } from "@/lib/supabase/server";
+import { fillerLocales } from "@/i18n/config";
 import { HideNumbers } from "./hide-numbers";
+import { LanguageToggle } from "./language-toggle";
 import { MobileNav, SidebarNav } from "./nav";
 import { SignOutForm } from "./sign-out";
 
@@ -31,6 +33,12 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
           <SidebarNav filler={filler} />
         </div>
         <div className="mt-auto flex flex-col gap-1">
+          {/* A filler picks Dutch or French here; the owner does so in the settings. */}
+          {filler && (
+            <div className="px-3 pb-2">
+              <LanguageToggle only={fillerLocales} />
+            </div>
+          )}
           {!filler && (
             <>
               <HideNumbers variant="row" />
@@ -58,6 +66,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
             <VendlyWordmark />
           </Link>
           <div className="ml-auto flex items-center gap-1">
+            {filler && <LanguageToggle only={fillerLocales} />}
             {!filler && (
               <>
                 <HideNumbers />
