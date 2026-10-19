@@ -16,9 +16,9 @@ const APP = join(SRC, "app");
 
 // Reachable without an account, or no data at all: nothing to guard. The /dev
 // previews run on made-up data and answer "not found" in production.
-const PUBLIC_PAGES = [/^login\//, /^signup\//, /^auth\//, /^r\//, /^b\//, /^p\//, /^pwa-icon\//, /^api\/mollie\//, /^dev\//, /^offline\//];
+const PUBLIC_PAGES = [/^login\//, /^signup\//, /^auth\//, /^r\//, /^b\//, /^pwa-icon\//, /^api\/mollie\//, /^dev\//, /^offline\//];
 // Server actions that are public on purpose (token links, signup, language, password check).
-const PUBLIC_ACTIONS = ["app/r/[token]/actions.ts", "app/p/[token]/actions.ts", "app/signup/actions.ts", "app/password-actions.ts", "i18n/actions.ts"];
+const PUBLIC_ACTIONS = ["app/r/[token]/actions.ts", "app/signup/actions.ts", "app/password-actions.ts", "i18n/actions.ts"];
 
 const GUARDS = [
   "denyFiller",

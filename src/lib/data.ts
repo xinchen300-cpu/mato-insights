@@ -1555,12 +1555,9 @@ export type ProductionList = {
   lines: ProductionLine[];
 };
 
-/** A producer's link: long and random, so it cannot be guessed. */
-const PRODUCER_TOKEN = /^[A-Za-z0-9_-]{24,64}$/;
-
 /**
- * One producer's list, read with the service key. Not exported: the two
- * callers below decide who may see it (the operator, or whoever holds the link).
+ * One producer's list, read with the service key. Not exported: the callers
+ * below are the operator's own, and check that first.
  */
 async function productionFor(orgId: string, producerId: string, producerName: string): Promise<ProductionList> {
   const admin = createAdminClient();
@@ -1624,12 +1621,12 @@ async function productionFor(orgId: string, producerId: string, producerName: st
   return { producerId, producerName, fillAt: plan.fillAt.toISOString(), lines: plan.lines };
 }
 
-/** The operator's production lists: one per producer that makes something, with its link if it has one. */
-export async function getProductionLists(orgId: string): Promise<(ProductionList & { token: string | null })[]> {
+/** The operator's production lists: one per producer that makes something. Only the operator sees them. */
+export async function getProductionLists(orgId: string): Promise<ProductionList[]> {
   await requireOperator();
   const admin = createAdminClient();
   const [{ data: producers, error }, { data: made }] = await Promise.all([
-    admin.from("producers").select("id, name, list_token").eq("org_id", orgId).order("name"),
+    admin.from("producers").select("id, name").eq("org_id", orgId).order("name"),
     admin.from("products").select("producer_id").eq("org_id", orgId).eq("archived", false).not("producer_id", "is", null),
   ]);
   if (error) throw new Error(error.message);
@@ -1637,46 +1634,58 @@ export async function getProductionLists(orgId: string): Promise<(ProductionList
   return Promise.all(
     (producers ?? [])
       .filter((producer) => busy.has(producer.id as string))
-      .map(async (producer) => ({
-        ...(await productionFor(orgId, producer.id as string, producer.name as string)),
-        token: (producer.list_token as string | null) ?? null,
-      })),
+      .map((producer) => productionFor(orgId, producer.id as string, producer.name as string)),
   );
 }
 
-/** The producer behind a link, or null: a wrong, revoked or blocked link opens nothing. */
-async function producerByToken(token: string): Promise<{ id: string; name: string; org_id: string } | null> {
-  if (!PRODUCER_TOKEN.test(token)) return null;
-  const { data } = await createAdminClient().from("producers").select("id, name, org_id").eq("list_token", token).maybeSingle();
-  if (!data || isBlockedOrg(data.org_id as string)) return null;
-  return { id: data.id as string, name: data.name as string, org_id: data.org_id as string };
-}
+export type OrderLine = { name: string; qty: number };
 
-/** The list a producer opens with their link, without an account. */
-export async function getProductionByToken(token: string): Promise<ProductionList | null> {
-  const producer = await producerByToken(token);
-  return producer ? productionFor(producer.org_id, producer.id, producer.name) : null;
-}
-
-/** The producer's link, made the first time it is asked for and the same every day after. */
-export async function ensureProducerLink(orgId: string, producerId: string): Promise<string> {
+/**
+ * The operator passes tonight's list on to the kitchen (Xin, 19-10-2026: the
+ * kitchen types nothing). What is passed on counts as made tonight, so the
+ * fridge follows without anyone counting. The amounts are worked out again
+ * here, never taken from the screen; passing on twice only adds what became
+ * needed since, because what was passed on is already in the fridge. Returns
+ * everything passed on today, for the message to the kitchen.
+ */
+export async function sendProductionOrder(orgId: string, producerId: string): Promise<OrderLine[]> {
   await requireOperator();
   const admin = createAdminClient();
-  const { data } = await admin.from("producers").select("list_token").eq("org_id", orgId).eq("id", producerId).maybeSingle();
-  if (!data) throw new Error("Not found");
-  if (data.list_token) return data.list_token as string;
-  const bytes = crypto.getRandomValues(new Uint8Array(24));
-  const token = btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  const { error } = await admin.from("producers").update({ list_token: token }).eq("org_id", orgId).eq("id", producerId);
+  const { data: producer } = await admin.from("producers").select("id, name").eq("org_id", orgId).eq("id", producerId).maybeSingle();
+  if (!producer) throw new Error("Not found");
+  const list = await productionFor(orgId, producerId, producer.name as string);
+  const today = reportDay(new Date(), DISPLAY_TIME_ZONE);
+  const by = displayName(await getSessionUser())?.slice(0, 80) ?? null;
+  const rows = list.lines
+    .filter((line) => line.make > 0)
+    .map((line) => ({ org_id: orgId, producer_id: producerId, product_id: line.productId, kind: "made", qty: line.make, made_on: today, by_name: by }));
+  if (rows.length > 0) {
+    const { error } = await admin.from("producer_stock_events").insert(rows);
+    if (error) throw new Error(error.message);
+  }
+  const { data: passed, error } = await admin
+    .from("producer_stock_events")
+    .select("product_id, qty")
+    .eq("org_id", orgId)
+    .eq("producer_id", producerId)
+    .eq("kind", "made")
+    .eq("made_on", today);
   if (error) throw new Error(error.message);
-  return token;
+  const names = new Map(list.lines.map((line) => [line.productId, line.name]));
+  const totals = new Map<string, number>();
+  for (const row of passed ?? []) totals.set(row.product_id as string, (totals.get(row.product_id as string) ?? 0) + Number(row.qty));
+  return [...totals]
+    .map(([productId, qty]) => ({ name: names.get(productId) ?? "—", qty }))
+    .sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name));
 }
 
-export type ProducerStockKind = "made" | "count";
-
-/** Writes what the kitchen made tonight, or what it counted in the fridge, for one of the producer's own dishes. */
-async function writeProducerStock(orgId: string, producerId: string, productId: string, kind: ProducerStockKind, qty: number, byName: string | null) {
-  if (!Number.isInteger(qty) || qty < 0 || qty > 9999 || (kind === "made" && qty === 0)) throw new Error("invalid quantity");
+/**
+ * What the operator counted in a producer's fridge, for one of the producer's
+ * own dishes: the level the fridge is followed from again.
+ */
+export async function countProducerFridge(orgId: string, producerId: string, productId: string, qty: number): Promise<void> {
+  await requireOperator();
+  if (!Number.isInteger(qty) || qty < 0 || qty > 9999) throw new Error("invalid quantity");
   const admin = createAdminClient();
   const { data: dish } = await admin
     .from("products")
@@ -1690,25 +1699,11 @@ async function writeProducerStock(orgId: string, producerId: string, productId: 
     org_id: orgId,
     producer_id: producerId,
     product_id: productId,
-    kind,
+    kind: "count",
     qty,
-    made_on: kind === "made" ? reportDay(new Date(), DISPLAY_TIME_ZONE) : null,
-    by_name: byName?.slice(0, 80) ?? null,
+    by_name: displayName(await getSessionUser())?.slice(0, 80) ?? null,
   });
   if (error) throw new Error(error.message);
-}
-
-/** The kitchen, through its link. */
-export async function producerStockByToken(token: string, productId: string, kind: ProducerStockKind, qty: number): Promise<void> {
-  const producer = await producerByToken(token);
-  if (!producer) throw new Error("Not found");
-  await writeProducerStock(producer.org_id, producer.id, productId, kind, qty, null);
-}
-
-/** The operator, in the app. */
-export async function producerStockAsOperator(orgId: string, producerId: string, productId: string, kind: ProducerStockKind, qty: number): Promise<void> {
-  await requireOperator();
-  await writeProducerStock(orgId, producerId, productId, kind, qty, displayName(await getSessionUser()));
 }
 
 /** The report that closes a run: filled, out of date and short, per product. */
