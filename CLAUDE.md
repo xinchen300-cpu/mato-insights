@@ -69,6 +69,19 @@ vakken stappen met 2. Online-status komt uit `Last Connect Date` vs `Last Discon
 niet uit `lastConnected` (dat is geen heartbeat). Een geweigerde betaling zit in
 `requestedAmount`, niet in `committedAmount` (dat is dan 0).
 
+## Gits: Televend-verkoop met de hand, tot Payter er is
+Gits Chens Garden (`9e523217-1488-4e3a-a02e-9f7ad642489e`, Nieuwplaats 11 Hooglede) betaalt nog via
+Worldline met Televend-telemetrie; Payter komt ten vroegste eind oktober 2026. Indeling: rijen 11–19
+… 71–79, vakken 1/5/9, 2 per vak (19-10-2026 overgenomen uit Televend, startstand als `correction`).
+Xin stuurt elke dag de verkooplijst uit Televend. Elke verkoop wordt één rij in `transactions`:
+`machine_id` = Gits, `item_ref` = Televends "Col", `amount` = de Televend-prijs, `disposition` =
+`'APPROVED'`, `payment_method` = `'TELEVEND'`, `occurred_at` = het tijdstip uit de lijst
+(Europe/Brussels), `raw_json` = `{"source":"televend","by_hand":true}` en `payter_transaction_id` =
+`'TELEVEND:GITS:<yyyy-mm-ddThh:mm>:<col>:<n>'` (uniek per org, dus nooit dubbel). Vraag om tijdstippen:
+een verkoop zonder uur kan na Alus' vulbeurt vallen en zijn voorraad te laag maken. Komt de
+Payter-lezer: zet zijn serienummer in `machines.payter_serial_number` van Gits **voordat** hij aangaat,
+anders maakt de sync een tweede automaat aan.
+
 ## Nooit committen
 De hardgecodeerde scope in `getScope` (voor lokaal testen zonder account) en de
 `VERCEL_OIDC_TOKEN` die `vercel link` in `.env.local` plakt. Na elke lokale test
