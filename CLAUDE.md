@@ -82,6 +82,14 @@ een verkoop zonder uur kan na Alus' vulbeurt vallen en zijn voorraad te laag mak
 Payter-lezer: zet zijn serienummer in `machines.payter_serial_number` van Gits **voordat** hij aangaat,
 anders maakt de sync een tweede automaat aan.
 
+## Rondes uit de cijfers gehaald (19-10-2026)
+Xin liet Alus opnieuw beginnen op niveau 1: zijn 20 oefenrondes (17–19 okt) staan in
+`refill_reset_archive` (de ronde als JSON plus zijn tekorten) én zijn verhuisd naar de lege organisatie
+`ef9b47c0-a4bf-4999-9d7a-e49e846315eb` ("Archief…", geen leden, geen plan). Niets is gewist: de
+voorraad steunt op `stock_events`, niet op de rondes. Terugzetten = `org_id` van die `refill_sheets`
+en `run_shortages` terug op Chens Garden zetten. Een `DELETE` via de Supabase-MCP blijft hangen
+(wacht op een bevestiging die niet komt); verhuizen of compenseren werkt wel.
+
 ## Nooit committen
 De hardgecodeerde scope in `getScope` (voor lokaal testen zonder account) en de
 `VERCEL_OIDC_TOKEN` die `vercel link` in `.env.local` plakt. Na elke lokale test

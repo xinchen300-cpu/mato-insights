@@ -4,7 +4,7 @@ import { HourChart } from "@/components/charts/hour-chart";
 import { Avatar } from "@/components/list-row";
 import { MachineIcon } from "@/components/machine/machine-icon";
 import { PageHeader, Panel, Section } from "@/components/page-header";
-import { DISPLAY_TIME_ZONE, duration, fmt, plural, type Formatters } from "@/i18n/format";
+import { DISPLAY_TIME_ZONE, duration, fmt, type Formatters } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import type { Messages } from "@/i18n/messages";
 import { getMachines, getMyRounds, getSoldReport, type SoldReport } from "@/lib/data";
@@ -82,7 +82,7 @@ export function SoldView({
           {report.machines.length === 0 ? (
             <p className="surface-card px-5 py-5 text-sm text-muted-foreground">{t.noSales}</p>
           ) : (
-            // An ordered list: the order is the point. Pieces only, the bar against the best one.
+            // An ordered list: the order is the point, the bars show how far apart.
             <ol className="surface-card flex flex-col p-2">
               {report.machines.map((row, i) => (
                 <li key={row.machineId} className="flex items-center gap-3 rounded-xl px-3 py-3">
@@ -90,14 +90,11 @@ export function SoldView({
                   <Avatar>
                     <MachineIcon />
                   </Avatar>
-                  {/* The whole name, then the bar with the pieces: a long name may take two lines. */}
-                  <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  {/* The whole name, then its bar against the best one: a graph, no numbers (Xin, 19-10-2026). */}
+                  <span className="flex min-w-0 flex-1 flex-col gap-2">
                     <span className="text-[15px] font-semibold leading-snug tracking-[-0.01em]">{row.name}</span>
-                    <span className="flex items-center gap-3">
-                      <span className="block h-1.5 flex-1 overflow-hidden rounded-full bg-border/70" aria-hidden="true">
-                        <span className="block h-full rounded-full bg-primary" style={{ width: `${Math.max(4, (row.units / top) * 100)}%` }} />
-                      </span>
-                      <span className="tabular-nums shrink-0 text-[14px] font-semibold">{plural(row.units, m.common.unitsOne, m.common.unitsOther)}</span>
+                    <span className="block h-3 overflow-hidden rounded-full bg-border/70" aria-hidden="true">
+                      <span className="block h-full rounded-full bg-primary" style={{ width: `${Math.max(4, (row.units / top) * 100)}%` }} />
                     </span>
                   </span>
                 </li>
