@@ -6,7 +6,8 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getBusinesses, getLastSales, getMachines, getMachineStock, getRoundSettings, rentsToBusinesses } from "@/lib/data";
+import { getBusinesses, getLastRefills, getLastSales, getMachines, getMachineStock, getRoundSettings, getStatsReport, rentsToBusinesses } from "@/lib/data";
+import { refilledText } from "@/lib/refilled";
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
 import { orderByRoute } from "@/lib/round-settings";
 import { MachineOrder } from "@/components/machine/machine-order";
@@ -50,14 +51,17 @@ export default async function MachinesPage() {
   const orgId = await requireOrgId();
   // The operator's machines follow the route, the same order as the filler's tiles and the rounds.
   const operator = await isOperator();
-  const [machines, stock, lastSales, businesses, rents, route] = await Promise.all([
+  const [machines, stock, lastSales, businesses, rents, route, today, refills] = await Promise.all([
     getMachines(orgId),
     getMachineStock(orgId),
     getLastSales(orgId),
     getBusinesses(orgId),
     rentsToBusinesses(orgId),
     operator ? getRoundSettings(orgId).then((settings) => settings.route) : Promise.resolve(null),
+    getStatsReport(orgId, { period: "today" }),
+    getLastRefills(orgId),
   ]);
+  const todayOf = new Map(today.by_machine.map((row) => [row.machine_id, row.revenue]));
 
   const statusLabel = (mc: (typeof machines)[number]) => {
     const status = terminalStatus(mc.last_connected_at, mc.last_disconnected_at);
@@ -126,7 +130,7 @@ export default async function MachinesPage() {
               const tracked = Boolean(s && s.slots > 0 && tracksStock);
               const fill = tracked && s ? machineFill(s.stock, s.capacity, s.counted) : null;
               // One line under the name: red when slots run low, grey for what is
-              // missing, otherwise the last sale.
+              // missing, otherwise today's money and when it was filled (or last sold).
               const line =
                 tracksStock && s && s.low > 0
                   ? { text: fmt(m.overview.slotsLow, { count: s.low }), alert: true }
@@ -134,7 +138,15 @@ export default async function MachinesPage() {
                     ? { text: m.machines.noLayout, alert: false }
                     : tracksStock && s && !s.counted
                       ? { text: m.machines.stockUnknown, alert: false }
-                      : { text: `${m.machines.lastSale}: ${lastSale ? f.relative(lastSale) : m.machines.noSales}`, alert: false };
+                      : {
+                          text: [
+                            fmt(m.overview.todayRevenue, { amount: f.euro(todayOf.get(mc.id) ?? 0) }),
+                            refills.get(mc.id)
+                              ? refilledText(refills.get(mc.id)!.at, m.overview, f)
+                              : `${m.machines.lastSale}: ${lastSale ? f.relative(lastSale) : m.machines.noSales}`,
+                          ].join(" · "),
+                          alert: false,
+                        };
               const place =
                 (ownerNames.get(mc.id) ?? []).filter((name) => name !== mc.name).join(" · ") ||
                 (mc.type ? m.machines.types[mc.type] : null);

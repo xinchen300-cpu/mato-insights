@@ -3,27 +3,33 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ChevronDown } from "lucide-react";
 import { Avatar, initial } from "@/components/list-row";
 import { RollingNumber } from "@/components/motion/rolling-number";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
 import type { LiveSale } from "@/lib/data";
+import { addDays, isoDay } from "@/lib/expiry";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 10_000;
 const SHOWN = 5;
+/** "Meer zien" opens this many, day by day (Xin, 19-10-2026). */
+const MORE = 40;
 
 /**
  * What just sold, as it happens: the newest sales across the machines, with a
  * new one sliding in on top within seconds of the sync taking it in. When one
  * arrives the page's figures refresh too, so "today" moves along with it.
- * A tab nobody looks at asks for nothing.
+ * "Meer zien" opens the longer list, under a heading per day. A tab nobody
+ * looks at asks for nothing.
  */
 export function LiveSales({ initial: first }: { initial: LiveSale[] }) {
   const { m, f } = useI18n();
   const t = m.overview;
   const router = useRouter();
-  const [sales, setSales] = useState(first.slice(0, SHOWN));
+  const [sales, setSales] = useState(first.slice(0, MORE));
+  const [open, setOpen] = useState(false);
   const [fresh, setFresh] = useState<Set<string>>(new Set());
   const [now, setNow] = useState<number | null>(null);
   // Arrival time of the newest sale seen: what came in after it is news.
@@ -51,7 +57,7 @@ export function LiveSales({ initial: first }: { initial: LiveSale[] }) {
           const ids = new Set(shown.map((sale) => sale.id));
           return [...incoming.filter((sale) => !ids.has(sale.id)), ...shown]
             .sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1))
-            .slice(0, SHOWN);
+            .slice(0, MORE);
         });
         setFresh(new Set(incoming.map((sale) => sale.id)));
         setTimeout(() => alive && setFresh(new Set()), 4000);
@@ -82,6 +88,11 @@ export function LiveSales({ initial: first }: { initial: LiveSale[] }) {
     if (minutes < 60) return fmt(t.liveSalesMinutes, { n: minutes });
     return f.time(at);
   };
+  const dayOf = (at: string) => {
+    const day = isoDay(new Date(at));
+    return day === isoDay(new Date()) ? m.periods.today : day === addDays(-1) ? t.yesterday : f.weekdayDay(at);
+  };
+  const shown = open ? sales : sales.slice(0, SHOWN);
 
   return (
     <section className="surface-card flex flex-col p-2 sm:p-3">
@@ -96,9 +107,11 @@ export function LiveSales({ initial: first }: { initial: LiveSale[] }) {
         </span>
       </div>
       <ul className="flex flex-col">
-        {sales.map((sale) => {
+        {shown.map((sale, index) => {
           const name = sale.productName ?? fmt(m.unassigned.selection, { number: sale.selection ?? "?" });
           const isNew = fresh.has(sale.id);
+          // In the long list, a heading where a new day begins.
+          const heading = open && (index === 0 || dayOf(shown[index - 1].occurredAt) !== dayOf(sale.occurredAt)) ? dayOf(sale.occurredAt) : null;
           return (
             <li
               key={sale.id}
@@ -107,6 +120,7 @@ export function LiveSales({ initial: first }: { initial: LiveSale[] }) {
                 isNew ? "bg-positive/10 animate-in fade-in slide-in-from-top-2 duration-500" : "bg-transparent",
               )}
             >
+              {heading && <p className="px-3 pb-1 pt-3 text-[13px] font-semibold text-muted-foreground">{heading}</p>}
               <Link
                 href={`/machines/${sale.machineId}`}
                 className="hover-surface flex min-h-14 items-center gap-3 rounded-xl px-3 py-2.5"
@@ -115,7 +129,7 @@ export function LiveSales({ initial: first }: { initial: LiveSale[] }) {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-semibold tracking-[-0.01em]">{name}</span>
                   <span className="block truncate text-[13px] text-muted-foreground">
-                    {sale.machineName} · {when(sale.occurredAt)}
+                    {sale.machineName} · {open ? f.time(sale.occurredAt) : when(sale.occurredAt)}
                   </span>
                 </span>
                 <span className="tabular shrink-0 text-[15px] font-semibold">
@@ -126,6 +140,17 @@ export function LiveSales({ initial: first }: { initial: LiveSale[] }) {
           );
         })}
       </ul>
+      {sales.length > SHOWN && (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+          className="mx-1 mt-1 flex h-11 items-center justify-center gap-1.5 rounded-xl text-[14.5px] font-semibold text-muted-foreground hover:bg-surface"
+        >
+          <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} aria-hidden="true" />
+          {open ? t.liveSalesLess : fmt(t.liveSalesMore, { n: sales.length - SHOWN })}
+        </button>
+      )}
     </section>
   );
 }
