@@ -33,6 +33,7 @@ export const en = {
     tagline: "Statistics Won't Lie",
   },
   nav: {
+    home: "Home",
     overview: "Overview",
     machines: "Machines",
     products: "Products",

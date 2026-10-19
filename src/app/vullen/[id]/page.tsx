@@ -4,7 +4,7 @@ import { cleanLook } from "@/lib/avatar";
 import { getMyRounds, getRefillRound, getRouteTimes } from "@/lib/data";
 import { displayName } from "@/lib/people";
 import { createClient } from "@/lib/supabase/server";
-import { requireRefillAccess } from "@/lib/org";
+import { isFiller, requireRefillAccess } from "@/lib/org";
 import { RoundFlow } from "./round-flow";
 
 export async function generateMetadata() {
@@ -23,10 +23,11 @@ export default async function RoundPage({ params }: { params: Promise<{ id: stri
   if (!orgId) notFound();
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
-  const [round, times, me] = await Promise.all([
+  const [round, times, me, filler] = await Promise.all([
     getRefillRound(orgId, id),
     getRouteTimes(orgId),
     createClient().then((client) => client.auth.getUser()),
+    isFiller(),
   ]);
   if (!round) notFound();
   // This person's earlier rounds only matter once this one ends, for what it
@@ -40,6 +41,7 @@ export default async function RoundPage({ params }: { params: Promise<{ id: stri
       look={cleanLook(me.data.user?.user_metadata?.avatar)}
       times={times}
       history={history}
+      filler={filler}
     />
   );
 }
