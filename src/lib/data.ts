@@ -1231,6 +1231,24 @@ export async function getMachineSalesSplit(
  * only, and on a shared one the last sale of its own slots: when the
  * co-tenant last sold is not its business.
  */
+export type LastRefill = { at: string; by: string | null; pieces: number };
+
+/**
+ * When each machine was last filled, by whom, and how many pieces went in on
+ * that visit (Xin, 19-10-2026). The operator's to see; anyone else gets none.
+ */
+export async function getLastRefills(orgId: string): Promise<Map<string, LastRefill>> {
+  if (!(await isOperator()) || (await getScope()).orgId !== orgId) return new Map();
+  const { data, error } = await createAdminClient().rpc("last_refills", { target_org: orgId });
+  if (error) throw new Error(error.message);
+  return new Map(
+    ((data ?? []) as { machine_id: string; filled_at: string; filled_by: string | null; pieces: number }[]).map((row) => [
+      row.machine_id,
+      { at: row.filled_at, by: row.filled_by, pieces: Number(row.pieces) },
+    ]),
+  );
+}
+
 export async function getLastSales(orgId: string): Promise<Map<string, string | null>> {
   const { data } = await createAdminClient().rpc("dashboard_machine_last_sale", { target_org: orgId });
   const all = new Map(
@@ -1682,6 +1700,18 @@ export async function getProducers(orgId: string): Promise<Producer[]> {
   // A shop only knows the producers behind its own products.
   const mine = new Set((await getProducts(orgId)).map((product) => product.producer_id).filter(Boolean));
   return producers.filter((producer) => mine.has(producer.id));
+}
+
+/** Whether the operator has a kitchen list to pass on: a dish made by one of their producers. Never for anyone else. */
+export async function hasProducerDishes(orgId: string): Promise<boolean> {
+  if (!(await isOperator()) || (await getScope()).orgId !== orgId) return false;
+  const { count } = await createAdminClient()
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .eq("archived", false)
+    .not("producer_id", "is", null);
+  return (count ?? 0) > 0;
 }
 
 // ── The production list (Xin, 19-10-2026) ────────────────────────────────────

@@ -1,19 +1,20 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarClock, CircleDashed, ClipboardList, Link2, PackageOpen, TriangleAlert, WifiOff, type LucideIcon } from "lucide-react";
+import { CalendarClock, ChefHat, ChevronRight, CircleDashed, ClipboardList, Link2, ListChecks, PackageOpen, TriangleAlert, WifiOff, type LucideIcon } from "lucide-react";
 import { RevenueChart } from "@/components/charts/revenue-chart";
-import { Delta } from "@/components/delta";
-import { KpiHero, MiniStat } from "@/components/kpi";
 import { Avatar, ListRow, RowList } from "@/components/list-row";
+import { MachineRevenue, PERIODS, type RevenueFigure, type RevenueMachine } from "@/components/overview/machine-revenue";
 import { InsightsList } from "@/components/insights-list";
 import { SetupGuide, nextSetupStep } from "@/components/setup-guide";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
 import { LiveRounds } from "@/components/refill/live-rounds";
 import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { DISPLAY_TIME_ZONE, fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import {
   getExpiryAlerts,
+  getLastRefills,
   getLastSales,
   getLiveSales,
   getLastSyncedAt,
@@ -23,16 +24,16 @@ import {
   getStatsReport,
   getUnassigned,
   getSetupState,
+  hasProducerDishes,
   type OpenRound,
 } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { buildInsights } from "@/lib/insights";
-import { compareMoneySince, compareSince, fillDays, lastFullWeeks } from "@/lib/stats";
+import { compareMoneySince, fillDays, lastFullWeeks } from "@/lib/stats";
 import { terminalStatus } from "@/lib/terminal-status";
 import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
-import { fillLevel, needsAttention, slotsFilledByVendly } from "@/lib/stock";
-import { MachineIcon } from "@/components/machine/machine-icon";
+import { fillLevel, machineFill, machineTotals, needsAttention, slotsFilledByVendly } from "@/lib/stock";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { LiveSales } from "@/components/live-sales";
 import { isRecent } from "@/lib/unassigned";
@@ -46,6 +47,10 @@ const toneAvatar: Record<Tone, "negative" | "warning" | "neutral"> = {
   muted: "neutral",
 };
 const LOW_ROWS = 3;
+/** To-dos shown before "Nog … meldingen" folds the rest away. */
+const TODO_ROWS = 4;
+/** "Meer zien" under Net verkocht opens this many. */
+const LIVE_ROWS = 40;
 /** Payter is asked every 15 seconds; only data this old is worth a word on the page. */
 const STALE_MS = 15 * 60_000;
 const isStale = (syncedAt: string | null) => syncedAt !== null && Date.now() - Date.parse(syncedAt) > STALE_MS;
@@ -98,23 +103,27 @@ export default async function OverviewPage() {
     getLastSales(orgId),
     getLastSyncedAt(orgId),
     getSetupState(orgId),
-    getLiveSales(orgId),
+    getLiveSales(orgId, { limit: LIVE_ROWS }),
+    getLastRefills(orgId),
+    hasProducerDishes(orgId),
   ]);
   // A redirect below leaves it unawaited: a failure in it must not go unhandled.
   loads.catch(() => undefined);
 
   // Wie nog nooit door de rondleiding is, hoort niet op een leeg dashboard te
   // landen. Eén keer, en daarna nooit meer. Wat al geladen werd, vervalt dan.
+  let orgName: string | null = null;
   if (operator) {
     const { data: org } = await createAdminClient()
       .from("organizations")
-      .select("onboarded_at")
+      .select("onboarded_at, name")
       .eq("id", orgId)
       .maybeSingle();
     if (org && !org.onboarded_at) redirect("/welkom");
+    orgName = (org?.name as string | null) ?? null;
   }
 
-  const [openRounds, today, week, month, weeks, machines, stock, unassigned, expiring, lastSales, syncedAt, setup, recentSales] =
+  const [openRounds, today, week, month, weeks, machines, stock, unassigned, expiring, lastSales, syncedAt, setup, recentSales, refills, kitchen] =
     await loads;
   // Only the rounds actually out (started), and only for the operator.
   const liveRounds = openRounds.filter((round) => round.readyAt);
@@ -183,7 +192,7 @@ export default async function OverviewPage() {
   const machineName = new Map(machines.map((mc) => [mc.id, mc.name]));
   const lowSorted = [...lowByMachine.entries()].sort((a, b) => b[1] - a[1]);
   const setupStep = operator && !setup.done ? nextSetupStep(setup, m) : null;
-  const todos: { key: string; icon: LucideIcon; tone: Tone; text: string; href: string }[] = [
+  const todos: Todo[] = [
     ...offline.map((mc) => ({
       key: `offline-${mc.id}`,
       icon: WifiOff,
@@ -264,21 +273,50 @@ export default async function OverviewPage() {
   // "new since …" instead of a percentage against a half-empty period.
   const newSince = (firstSale: string | null) =>
     firstSale ? fmt(m.stats.newSince, { date: f.dayMonth(firstSale) }) : undefined;
-  const compareOf = (report: typeof month, label?: string) => ({
-    current: report.totals.revenue,
-    previous: report.totals.prev_revenue,
-    label,
-    // Money shown, pieces tested: a mix shift is "about the same", not a real change.
-    verdict: compareMoneySince(
-      report.totals.units,
-      report.totals.prev_units,
-      report.totals.revenue,
-      report.totals.prev_revenue,
-      report.first_sale,
-      report.prev_start,
-    ),
-    notes: { tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise, same: m.stats.aboutSame, new: newSince(report.first_sale) },
+  const reports = { today, week, month };
+  // Money shown, pieces tested: a mix shift is "about the same", not a real change.
+  const figure = (
+    report: typeof month,
+    row: { units: number; prev_units: number; revenue: number; prev_revenue: number; first_sale: string | null } | undefined,
+  ): RevenueFigure => {
+    const verdict = row
+      ? compareMoneySince(row.units, row.prev_units, row.revenue, row.prev_revenue, row.first_sale, report.prev_start)
+      : "tooFew";
+    return {
+      revenue: row?.revenue ?? 0,
+      units: row?.units ?? 0,
+      prevRevenue: row?.prev_revenue ?? 0,
+      verdict,
+      newLabel: verdict === "new" ? newSince(row?.first_sale ?? null) : undefined,
+    };
+  };
+  // Every machine with its money for today, this week and this month (Xin,
+  // 19-10-2026: per machine rather than one total), how full it is and when it
+  // was last filled. A machine filled by hand has no fill to show.
+  const fills = machineTotals(
+    slotsFilledByVendly(stock, machines)
+      .filter((slot) => slot.product_id)
+      .map((slot) => ({ machine_id: slot.machine_id, stock: slot.stock, capacity: slot.capacity })),
+  );
+  const revenueMachines: RevenueMachine[] = machines.map((mc) => {
+    const total = fills.get(mc.id);
+    return {
+      id: mc.id,
+      name: withoutOrgName(mc.name, orgName),
+      photoPath: mc.photo_path,
+      status: terminalStatus(mc.last_connected_at, mc.last_disconnected_at),
+      fill: total && mc.type !== "other" ? machineFill(total.stock, total.capacity, total.counted) : null,
+      // Without a payment terminal of ours its sales are typed in a day later (Gits, Televend).
+      late: !mc.payter_serial_number,
+      lastRefill: refills.get(mc.id) ?? null,
+      figures: Object.fromEntries(
+        PERIODS.map((key) => [key, figure(reports[key], reports[key].by_machine.find((row) => row.machine_id === mc.id))]),
+      ) as Record<(typeof PERIODS)[number], RevenueFigure>,
+    };
   });
+  const revenueTotals = Object.fromEntries(
+    PERIODS.map((key) => [key, figure(reports[key], { ...reports[key].totals, first_sale: reports[key].first_sale })]),
+  ) as Record<(typeof PERIODS)[number], RevenueFigure>;
 
   return (
     <>
@@ -294,95 +332,99 @@ export default async function OverviewPage() {
         }
       />
 
-      {/* Like Bijvullen: what you look for first. What needs doing, the money,
-          what just sold, then each machine. One thing per block. */}
-      <div className="flex flex-col gap-10">
+      {/* What needs doing, then the money machine by machine, what just sold,
+          the month day by day. One thing per block (Xin, 19-10-2026). */}
+      <div className="flex flex-col gap-8">
         {/* A round that is out right now comes first: who, how long, where. */}
         {liveRounds.length > 0 && <LiveRounds rounds={liveRounds} refresh={false} />}
-        {/* What needs doing today first, above the money (UX review, 17-10-2026). */}
+        {/* The owner's day in three taps: a round, the kitchen's order, what each machine needs. */}
+        {operator && (
+          <nav aria-label={m.overview.quick} className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            <Link href="/refill/new" className={cn(buttonVariants({ size: "lg" }), "shrink-0")}>
+              <ClipboardList />
+              {m.refill.newRound}
+            </Link>
+            {kitchen && (
+              <Link href="/refill/kitchen" className={cn(buttonVariants({ size: "lg", variant: "outline" }), "shrink-0")}>
+                <ChefHat />
+                {m.kitchen.title}
+              </Link>
+            )}
+            <Link href="/refill/list" className={cn(buttonVariants({ size: "lg", variant: "outline" }), "shrink-0")}>
+              <ListChecks />
+              {m.nav.fillList}
+            </Link>
+          </nav>
+        )}
+        {/* What needs doing today first, above the money (UX review, 17-10-2026); a long list folds. */}
         {todos.length > 0 && (
-          <Section
-            title={m.overview.todo}
-            actions={
-              // Machines running low are what a round is for: /refill/new ticks them already.
-              operator && lowSorted.length > 0 ? (
-                <Link href="/refill/new" className={buttonVariants({ variant: "outline" })}>
-                  <ClipboardList />
-                  {m.refill.newRound}
-                </Link>
-              ) : undefined
-            }
-          >
+          <Section title={m.overview.todo}>
             <RowList>
-              {todos.map((t) => (
-                <li key={t.key}>
-                  <ListRow
-                    href={t.href}
-                    leading={
-                      <Avatar tone={toneAvatar[t.tone]}>
-                        <t.icon />
-                      </Avatar>
-                    }
-                    title={<span className="whitespace-normal font-medium">{t.text}</span>}
-                    chevron
-                  />
-                </li>
+              {todos.slice(0, TODO_ROWS).map((t) => (
+                <TodoRow key={t.key} todo={t} />
               ))}
             </RowList>
+            {todos.length > TODO_ROWS && (
+              <details className="group">
+                <summary className="flex h-11 cursor-pointer list-none items-center gap-1.5 px-3 text-[14.5px] font-semibold text-muted-foreground [&::-webkit-details-marker]:hidden">
+                  <ChevronRight className="size-4 transition-transform group-open:rotate-90" aria-hidden="true" />
+                  {fmt(m.overview.moreTodos, { n: todos.length - TODO_ROWS })}
+                </summary>
+                <RowList>
+                  {todos.slice(TODO_ROWS).map((t) => (
+                    <TodoRow key={t.key} todo={t} />
+                  ))}
+                </RowList>
+              </details>
+            )}
           </Section>
         )}
-        {/* The balance, as a bank would show it: one figure, two smaller ones, the curve. */}
-        <section className="surface-card px-5 pb-4 pt-6 sm:px-8 sm:pb-6 sm:pt-8">
-          <KpiHero
-            label={m.overview.month}
-            value={f.euro(month.totals.revenue)}
-            compare={compareOf(month, m.periods.compareMonth)}
-            detail={plural(month.totals.units, m.common.salesOne, m.common.salesOther)}
-            f={f}
-          />
-          <div className="mt-7 grid grid-cols-2 gap-x-6 gap-y-6">
-            <MiniStat label={m.overview.today} value={f.euro(today.totals.revenue)} compare={compareOf(today)} f={f} />
-            <MiniStat label={m.overview.week} value={f.euro(week.totals.revenue)} compare={compareOf(week)} f={f} />
-          </div>
-          <div className="-mx-2 mt-7 sm:-mx-3">
-            <RevenueChart data={chartData} height={220} />
-          </div>
-        </section>
 
+        <MachineRevenue machines={revenueMachines} totals={revenueTotals} />
 
-        {/* What just sold, sliding in as it happens. */}
+        {/* What just sold, sliding in as it happens; "Meer zien" opens the day's list. */}
         <LiveSales initial={recentSales} />
 
-        <Section title={m.overview.byMachine}>
-          <RowList>
-            {month.by_machine.map((row) => (
-              <li key={row.machine_id}>
-                <ListRow
-                  href={`/machines/${row.machine_id}`}
-                  leading={<Avatar><MachineIcon /></Avatar>}
-                  title={row.machine_name}
-                  subtitle={<span className="tabular">{plural(row.units, m.common.salesOne, m.common.salesOther)}</span>}
-                  value={f.euro(row.revenue)}
-                  valueSub={
-                    <Delta
-                      current={row.revenue}
-                      previous={row.prev_revenue}
-                      f={f}
-                      verdict={compareSince(row.units, row.prev_units, row.first_sale, month.prev_start)}
-                      noiseLabel={m.stats.withinNoise}
-                      sameLabel={m.stats.aboutSame}
-                      newLabel={newSince(row.first_sale)}
-                      className="text-[13px]"
-                    />
-                  }
-                />
-              </li>
-            ))}
-          </RowList>
-        </Section>
+        {/* The month, day by day. */}
+        <section className="surface-card px-3 pb-4 pt-5 sm:px-5">
+          <h2 className="px-2 text-[17px] font-semibold tracking-[-0.02em]">{m.overview.revenueChart}</h2>
+          <div className="-mx-1 mt-4">
+            <RevenueChart data={chartData} height={200} />
+          </div>
+        </section>
 
         <InsightsList insights={goodToKnow} m={m} f={f} />
       </div>
     </>
+  );
+}
+
+/**
+ * "Koekelare Chens Garden" as "Koekelare" in the owner's own list: every
+ * machine there is theirs, so their name after each one only takes room.
+ */
+function withoutOrgName(name: string, orgName: string | null): string {
+  if (!orgName) return name;
+  const suffix = ` ${orgName.trim()}`.toLocaleLowerCase("nl-BE");
+  const short = name.toLocaleLowerCase("nl-BE").endsWith(suffix) ? name.slice(0, name.length - suffix.length).trim() : name;
+  return short || name;
+}
+
+type Todo = { key: string; icon: LucideIcon; tone: Tone; text: string; href: string };
+
+function TodoRow({ todo }: { todo: Todo }) {
+  return (
+    <li>
+      <ListRow
+        href={todo.href}
+        leading={
+          <Avatar tone={toneAvatar[todo.tone]}>
+            <todo.icon />
+          </Avatar>
+        }
+        title={<span className="whitespace-normal font-medium">{todo.text}</span>}
+        chevron
+      />
+    </li>
   );
 }

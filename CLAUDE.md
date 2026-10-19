@@ -139,6 +139,14 @@ binomiaal, `DISPERSION`). Nooit overslaan bij: iets eruit te halen of etiket te 
 binnenkomt (Gits, geen Payter), een vak nooit geteld, < 30 verkopen in 8 weken, geen prijs. Alus ziet stuks,
 de uitbater ziet ook euro's; zelf kiezen kan altijd.
 
+## Overzicht van de uitbater (19-10-2026)
+Xin: "omzet per automaat, niet één totaal". Het overzicht toont eerst snelknoppen (Nieuwe ronde, Keukenlijst,
+Vullijst), de meldingen (4, de rest onder "Nog … meldingen"), dan **Omzet per automaat** met Vandaag/Week/Maand
+(`src/components/overview/machine-revenue.tsx`): per automaat geld, stuks, alleen een échte verandering, hoe vol,
+en wanneer gevuld (`last_refills`, `getLastRefills`, alleen voor de uitbater). Het totaal is één regel erboven.
+De eigen bedrijfsnaam valt weg uit de automaatnamen ("Koekelare"). Net verkocht toont 5, "Meer zien" tot 40 per
+dag. Voorbeeld met verzonnen cijfers: `/dev/owner`.
+
 ## Rondes uit de cijfers gehaald (19-10-2026)
 Xin liet Alus opnieuw beginnen op niveau 1: zijn 20 oefenrondes (17–19 okt) staan in
 `refill_reset_archive` (de ronde als JSON plus zijn tekorten) én zijn verhuisd naar de lege organisatie
