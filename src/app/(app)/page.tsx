@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { CalendarClock, ChefHat, ChevronRight, CircleDashed, ClipboardList, Link2, ListChecks, PackageOpen, TriangleAlert, WifiOff, type LucideIcon } from "lucide-react";
 import { RevenueChart } from "@/components/charts/revenue-chart";
 import { Avatar, ListRow, RowList } from "@/components/list-row";
-import { MachineRevenue, PERIODS, type RevenueFigure, type RevenueMachine } from "@/components/overview/machine-revenue";
+import { MachineRevenue } from "@/components/overview/machine-revenue";
+import { revenueByMachine } from "@/lib/overview";
 import { InsightsList } from "@/components/insights-list";
 import { SetupGuide, nextSetupStep } from "@/components/setup-guide";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
@@ -30,10 +31,10 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { buildInsights } from "@/lib/insights";
-import { compareMoneySince, fillDays, lastFullWeeks } from "@/lib/stats";
+import { fillDays, lastFullWeeks } from "@/lib/stats";
 import { terminalStatus } from "@/lib/terminal-status";
 import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
-import { fillLevel, machineFill, machineTotals, needsAttention, slotsFilledByVendly } from "@/lib/stock";
+import { fillLevel, needsAttention, slotsFilledByVendly } from "@/lib/stock";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { LiveSales } from "@/components/live-sales";
 import { isRecent } from "@/lib/unassigned";
@@ -273,50 +274,10 @@ export default async function OverviewPage() {
   // "new since …" instead of a percentage against a half-empty period.
   const newSince = (firstSale: string | null) =>
     firstSale ? fmt(m.stats.newSince, { date: f.dayMonth(firstSale) }) : undefined;
-  const reports = { today, week, month };
-  // Money shown, pieces tested: a mix shift is "about the same", not a real change.
-  const figure = (
-    report: typeof month,
-    row: { units: number; prev_units: number; revenue: number; prev_revenue: number; first_sale: string | null } | undefined,
-  ): RevenueFigure => {
-    const verdict = row
-      ? compareMoneySince(row.units, row.prev_units, row.revenue, row.prev_revenue, row.first_sale, report.prev_start)
-      : "tooFew";
-    return {
-      revenue: row?.revenue ?? 0,
-      units: row?.units ?? 0,
-      prevRevenue: row?.prev_revenue ?? 0,
-      verdict,
-      newLabel: verdict === "new" ? newSince(row?.first_sale ?? null) : undefined,
-    };
-  };
   // Every machine with its money for today, this week and this month (Xin,
   // 19-10-2026: per machine rather than one total), how full it is and when it
-  // was last filled. A machine filled by hand has no fill to show.
-  const fills = machineTotals(
-    slotsFilledByVendly(stock, machines)
-      .filter((slot) => slot.product_id)
-      .map((slot) => ({ machine_id: slot.machine_id, stock: slot.stock, capacity: slot.capacity })),
-  );
-  const revenueMachines: RevenueMachine[] = machines.map((mc) => {
-    const total = fills.get(mc.id);
-    return {
-      id: mc.id,
-      name: withoutOrgName(mc.name, orgName),
-      photoPath: mc.photo_path,
-      status: terminalStatus(mc.last_connected_at, mc.last_disconnected_at),
-      fill: total && mc.type !== "other" ? machineFill(total.stock, total.capacity, total.counted) : null,
-      // Without a payment terminal of ours its sales are typed in a day later (Gits, Televend).
-      late: !mc.payter_serial_number,
-      lastRefill: refills.get(mc.id) ?? null,
-      figures: Object.fromEntries(
-        PERIODS.map((key) => [key, figure(reports[key], reports[key].by_machine.find((row) => row.machine_id === mc.id))]),
-      ) as Record<(typeof PERIODS)[number], RevenueFigure>,
-    };
-  });
-  const revenueTotals = Object.fromEntries(
-    PERIODS.map((key) => [key, figure(reports[key], { ...reports[key].totals, first_sale: reports[key].first_sale })]),
-  ) as Record<(typeof PERIODS)[number], RevenueFigure>;
+  // was last filled; all of them together is one line above.
+  const revenue = revenueByMachine({ reports: { today, week, month }, machines, stock, refills, orgName, newSince });
 
   return (
     <>
@@ -380,7 +341,7 @@ export default async function OverviewPage() {
           </Section>
         )}
 
-        <MachineRevenue machines={revenueMachines} totals={revenueTotals} />
+        <MachineRevenue machines={revenue.machines} totals={revenue.totals} />
 
         {/* What just sold, sliding in as it happens; "Meer zien" opens the day's list. */}
         <LiveSales initial={recentSales} />
@@ -397,17 +358,6 @@ export default async function OverviewPage() {
       </div>
     </>
   );
-}
-
-/**
- * "Koekelare Chens Garden" as "Koekelare" in the owner's own list: every
- * machine there is theirs, so their name after each one only takes room.
- */
-function withoutOrgName(name: string, orgName: string | null): string {
-  if (!orgName) return name;
-  const suffix = ` ${orgName.trim()}`.toLocaleLowerCase("nl-BE");
-  const short = name.toLocaleLowerCase("nl-BE").endsWith(suffix) ? name.slice(0, name.length - suffix.length).trim() : name;
-  return short || name;
 }
 
 type Todo = { key: string; icon: LucideIcon; tone: Tone; text: string; href: string };

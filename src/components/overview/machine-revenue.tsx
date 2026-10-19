@@ -7,36 +7,10 @@ import { MachinePhoto } from "@/components/machine/machine-photo";
 import { StatusDot } from "@/components/machine/status-badge";
 import { useI18n } from "@/i18n/client";
 import { fmt, plural } from "@/i18n/format";
+import { PERIODS, type PeriodKey, type RevenueFigure, type RevenueMachine } from "@/lib/overview";
 import { refilledText } from "@/lib/refilled";
-import type { Verdict } from "@/lib/stats";
-import { bandBg, type FillBand } from "@/lib/stock";
-import type { TerminalStatus } from "@/lib/terminal-status";
+import { bandBg } from "@/lib/stock";
 import { cn } from "@/lib/utils";
-
-export type PeriodKey = "today" | "week" | "month";
-export const PERIODS: PeriodKey[] = ["today", "week", "month"];
-
-/** One machine, or all together, over one period: worked out on the server, verdict included. */
-export type RevenueFigure = {
-  revenue: number;
-  units: number;
-  prevRevenue: number;
-  verdict: Verdict;
-  /** "New since …" when it only started selling during the earlier period. */
-  newLabel?: string;
-};
-
-export type RevenueMachine = {
-  id: string;
-  name: string;
-  photoPath: string | null;
-  status: TerminalStatus;
-  fill: { percent: number; band: FillBand } | null;
-  /** Its sales are typed in a day later (no payment terminal of ours yet): today stays empty. */
-  late: boolean;
-  lastRefill: { at: string; by: string | null; pieces: number } | null;
-  figures: Record<PeriodKey, RevenueFigure>;
-};
 
 /**
  * Revenue machine by machine (Xin, 19-10-2026: "omzet per automaat instead of
