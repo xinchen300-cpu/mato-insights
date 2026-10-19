@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { ArrowRight, ChartNoAxesColumn, Download, Link2, TriangleAlert } from "lucide-react";
+import { ArrowRight, ChartNoAxesColumn, ChevronRight, Download, Link2, TriangleAlert } from "lucide-react";
 import { BarList } from "@/components/charts/bar-list";
 import { HourChart } from "@/components/charts/hour-chart";
 import { RevenueChart } from "@/components/charts/revenue-chart";
@@ -12,7 +12,9 @@ import { buttonVariants } from "@/components/ui/button";
 import { fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import Link from "next/link";
-import { getBusinesses, getMachines, getPriceMismatches, getProducts, getStatsReport } from "@/lib/data";
+import { getBusinesses, getMachines, getOrgName, getPriceMismatches, getProducts, getRefillVisits, getStatsReport } from "@/lib/data";
+import { withoutOrgName } from "@/lib/overview";
+import { RefillLog } from "@/components/stats/refill-log";
 import { mediaUrl } from "@/lib/media";
 import { isFiller, requireOrgId, requireRefillAccess } from "@/lib/org";
 import { cn } from "@/lib/utils";
@@ -49,13 +51,23 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
   const orgId = await requireOrgId();
   const { period, from, to, business, machine, product, year, thisYear, filters } = parseStatsParams(raw);
 
-  const [report, machines, businesses, products, mismatches] = await Promise.all([
+  const [report, machines, businesses, products, mismatches, orgName] = await Promise.all([
     getStatsReport(orgId, filters),
     getMachines(orgId),
     getBusinesses(orgId),
     getProducts(orgId),
     getPriceMismatches(orgId),
+    getOrgName(orgId),
   ]);
+  // When each machine was filled in the same period, how many and at what time (Xin, 20-10-2026): the owner's only.
+  const visitMachines = machine
+    ? [machine]
+    : business
+      ? machines.filter((mc) => mc.business_id === business || mc.shared_business_id === business).map((mc) => mc.id)
+      : null;
+  const visits = await getRefillVisits(orgId, { from: report.cur_start, to: report.cur_end }, visitMachines);
+  // "Koekelare" rather than "Koekelare Chens Garden": every machine here is the organisation's own.
+  const machineNames = new Map(machines.map((mc) => [mc.id, withoutOrgName(mc.name, orgName)]));
 
   // A slot taking several different prices carries several products through one
   // number, so nothing here can say what sold. Saying it is the whole point of
@@ -70,7 +82,6 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
 
   const compare = m.periods[compareLabelKey(report.period)];
   const { totals } = report;
-  const avg = totals.units ? totals.revenue / totals.units : 0;
 
   const named = report.by_product.filter((p) => p.product_id);
   // Sorted here on purpose: the headline above ranks by pieces, so this panel
@@ -189,7 +200,6 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                   }}
                   f={f}
                 />
-                <MiniStat label={m.stats.avgSale} value={f.euro(avg)} f={f} />
               </div>
 
               <div className="mt-7">
@@ -210,6 +220,37 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                 </div>
               </div>
             </section>
+
+            {/* Money machine by machine, right under the total (Xin, 20-10-2026). */}
+            <Section title={m.stats.perMachine}>
+              <RowList>
+                {report.by_machine.map((row) => (
+                  <li key={row.machine_id}>
+                    <ListRow
+                      leading={<Avatar><MachineIcon /></Avatar>}
+                      title={withoutOrgName(row.machine_name, orgName)}
+                      subtitle={<span className="tabular">{plural(row.units, m.common.unitsOne, m.common.unitsOther)}</span>}
+                      value={f.euro(row.revenue)}
+                      valueSub={
+                        <Delta
+                          current={row.revenue}
+                          previous={row.prev_revenue}
+                          f={f}
+                          verdict={moneyVerdict(row)}
+                          noiseLabel={m.stats.withinNoise}
+                          sameLabel={m.stats.aboutSame}
+                          newLabel={newSince(row.first_sale)}
+                          className="text-[13px]"
+                        />
+                      }
+                    />
+                  </li>
+                ))}
+              </RowList>
+            </Section>
+
+            {/* When each machine was filled, with how many and at what time. */}
+            {visits.length > 0 && <RefillLog visits={visits} names={machineNames} m={m} f={f} />}
 
             {/* Said once, right above the product figures it is about. */}
             {scrambled.length > 0 && (
@@ -243,32 +284,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
               )}
             </div>
 
-            <Section title={m.stats.perMachine}>
-              <RowList>
-                {report.by_machine.map((row) => (
-                  <li key={row.machine_id}>
-                    <ListRow
-                      leading={<Avatar><MachineIcon /></Avatar>}
-                      title={row.machine_name}
-                      subtitle={<span className="tabular">{plural(row.units, m.common.unitsOne, m.common.unitsOther)}</span>}
-                      value={f.euro(row.revenue)}
-                      valueSub={
-                        <Delta
-                          current={row.revenue}
-                          previous={row.prev_revenue}
-                          f={f}
-                          verdict={moneyVerdict(row)}
-                          noiseLabel={m.stats.withinNoise}
-                          sameLabel={m.stats.aboutSame}
-                          newLabel={newSince(row.first_sale)}
-                          className="text-[13px]"
-                        />
-                      }
-                    />
-                  </li>
-                ))}
-              </RowList>
-            </Section>
+
 
             <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
               <Panel
@@ -296,7 +312,12 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
 
             {monthly}
 
-            <Section title={m.stats.perProduct}>
+            {/* Every product, folded: the best and slowest above say most of it. */}
+            <details className="group">
+              <summary className="flex h-12 cursor-pointer list-none items-center gap-1.5 px-1 text-[16px] font-semibold [&::-webkit-details-marker]:hidden">
+                <ChevronRight className="size-4 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden="true" />
+                {fmt(m.stats.productsAll, { n: report.by_product.filter((p) => p.units > 0).length })}
+              </summary>
               <RowList>
                 {report.by_product
                   .filter((p) => p.units > 0)
@@ -333,7 +354,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                     </li>
                   ))}
               </RowList>
-            </Section>
+            </details>
 
             {/* How to read all this, for whoever wants to: at the foot, one row until opened. */}
             <StatsGuide m={m} f={f} />
@@ -406,3 +427,4 @@ function ProductAvatar({ row }: { row: StatsReport["by_product"][number] }) {
     </Avatar>
   );
 }
+

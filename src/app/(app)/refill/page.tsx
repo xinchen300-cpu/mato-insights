@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { ChevronRight, ClipboardList, Plus } from "lucide-react";
+import { ChevronRight, ClipboardList } from "lucide-react";
 import { FiguresCard, HowItWorks } from "@/components/filler/figures";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
-import { buttonVariants } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getLiveSold, getMachines, getMachineStock, getMyRounds, getOpenRounds, getRefillSheets, getRoundSettings, getShortages, type OpenRound } from "@/lib/data";
@@ -25,6 +24,7 @@ import { MachinePicker } from "./machine-picker";
 import { StartRound } from "./list/start-round";
 import { InstallApp } from "@/components/install-app";
 import { DeleteRounds, type DeletableRound } from "@/components/refill/delete-rounds";
+import { startable } from "@/lib/refill-start";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -130,12 +130,32 @@ export default async function RefillPage() {
   const orgId = await requireOrgId();
   const operator = await isOperator();
   // All at once, each loader with its own checks.
-  const [openRounds, machines, sheets, shortages] = await Promise.all([
+  const [openRounds, machines, sheets, shortages, slots, ownerSettings] = await Promise.all([
     operator ? getOpenRounds(orgId) : Promise.resolve<OpenRound[]>([]),
     getMachines(orgId),
     getRefillSheets(orgId),
     getShortages(orgId),
+    operator ? getMachineStock(orgId) : Promise.resolve([]),
+    operator ? getRoundSettings(orgId) : Promise.resolve(null),
   ]);
+  // The filler's way, for the owner too (Xin, 20-10-2026): one big button to a
+  // round with every machine that needs something, filled by the owner
+  // themselves; the machines as tiles; choosing them one by one folded away.
+  const route = ownerSettings?.route ?? [];
+  const start = startable(machines, slots, openRounds, route);
+  const ownerGrid = operator ? gridMachines(start.stocked, slotsFilledByVendly(slots, machines), route) : [];
+  const ownerChoices = orderByRoute(start.stocked.map((mc) => mc.id), route).map((id) => {
+    const mine = slots.filter((slot) => slot.machine_id === id && slot.product_id);
+    const counted = mine.filter((slot) => slot.stock !== null);
+    const lowSlots = mine.filter((slot) => needsAttention(fillLevel(slot.stock, slot.capacity))).length;
+    return {
+      id,
+      name: machines.find((mc) => mc.id === id)!.name,
+      low: lowSlots > 0 && !start.busy.has(id),
+      hint: counted.length === 0 ? m.overview.stockUnknown : fmt(m.refill.items, { count: counted.reduce((sum, slot) => sum + slot.capacity - slot.stock!, 0) }),
+      note: start.busy.has(id) ? m.refill.onOpenRound : undefined,
+    };
+  });
 
   // How often a product came up short, and how many pieces in total.
   const shortByProduct = new Map<string, { name: string; times: number; units: number }>();
@@ -155,14 +175,26 @@ export default async function RefillPage() {
       <PageHeader title={m.refill.title} actions={operator ? <RefillTabs active="rounds" m={m} /> : undefined} />
 
       <div className="flex flex-col gap-10">
-        {operator && (
-          <Link href="/refill/new" className={cn(buttonVariants({ size: "lg" }), "w-full sm:w-auto sm:self-start")}>
-            <Plus />
-            {m.refill.newRound}
-          </Link>
-        )}
+        {operator && start.ids.length > 0 && <StartRound big fill label={m.refill.beginFilling} machineIds={start.ids} />}
         <LiveRounds rounds={openRounds} />
         <DeleteRounds rounds={deletable(openRounds, m, f)} />
+        {ownerGrid.length > 0 && (
+          <Section title={m.refill.machinesTitle}>
+            <MachineGrid machines={ownerGrid} m={m} />
+          </Section>
+        )}
+        {operator && ownerChoices.length > 0 && (
+          // Choosing machines one by one, folded away under the big button's way, as for the filler.
+          <details className="group -mt-4">
+            <summary className="flex h-12 cursor-pointer list-none items-center gap-1.5 px-1 text-[15px] font-semibold text-muted-foreground [&::-webkit-details-marker]:hidden">
+              <ChevronRight className="size-4 transition-transform group-open:rotate-90" aria-hidden="true" />
+              {m.refill.pickOwn}
+            </summary>
+            <div className="pt-2">
+              <MachinePicker machines={ownerChoices} canOrder fill />
+            </div>
+          </details>
+        )}
         {!operator && <p className="max-w-[60ch] px-1 text-[15px] text-muted-foreground">{m.refill.operatorOnly}</p>}
 
         <Section

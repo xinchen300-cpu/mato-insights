@@ -17,11 +17,14 @@ import { MachineIcon } from "@/components/machine/machine-icon";
 export function MachinePicker({
   machines,
   canOrder = false,
+  fill = false,
 }: {
   /** In the order of the route. */
   machines: { id: string; name: string; hint: string; low: boolean; note?: string }[];
   /** The owner puts the round in order (and so sets the route); a filler follows it. */
   canOrder?: boolean;
+  /** The operator fills it themselves: into the round, as a filler. */
+  fill?: boolean;
 }) {
   const { m } = useI18n();
   const [selected, setSelected] = useState<Set<string>>(new Set(machines.filter((mc) => mc.low).map((mc) => mc.id)));
@@ -64,7 +67,7 @@ export function MachinePicker({
     setFailed(false);
     startTransition(async () => {
       try {
-        const result = await createRefillSheet(chosen);
+        const result = await createRefillSheet(chosen, { fill });
         if (result && "empty" in result) setEmpty(true);
         if (result && "locked" in result) setLocked(true);
       } catch (error) {

@@ -22,7 +22,7 @@ export function FillButton({ machineId }: { machineId: string }) {
           setNote(null);
           startTransition(async () => {
             try {
-              const result = await createRefillSheet([machineId]);
+              const result = await createRefillSheet([machineId], { fill: true });
               if (result && "empty" in result) setNote(m.refill.nothingToRefill);
               if (result && "locked" in result) setNote(fmt(m.billing.locked, { plan: m.plans[cheapestWith("refill").id] }));
             } catch (error) {

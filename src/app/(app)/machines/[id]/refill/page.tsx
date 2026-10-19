@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/page-header";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getMachine, getMachineStock, getProducts, getShelfLifePresets } from "@/lib/data";
-import { denyFiller, requireOrgId } from "@/lib/org";
+import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
 import { StockForm } from "./stock-form";
 
 export async function generateMetadata() {
@@ -24,6 +24,8 @@ export default async function RefillMachinePage({
   const { m } = await getI18n();
   const orgId = await requireOrgId();
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
+  // The owner fills and counts on the filler's page now (Xin, 20-10-2026); a shop keeps this form.
+  if (await isOperator()) redirect(`/refill/machines/${id}?from=machine`);
 
   // Everything at once: each loader keeps its own checks (another account's
   // machine comes back as nothing), and nothing is shown before the machine

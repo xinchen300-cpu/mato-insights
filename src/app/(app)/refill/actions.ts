@@ -13,6 +13,8 @@ import { cleanRoundSettings, legKey, mergeRoute, orderByRoute, type RoundSetting
 
 export async function createRefillSheet(
   machineIds: string[],
+  /** The operator fills it themselves, as a filler does (Xin, 20-10-2026): straight into the round. */
+  options: { fill?: boolean } = {},
 ): Promise<{ empty: true } | { locked: true } | void> {
   // A run carries every slot of every machine on it, including a co-tenant's
   // on a shared machine: planning one is the operator's or a filler's job,
@@ -74,8 +76,8 @@ export async function createRefillSheet(
   }
 
   revalidatePath("/refill");
-  // The operator lands on the round to hand it out; a filler starts filling.
-  redirect((await isFiller()) ? `/vullen/${sheet.id}` : `/refill/${sheet.id}`);
+  // A filler, or the operator filling it themselves, starts filling; otherwise the operator lands on the round to hand it out.
+  redirect((await isFiller()) || options?.fill === true ? `/vullen/${sheet.id}` : `/refill/${sheet.id}`);
 }
 
 export async function saveSheetNotes(sheetId: string, notes: string) {

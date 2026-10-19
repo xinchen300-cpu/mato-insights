@@ -1110,6 +1110,41 @@ export async function getLastRefills(orgId: string): Promise<Map<string, LastRef
   );
 }
 
+/** The organisation's own name, to leave off its machines' names; only for its own members. */
+export async function getOrgName(orgId: string): Promise<string | null> {
+  if ((await getScope()).orgId !== orgId) return null;
+  const { data } = await createAdminClient().from("organizations").select("name").eq("id", orgId).maybeSingle();
+  return (data?.name as string | null) ?? null;
+}
+
+export type RefillVisit = { machineId: string; at: string; pieces: number; by: string | null };
+
+/**
+ * Every time a machine was filled between two moments: when, how many pieces
+ * and by whom (Xin, 20-10-2026). The operator's to see, for their own
+ * machines (none asked is all of them); anyone else gets none.
+ */
+export async function getRefillVisits(
+  orgId: string,
+  range: { from: string; to: string },
+  machineIds: string[] | null,
+): Promise<RefillVisit[]> {
+  if (!(await isOperator()) || (await getScope()).orgId !== orgId) return [];
+  const own = new Set((await getMachines(orgId)).map((machine) => machine.id));
+  const asked = machineIds === null ? null : machineIds.filter((id) => own.has(id));
+  if (asked !== null && asked.length === 0) return [];
+  const { data, error } = await createAdminClient().rpc("refill_visits", {
+    target_org: orgId,
+    from_ts: range.from,
+    to_ts: range.to,
+    machine_filter: asked,
+  });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as { machine_id: string; filled_at: string; pieces: number; filled_by: string | null }[])
+    .filter((row) => own.has(row.machine_id))
+    .map((row) => ({ machineId: row.machine_id, at: row.filled_at, pieces: Number(row.pieces), by: row.filled_by }));
+}
+
 export async function getLastSales(orgId: string): Promise<Map<string, string | null>> {
   const { data } = await createAdminClient().rpc("dashboard_machine_last_sale", { target_org: orgId });
   const all = new Map(

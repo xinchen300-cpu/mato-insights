@@ -421,3 +421,20 @@ import { PERIODS, revenueByMachine, withoutOrgName } from "../src/lib/overview.t
   ok("overview: late sales without our terminal; last fill kept", of("b").late && !of("a").late && of("a").lastRefill?.pieces === 9 && of("b").lastRefill === null);
   ok("overview: names without the org's own name", of("a").name === "a");
 }
+
+// ── "Vul route beginnen" for the owner too (src/lib/refill-start.ts) ──
+import { startable } from "../src/lib/refill-start.ts";
+{
+  const mc = (id: string, refill_manual = false) => ({ id, refill_manual });
+  const slots = [
+    { machine_id: "a", product_id: "p" },
+    { machine_id: "b", product_id: "p" },
+    { machine_id: "c", product_id: null },
+    { machine_id: "d", product_id: "p" },
+    { machine_id: "e", product_id: "p" },
+  ];
+  const start = startable([mc("a"), mc("b"), mc("c"), mc("d", true), mc("e")], slots, [{ machines: [{ id: "e", done: false }, { id: "a", done: true }] }], ["b", "a"]);
+  ok("start: machines with a product, in the route's order, the rest after", start.ids.join() === "b,a");
+  ok("start: none filled by hand, none without a product", !start.ids.includes("d") && !start.ids.includes("c"));
+  ok("start: one still on an open round is left off; one done on it is not", start.busy.has("e") && !start.ids.includes("e") && start.ids.includes("a"));
+}

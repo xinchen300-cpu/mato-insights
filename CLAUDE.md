@@ -123,6 +123,17 @@ verzonnen cijfers langs dezelfde weg: `/dev/owner`. **Nooit een waarde (lijst, c
 op 19-10 het live overzicht (teruggerold naar de vorige versie); `check:guards` vangt dat nu
 (`scripts/check-client-imports.mjs`).
 
+## De uitbater vult zoals Alus (20-10-2026)
+Xin: "Nieuwe ronde vervangen door de feature van Alus". De uitbater krijgt dezelfde grote knop **Vul route
+beginnen** (Bijvullen en overzicht; `StartRound fill`, `startable` in `src/lib/refill-start.ts`): één ronde
+met elke automaat die iets mist en niet op een open ronde staat, en meteen erin (`createRefillSheet(…, {fill:
+true})` → `/vullen`). Ook de tegels en "Zelf automaten kiezen" van Alus. "Bijvullen" en "Aantallen corrigeren"
+op een automaat openen voor de uitbater Alus' pagina met de grote − en + (`/refill/machines/[id]?from=machine`);
+`/machines/[id]/refill` stuurt hem daarheen, een zaak houdt dat oude formulier. `/refill/new` bestaat nog maar
+wordt nergens meer gelinkt. **Statistieken**: per automaat staat nu onder het totaal, daarna **Bijvullingen**
+(`refill_visits`, `getRefillVisits`, alleen de uitbater): per dag wanneer, hoeveel stuks, door wie; de lijst van
+alle producten is ingeklapt en "Gemiddelde verkoop" is weg.
+
 ## Rondes uit de cijfers gehaald (19-10-2026)
 Xin liet Alus opnieuw beginnen op niveau 1: zijn 20 oefenrondes (17–19 okt) staan in
 `refill_reset_archive` (de ronde als JSON plus zijn tekorten) én zijn verhuisd naar de lege organisatie
