@@ -107,6 +107,17 @@ voor Alus' paklijst. Stuurt Televend ooit losse verkopen mét uur en kolom, gebr
 `machines.payter_serial_number` van Gits **voordat** hij aangaat, anders maakt de sync een tweede
 automaat aan.
 
+## Keukenlijst (productielijst per producent, sinds 19-10-2026)
+Elke producent (`producers`, bij Chens: "Chens Garden keuken", 20 gerechten) krijgt een lijst van wat
+er vanavond gekookt moet worden voor de ronde van morgen 9:00 (`src/lib/production.ts`, getest in
+`test:flow`). Per gerecht: wat de automaten bij die ronde missen (nu leeg + verwachte verkoop tot dan,
+per vak en weekdag uit 8 weken, verdeeld over de uren) min de koelkast; is er iets nodig, dan minstens
+`products.batch_min` (standaard 5). Automaten met de hand gevuld (Torhout) of met voorraad ouder dan 72 u
+tellen een dag verkoop. Een trend staat er alleen als `compareSince` hem echt noemt. De koelkast is
+`producer_stock_events` (gemaakt +, geteld =, weggegooid −) min wat er in rondes in de automaten ging
+(`stock_events` refill) min wat Torhout verkocht (`producer_fridge`). Nooit geteld = "tel eerst", geen
+blinde batches. De keuken opent `/p/<list_token>` zonder account (NL/FR), de uitbater Bijvullen → Keuken.
+
 ## Rondes uit de cijfers gehaald (19-10-2026)
 Xin liet Alus opnieuw beginnen op niveau 1: zijn 20 oefenrondes (17–19 okt) staan in
 `refill_reset_archive` (de ronde als JSON plus zijn tekorten) én zijn verhuisd naar de lege organisatie

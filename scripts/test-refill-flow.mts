@@ -339,3 +339,55 @@ ok("months: first and last day", isDeepStrictEqual(monthDays("2026-02"), { from:
   const [empty] = roundsByMonth([], ["2026-08"], BXL);
   ok("by month: an empty month has no busiest day", empty.rounds.length === 0 && empty.busiest === null && empty.minutes === 0);
 }
+
+// ── The production list (src/lib/production.ts) ──
+import { hourShares, localTime, nextFill, productionPlan, salesBetween, type WeekdaySales } from "../src/lib/production.ts";
+{
+  // Monday 19 October 2026, Belgian summer time (UTC+2).
+  const at = (iso: string) => new Date(iso);
+  ok("production: the round after an evening is tomorrow morning", nextFill(at("2026-10-19T15:00:00Z")).toISOString() === "2026-10-20T07:00:00.000Z");
+  ok("production: cooking at 3 at night still makes 9 the same morning", nextFill(at("2026-10-20T01:00:00Z")).toISOString() === "2026-10-20T07:00:00.000Z");
+  ok("production: at 8 in the morning the next one is tomorrow", nextFill(at("2026-10-20T06:00:00Z")).toISOString() === "2026-10-21T07:00:00.000Z");
+  ok("production: winter time keeps 9 o'clock", localTime(nextFill(at("2026-10-26T15:00:00Z"))).hour === 9);
+  const flat = hourShares([]);
+  const perDay24 = [0, 24, 24, 24, 24, 24, 24, 24];
+  ok("production: flat hours, 24 a day is one an hour", Math.abs(salesBetween(perDay24, flat, at("2026-10-19T15:00:00Z"), at("2026-10-20T07:00:00Z")) - 16) < 1e-9);
+  const shares = hourShares([{ hour: 12, units: 3 }, { hour: 18, units: 1 }]);
+  ok("production: the hours follow the sales", shares[12] === 0.75 && shares[18] === 0.25 && shares[3] === 0);
+
+  // Two followed slots of one dish, 0.75 a day each (6 on every weekday over eight weeks).
+  const now = at("2026-10-19T15:00:00Z");
+  const sales = (machineId: string, selection: string): WeekdaySales[] =>
+    [1, 2, 3, 4, 5, 6, 7].map((weekday) => ({ machineId, selection, weekday, units: 6, firstSale: "2026-08-01T10:00:00Z" }));
+  const base = {
+    now,
+    dishes: [{ id: "bami", name: "Bami", photoPath: null, batchMin: 5 }],
+    manual: [] as string[],
+    slots: [
+      { machineId: "m1", selection: "1", productId: "bami", capacity: 2, stock: 1, countedAt: "2026-10-19T07:00:00Z" },
+      { machineId: "m1", selection: "3", productId: "bami", capacity: 2, stock: 1, countedAt: "2026-10-19T07:00:00Z" },
+    ],
+    sales: [...sales("m1", "1"), ...sales("m1", "3")],
+    hourUnits: [],
+    fridge: [{ productId: "bami", inFridge: 1, madeToday: 0 }],
+    trends: [],
+    trendPrevStart: "2026-08-24T00:00:00Z",
+  };
+  const plan = productionPlan(base).lines[0];
+  // Until 9 tomorrow (16 h of 24, flat): 0.5 a slot. Each slot then holds 0.5 and needs 1.5.
+  ok("production: what the round will need", plan.need === 3 && plan.emptyNow === 2 && plan.sells === 1);
+  ok("production: short after the fridge, made as at least a batch", plan.inFridge === 1 && plan.make === 5);
+  ok("production: a fridge that covers it makes nothing", productionPlan({ ...base, fridge: [{ productId: "bami", inFridge: 4, madeToday: 0 }] }).lines[0].make === 0);
+  ok("production: a fridge never counted makes nothing blind, but says what is needed", (() => {
+    const line = productionPlan({ ...base, fridge: [] }).lines[0];
+    return line.inFridge === null && line.make === 0 && line.need === 3;
+  })());
+  const manual = productionPlan({ ...base, manual: ["m1"] }).lines[0];
+  ok("production: a machine filled by hand needs a day's sales", manual.need === 2 && manual.emptyNow === 0);
+  const stale = productionPlan({ ...base, slots: base.slots.map((s) => ({ ...s, countedAt: "2026-10-14T07:00:00Z" })) }).lines[0];
+  ok("production: stock not counted for days is not trusted", stale.need === 2);
+  const trend = (units: number, prevUnits: number, firstSale: string | null) =>
+    productionPlan({ ...base, trends: [{ productId: "bami", units, prevUnits, firstSale }] }).lines[0].trend;
+  ok("production: a trend only when it is real", trend(60, 30, null) === null && trend(100, 40, null) === "up" && trend(40, 100, null) === "down");
+  ok("production: a dish new since the earlier weeks has no trend", trend(100, 40, "2026-09-01T00:00:00Z") === null);
+}

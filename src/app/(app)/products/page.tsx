@@ -2,7 +2,7 @@ import { Link2 } from "lucide-react";
 import { Avatar, ListRow, RowList } from "@/components/list-row";
 import { plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getBusinesses, getProducts, getShelfLifePresets, getUnassigned } from "@/lib/data";
+import { getBusinesses, getProducers, getProducts, getShelfLifePresets, getUnassigned } from "@/lib/data";
 import { denyFiller, requireOrgId } from "@/lib/org";
 import { ProductGrid } from "./product-grid";
 import { isRecent } from "@/lib/unassigned";
@@ -17,11 +17,12 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const { business } = await searchParams;
   const { m } = await getI18n();
   const orgId = await requireOrgId();
-  const [products, unassigned, businesses, presets] = await Promise.all([
+  const [products, unassigned, businesses, presets, producers] = await Promise.all([
     getProducts(orgId, { includeArchived: true }),
     getUnassigned(orgId),
     getBusinesses(orgId),
     getShelfLifePresets(orgId),
+    getProducers(orgId),
   ]);
 
   // The same count as on the overview: what sold lately and still has no product.
@@ -56,6 +57,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
       businesses={businesses.map((b) => ({ id: b.id, name: b.name }))}
       initialBusiness={businesses.some((b) => b.id === business) ? business : ""}
       presets={presets}
+      producers={producers.map((p) => ({ id: p.id, name: p.name }))}
     />
   );
 }
