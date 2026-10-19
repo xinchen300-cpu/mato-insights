@@ -105,23 +105,11 @@ in"): "Bestelling doorgeven" rekent de lijst opnieuw op de server, schrijft hem 
 (`sendProductionOrder`) en geeft een bericht voor WhatsApp of om te kopiëren. "Koelkast" is de correctie
 van de uitbater. De kolom `producers.list_token` bleef van een eerste versie met een keukenlink; ongebruikt.
 
-## Houdbaarheid per vak en "vandaag niet nodig" (19-10-2026)
-Elk gerecht van de keuken houdt **12 dagen** (`products.shelf_life_days`). De datum komt **alleen van de
-kookdag**, nooit van de dag dat het in de automaat ging: `record_stock` geeft een gerecht van een producent
-zonder `made_on` geen datum (`stock_batches.expires_at` blijft leeg). De kookdag komt uit de koelkast
-(`src/lib/freshness.ts`, `fridge_events`): wat "Bestelling doorgeven" wegschrijft telt als gekookt die avond,
-de koelkast geeft de oudste eerst, een telling houdt de nieuwste. `completeStop` stuurt per vak de oudste
-kookdag mee; vóór de eerste telling van de koelkast is niets bekend. Aan de automaat (`slot_dates`): **Haal
-eruit** = gedateerde stuks die vóór de volgende ronde (morgen 9:00) vervallen, met het aantal al ingevuld;
-**Lees het etiket** = stuks zonder kookdag die er ≥ 5 dagen staan of zonder batch binnenkwamen. Niets
-gemarkeerd: de gewone regel "kijk de datums na". `slot_ages` is een ongebruikte eerste versie.
-
-"Vandaag niet nodig" (`src/lib/skip.ts`, `getVisitAdvice`): een automaat valt van Alus' grote knop als het
-bezoek (15 min × `cost_per_hour` €16 + de omweg uit Route) meer kost dan wat hij tot morgen 9:00 niet verkoopt
-door lege vakken, gewaardeerd aan de **verkoopprijs** (marge onbekend, dus voorzichtig). Spreiding ×4 (negatief
-binomiaal, `DISPERSION`). Nooit overslaan bij: iets eruit te halen of etiket te lezen, verkoop die later
-binnenkomt (Gits, geen Payter), een vak nooit geteld, < 30 verkopen in 8 weken, geen prijs. Alus ziet stuks,
-de uitbater ziet ook euro's; zelf kiezen kan altijd.
+## Geen houdbaarheid per vak en geen "vandaag niet nodig" (19-10-2026)
+Gebouwd en op 19-10 even live, maar Xin wil ze (nog) niet: teruggedraaid (revert van b523503). Wat in de
+databank bleef is toevoegend en ongebruikt: `stock_batches.made_on`, `fridge_events`, `slot_dates`,
+`slot_ages`, `sales_by_hour`. `record_stock` en `products.shelf_life_days` van Chens' gerechten staan weer
+zoals ervoor; `organizations.cost_per_hour` bleef €16 (Xin: "ik betaal mijn chauffeur 16 euro per uur").
 
 ## Overzicht van de uitbater (19-10-2026)
 Xin: "omzet per automaat, niet één totaal". Het overzicht toont eerst snelknoppen (Nieuwe ronde, Keukenlijst,

@@ -2,15 +2,13 @@ import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { denyFillerAccess, getScope, getSessionUser, isFiller, isOperator, requireOperator, requireRefillAccess, type Role } from "@/lib/org";
 import { displayName } from "@/lib/people";
-import { cleanRoundSettings, orderByRoute, type RoundSettings } from "@/lib/round-settings";
+import { cleanRoundSettings, type RoundSettings } from "@/lib/round-settings";
 import { lineTake, onlyMine, roundOrder, roundTimings, slotKey, type Average, type FlowLine, type RoundTimings, type ShopView, type StopRecord } from "@/lib/refill-flow";
 import type { MyRound } from "@/lib/filler-stats";
 import { terminalStatus, type TerminalStatus } from "@/lib/terminal-status";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
 import { reportDay } from "@/lib/stats";
-import { nextFill, productionPlan, RATE_DAYS, type ProductionLine } from "@/lib/production";
-import { fridgeLots, madeDays, slotFreshness, type AgeRow, type FridgeEvent, type SlotFresh } from "@/lib/freshness";
-import { skipAdvice, type SkipReason } from "@/lib/skip";
+import { productionPlan, RATE_DAYS, type ProductionLine } from "@/lib/production";
 import type {
   Producer,
   RunSummaryRow,
@@ -182,8 +180,6 @@ export type RefillRound = {
   settings: RoundSettings;
   /** What the operator wrote for this one round, for whoever fills it. */
   notes: string | null;
-  /** Per slot ("machine:selection") with something to do about dates: pieces to take out, labels to read. */
-  freshness: Record<string, SlotFresh>;
 };
 
 /** What Vendly knows is in a slot, or null when it cannot know (never counted, or oversold since). */
@@ -212,7 +208,7 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
   const machineIds = (sheet.machine_ids ?? []) as string[];
   // The full ones too: their place on the route and how full they are now.
   const order = roundOrder((sheet.chosen_machine_ids ?? []) as string[], machineIds);
-  const [{ data: machineRows }, stock, lastSales, { data: org }, dates] = await Promise.all([
+  const [{ data: machineRows }, stock, lastSales, { data: org }] = await Promise.all([
     admin
       .from("machines")
       .select("id, name, photo_path, last_connected_at, last_disconnected_at, type, address")
@@ -221,7 +217,6 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
     getMachineStock(orgId, order.length ? order : [NOTHING]),
     getLastSales(orgId),
     admin.from("organizations").select("refill_settings").eq("id", orgId).maybeSingle(),
-    slotDates(orgId, order.length ? order : [NOTHING]),
   ]);
   const byId = new Map((machineRows ?? []).map((row) => [row.id as string, row]));
   const live = new Map(stock.map((slot) => [slotKey(slot.machine_id, slot.selection_number), slot]));
@@ -285,141 +280,7 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
     stops: (sheet.stops ?? {}) as Record<string, StopRecord>,
     settings: cleanRoundSettings(org?.refill_settings),
     notes: (sheet.notes as string | null)?.trim() || null,
-    freshness: Object.fromEntries(freshnessOf(dates, stock)),
   };
-}
-
-/** Every batch still in the slots of these machines, with the day it was cooked when known; read with the service key. */
-async function slotDates(orgId: string, machineIds: string[] | null): Promise<AgeRow[]> {
-  const { data, error } = await createAdminClient().rpc("slot_dates", { target_org: orgId, machine_filter: machineIds });
-  if (error) throw new Error(error.message);
-  return (
-    (data ?? []) as {
-      machine_id: string;
-      selection_number: string;
-      shelf_life_days: number;
-      from_producer: boolean;
-      qty_remaining: number | null;
-      filled_at: string | null;
-      made_on: string | null;
-      expires_at: string | null;
-    }[]
-  ).map((row) => ({
-    machineId: row.machine_id,
-    selection: row.selection_number,
-    shelfLifeDays: Number(row.shelf_life_days),
-    fromProducer: row.from_producer,
-    qtyRemaining: row.qty_remaining === null ? null : Number(row.qty_remaining),
-    filledAt: row.filled_at,
-    madeOn: row.made_on,
-    expiresAt: row.expires_at,
-  }));
-}
-
-/** What comes out of each slot before the next round, and whose label is read, as of now. */
-function freshnessOf(dates: AgeRow[], stock: SlotStock[], now = new Date()): Map<string, SlotFresh> {
-  const known = new Map(stock.map((slot) => [slotKey(slot.machine_id, slot.selection_number), knownStock(slot)]));
-  return slotFreshness(dates, known, now, nextFill(now));
-}
-
-/**
- * The day the pieces filled into each slot were cooked, keyed by selection
- * (Xin, 19-10-2026): taken from their dish's fridge, oldest first, in the
- * order given. Only for a dish whose fridge the operator follows and counted;
- * null where the day is not known, so no date is made up.
- */
-export async function cookingDays(
-  orgId: string,
-  fills: { selection: string; productId: string; pieces: number }[],
-): Promise<Map<string, string | null>> {
-  if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
-  const products = [...new Set(fills.filter((fill) => fill.pieces > 0).map((fill) => fill.productId))];
-  if (products.length === 0) return new Map();
-  const { data, error } = await createAdminClient().rpc("fridge_events", { target_org: orgId, products });
-  if (error) throw new Error(error.message);
-  const events = new Map<string, FridgeEvent[]>();
-  for (const row of (data ?? []) as { product_id: string; at: string; kind: string; qty: number; made_on: string | null }[]) {
-    const list = events.get(row.product_id) ?? [];
-    list.push({ at: row.at, kind: row.kind, qty: Number(row.qty), madeOn: row.made_on });
-    events.set(row.product_id, list);
-  }
-  return madeDays(
-    new Map([...events].map(([productId, list]) => [productId, fridgeLots(list)])),
-    fills.map((fill) => ({ key: fill.selection, productId: fill.productId, pieces: fill.pieces })),
-  );
-}
-
-export type VisitAdvice = {
-  machineId: string;
-  /** Leaving it out today pays: the round goes without it. */
-  skip: boolean;
-  reason: SkipReason;
-  /** Pieces it is expected to fail to sell until the next round, when left out. */
-  missed: number;
-  /** For the operator only: what leaving it out costs at most, and what its visit costs. */
-  money: { lost: number; saves: number; minutes: number; km: number } | null;
-};
-
-/**
- * Per machine with something to fill, whether today's visit is worth making
- * (Xin, 19-10-2026). For the operator and a filler; a filler gets pieces only,
- * never money, as everywhere on their screens.
- */
-export async function getVisitAdvice(orgId: string): Promise<VisitAdvice[]> {
-  if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
-  const operator = await isOperator();
-  const admin = createAdminClient();
-  const now = new Date();
-  const [machines, stock, sales, hours, org, dates] = await Promise.all([
-    admin.from("machines").select("id, payter_serial_number, refill_manual").eq("org_id", orgId).eq("excluded", false),
-    admin.rpc("machine_stock", { target_org: orgId, machine_filter: null }),
-    admin.rpc("slot_weekday_sales", { target_org: orgId, days: RATE_DAYS }),
-    admin.rpc("sales_by_hour", { target_org: orgId, days: RATE_DAYS }),
-    admin.from("organizations").select("cost_per_hour, cost_per_km, refill_settings").eq("id", orgId).maybeSingle(),
-    slotDates(orgId, null),
-  ]);
-  for (const result of [machines, stock, sales, hours, org]) {
-    if (result.error) throw new Error(result.error.message);
-  }
-  const slots = ((stock.data ?? []) as SlotStock[]).filter((slot) => slot.product_id);
-  // Only machines a round would visit: filled by Vendly, with a slot that lacks something or was never counted.
-  const visiting = new Set(
-    slots.filter((slot) => knownStock(slot) === null || knownStock(slot)! < slot.capacity).map((slot) => slot.machine_id),
-  );
-  const fleet = (machines.data ?? []).filter((machine) => !machine.refill_manual && visiting.has(machine.id as string));
-  if (fleet.length === 0) return [];
-  const settings = cleanRoundSettings(org.data?.refill_settings);
-  const ids = orderByRoute(fleet.map((machine) => machine.id as string), settings.route);
-  const fresh = freshnessOf(dates, slots, now);
-  const advice = skipAdvice({
-    now,
-    machines: ids.map((id) => {
-      const mine = slots.filter((slot) => slot.machine_id === id);
-      const dates = mine.map((slot) => fresh.get(slotKey(id, slot.selection_number)));
-      return {
-        id,
-        live: Boolean(fleet.find((machine) => machine.id === id)?.payter_serial_number),
-        slots: mine.map((slot) => ({ selection: slot.selection_number, capacity: slot.capacity, stock: knownStock(slot), price: slot.price })),
-        pull: dates.reduce((sum, d) => sum + (d?.pull ?? 0), 0),
-        check: dates.reduce((sum, d) => sum + (d?.check ?? 0), 0),
-      };
-    }),
-    sales: ((sales.data ?? []) as { machine_id: string; selection_number: string; weekday: number; units: number; first_sale: string }[]).map(
-      (row) => ({ machineId: row.machine_id, selection: row.selection_number, weekday: row.weekday, units: row.units, firstSale: row.first_sale }),
-    ),
-    hourUnits: ((hours.data ?? []) as { hour: number; units: number }[]).map((row) => ({ hour: Number(row.hour), units: Number(row.units) })),
-    legs: settings.legs,
-    drive: settings.drive,
-    perHour: Number(org.data?.cost_per_hour ?? 25),
-    perKm: Number(org.data?.cost_per_km ?? 0.42),
-  });
-  return advice.map((entry) => ({
-    machineId: entry.machineId,
-    skip: entry.reason === "skip",
-    reason: entry.reason,
-    missed: entry.missed,
-    money: operator ? { lost: entry.lost, saves: entry.saves, minutes: entry.minutes, km: entry.km } : null,
-  }));
 }
 
 /**

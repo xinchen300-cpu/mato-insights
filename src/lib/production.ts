@@ -122,15 +122,17 @@ export type ProductionLine = {
   trend: "up" | "down" | null;
 };
 
-/**
- * Each slot's pace per weekday (index 1–7, pieces a day), keyed
- * "machine|selection": its sales of the window per day the machine was selling.
- */
-export function slotPace(sales: WeekdaySales[], now: Date): Map<string, number[]> {
+export function productionPlan(input: ProductionInput): { fillAt: Date; lines: ProductionLine[] } {
+  const { now } = input;
+  const fillAt = nextFill(now);
+  const shares = hourShares(input.hourUnits);
+  const manual = new Set(input.manual);
+
+  // Each slot's pace per weekday, per day the machine was selling in the window.
   const windowStart = new Date(now.getTime() - RATE_DAYS * DAY);
   const pace = new Map<string, number[]>();
   const bySlot = new Map<string, WeekdaySales[]>();
-  for (const row of sales) {
+  for (const row of input.sales) {
     const key = `${row.machineId}|${row.selection}`;
     bySlot.set(key, [...(bySlot.get(key) ?? []), row]);
   }
@@ -147,15 +149,6 @@ export function slotPace(sales: WeekdaySales[], now: Date): Map<string, number[]
     }
     pace.set(key, perDay);
   }
-  return pace;
-}
-
-export function productionPlan(input: ProductionInput): { fillAt: Date; lines: ProductionLine[] } {
-  const { now } = input;
-  const fillAt = nextFill(now);
-  const shares = hourShares(input.hourUnits);
-  const manual = new Set(input.manual);
-  const pace = slotPace(input.sales, now);
 
   const lines = input.dishes.map((dish): ProductionLine => {
     let emptyNow = 0;

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { cookingDays, getRefillRound, type RefillRound } from "@/lib/data";
+import { getRefillRound, type RefillRound } from "@/lib/data";
 import { getSessionUser, requireRefillAccess } from "@/lib/org";
 import {
   REMOVAL_REASONS,
@@ -239,32 +239,12 @@ export async function completeStop(sheetId: string, machineId: string, input: St
     }
   }
 
-  // The day the new pieces were cooked, taken from the kitchen's fridge oldest
-  // first, slot by slot down the machine (Xin, 19-10-2026). Where it is not
-  // known nothing is sent, and the dish gets no date rather than a made-up one.
-  const filledIn = lines
-    .filter((line) => line.filled > 0 && refills.some((entry) => entry.selection === line.selection))
-    .map((line) => slots.get(line.selection)!)
-    .sort((a, b) => a.row - b.row || a.slot - b.slot);
-  const cooked = await cookingDays(
-    orgId,
-    filledIn.map((slot) => ({
-      selection: slot.selection,
-      productId: slot.productId,
-      pieces: lines.find((line) => line.selection === slot.selection)!.filled,
-    })),
-  );
-  const dated = refills.map((entry) => {
-    const day = cooked.get(entry.selection);
-    return day ? { ...entry, made_on: day } : entry;
-  });
-
   const now = Date.now();
   const completedAt = phoneMoment(input.doneAgo, round.readyAt, now) ?? new Date(now).toISOString();
   const checkedAt = phoneMoment(input.checkedAgo, round.readyAt, now);
   const status = await finishStop(orgId, sheetId, machineId, {
     pulled: [...pulled].map(([note, entries]) => ({ note, entries })),
-    refills: dated,
+    refills,
     corrections: [...corrections].map(([note, entries]) => ({ note, entries })),
     record: {
       checkedAt: checkedAt && checkedAt > completedAt ? completedAt : checkedAt,
@@ -372,8 +352,7 @@ async function finishStop(
   work: {
     /** Taken out of slots that are filled again: written before them. */
     pulled?: { note: string; entries: { selection: string; level_after: number }[] }[];
-    /** With the day the pieces were cooked, where it is known. */
-    refills: { selection: string; level_after: number; made_on?: string }[];
+    refills: { selection: string; level_after: number }[];
     corrections: { note: string; entries: { selection: string; level_after: number }[] }[];
     record: StopRecord;
   },
