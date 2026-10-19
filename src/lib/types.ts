@@ -91,6 +91,8 @@ export type Product = {
   shelf_life_days: number | null;
   shelf_life_preset_id: string | null;
   producer_id: string | null;
+  /** The smallest amount the producer makes of it at once (the kitchen list rounds up to it). */
+  batch_min: number;
 };
 
 export type Business = {

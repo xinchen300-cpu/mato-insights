@@ -8,6 +8,7 @@ import type { MyRound } from "@/lib/filler-stats";
 import { terminalStatus, type TerminalStatus } from "@/lib/terminal-status";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
 import { reportDay } from "@/lib/stats";
+import { productionPlan, RATE_DAYS, type ProductionLine } from "@/lib/production";
 import type {
   Producer,
   RunSummaryRow,
@@ -1137,7 +1138,7 @@ function brusselsMidnight(day: string): string {
 }
 
 export const PRODUCT_COLUMNS =
-  "id, name, price, photo_path, archived, business_id, shelf_life_days, shelf_life_preset_id, producer_id";
+  "id, name, price, photo_path, archived, business_id, shelf_life_days, shelf_life_preset_id, producer_id, batch_min";
 
 export async function getProducts(orgId: string, { includeArchived = false } = {}): Promise<Product[]> {
   await denyFillerAccess();
@@ -1539,6 +1540,172 @@ export async function getProducers(orgId: string): Promise<Producer[]> {
   // A shop only knows the producers behind its own products.
   const mine = new Set((await getProducts(orgId)).map((product) => product.producer_id).filter(Boolean));
   return producers.filter((producer) => mine.has(producer.id));
+}
+
+// ── The production list (Xin, 19-10-2026) ────────────────────────────────────
+
+export type ProductionList = {
+  producerId: string;
+  producerName: string;
+  /** The round this list is for. */
+  fillAt: string;
+  lines: ProductionLine[];
+};
+
+/** A producer's link: long and random, so it cannot be guessed. */
+const PRODUCER_TOKEN = /^[A-Za-z0-9_-]{24,64}$/;
+
+/**
+ * One producer's list, read with the service key. Not exported: the two
+ * callers below decide who may see it (the operator, or whoever holds the link).
+ */
+async function productionFor(orgId: string, producerId: string, producerName: string): Promise<ProductionList> {
+  const admin = createAdminClient();
+  const now = new Date();
+  const daysAgo = (n: number) => reportDay(new Date(now.getTime() - n * 86_400_000), DISPLAY_TIME_ZONE);
+  const report = (from: string, to: string) =>
+    admin.rpc("stats_report", {
+      target_org: orgId,
+      period: "custom",
+      custom_from: from,
+      custom_to: to,
+      machine_filter: null,
+      business_filter: null,
+      product_filter: null,
+    });
+  const [dishes, machines, stock, sales, hours, trend, fridge] = await Promise.all([
+    admin.from("products").select("id, name, photo_path, batch_min").eq("org_id", orgId).eq("producer_id", producerId).eq("archived", false),
+    admin.from("machines").select("id, refill_manual").eq("org_id", orgId).eq("excluded", false),
+    admin.rpc("machine_stock", { target_org: orgId, machine_filter: null }),
+    admin.rpc("slot_weekday_sales", { target_org: orgId, days: RATE_DAYS }),
+    // The hours of the last eight weeks; the trend over four full weeks against the four before.
+    report(daysAgo(RATE_DAYS), daysAgo(1)),
+    report(daysAgo(28), daysAgo(1)),
+    admin.rpc("producer_fridge", { target_org: orgId, target_producer: producerId }),
+  ]);
+  for (const result of [dishes, machines, stock, sales, hours, trend, fridge]) {
+    if (result.error) throw new Error(result.error.message);
+  }
+  const trendReport = trend.data as StatsReport;
+  const plan = productionPlan({
+    now,
+    dishes: (dishes.data ?? []).map((d) => ({
+      id: d.id as string,
+      name: d.name as string,
+      photoPath: (d.photo_path as string | null) ?? null,
+      batchMin: Number(d.batch_min) || 1,
+    })),
+    manual: (machines.data ?? []).filter((m) => m.refill_manual).map((m) => m.id as string),
+    slots: ((stock.data ?? []) as SlotStock[]).map((slot) => ({
+      machineId: slot.machine_id,
+      selection: slot.selection_number,
+      productId: slot.product_id,
+      capacity: slot.capacity,
+      stock: slot.stock,
+      countedAt: slot.counted_at,
+    })),
+    sales: ((sales.data ?? []) as { machine_id: string; selection_number: string; weekday: number; units: number; first_sale: string }[]).map(
+      (row) => ({ machineId: row.machine_id, selection: row.selection_number, weekday: row.weekday, units: row.units, firstSale: row.first_sale }),
+    ),
+    hourUnits: (hours.data as StatsReport).by_hour,
+    fridge: ((fridge.data ?? []) as { product_id: string; in_fridge: number | null; made_today: number }[]).map((row) => ({
+      productId: row.product_id,
+      inFridge: row.in_fridge,
+      madeToday: row.made_today,
+    })),
+    trends: trendReport.by_product
+      .filter((row) => row.product_id)
+      .map((row) => ({ productId: row.product_id!, units: row.units, prevUnits: row.prev_units, firstSale: row.first_sale })),
+    trendPrevStart: trendReport.prev_start,
+  });
+  return { producerId, producerName, fillAt: plan.fillAt.toISOString(), lines: plan.lines };
+}
+
+/** The operator's production lists: one per producer that makes something, with its link if it has one. */
+export async function getProductionLists(orgId: string): Promise<(ProductionList & { token: string | null })[]> {
+  await requireOperator();
+  const admin = createAdminClient();
+  const [{ data: producers, error }, { data: made }] = await Promise.all([
+    admin.from("producers").select("id, name, list_token").eq("org_id", orgId).order("name"),
+    admin.from("products").select("producer_id").eq("org_id", orgId).eq("archived", false).not("producer_id", "is", null),
+  ]);
+  if (error) throw new Error(error.message);
+  const busy = new Set((made ?? []).map((row) => row.producer_id as string));
+  return Promise.all(
+    (producers ?? [])
+      .filter((producer) => busy.has(producer.id as string))
+      .map(async (producer) => ({
+        ...(await productionFor(orgId, producer.id as string, producer.name as string)),
+        token: (producer.list_token as string | null) ?? null,
+      })),
+  );
+}
+
+/** The producer behind a link, or null: a wrong, revoked or blocked link opens nothing. */
+async function producerByToken(token: string): Promise<{ id: string; name: string; org_id: string } | null> {
+  if (!PRODUCER_TOKEN.test(token)) return null;
+  const { data } = await createAdminClient().from("producers").select("id, name, org_id").eq("list_token", token).maybeSingle();
+  if (!data || isBlockedOrg(data.org_id as string)) return null;
+  return { id: data.id as string, name: data.name as string, org_id: data.org_id as string };
+}
+
+/** The list a producer opens with their link, without an account. */
+export async function getProductionByToken(token: string): Promise<ProductionList | null> {
+  const producer = await producerByToken(token);
+  return producer ? productionFor(producer.org_id, producer.id, producer.name) : null;
+}
+
+/** The producer's link, made the first time it is asked for and the same every day after. */
+export async function ensureProducerLink(orgId: string, producerId: string): Promise<string> {
+  await requireOperator();
+  const admin = createAdminClient();
+  const { data } = await admin.from("producers").select("list_token").eq("org_id", orgId).eq("id", producerId).maybeSingle();
+  if (!data) throw new Error("Not found");
+  if (data.list_token) return data.list_token as string;
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  const token = btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const { error } = await admin.from("producers").update({ list_token: token }).eq("org_id", orgId).eq("id", producerId);
+  if (error) throw new Error(error.message);
+  return token;
+}
+
+export type ProducerStockKind = "made" | "count";
+
+/** Writes what the kitchen made tonight, or what it counted in the fridge, for one of the producer's own dishes. */
+async function writeProducerStock(orgId: string, producerId: string, productId: string, kind: ProducerStockKind, qty: number, byName: string | null) {
+  if (!Number.isInteger(qty) || qty < 0 || qty > 9999 || (kind === "made" && qty === 0)) throw new Error("invalid quantity");
+  const admin = createAdminClient();
+  const { data: dish } = await admin
+    .from("products")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("producer_id", producerId)
+    .eq("id", productId)
+    .maybeSingle();
+  if (!dish) throw new Error("Not found");
+  const { error } = await admin.from("producer_stock_events").insert({
+    org_id: orgId,
+    producer_id: producerId,
+    product_id: productId,
+    kind,
+    qty,
+    made_on: kind === "made" ? reportDay(new Date(), DISPLAY_TIME_ZONE) : null,
+    by_name: byName?.slice(0, 80) ?? null,
+  });
+  if (error) throw new Error(error.message);
+}
+
+/** The kitchen, through its link. */
+export async function producerStockByToken(token: string, productId: string, kind: ProducerStockKind, qty: number): Promise<void> {
+  const producer = await producerByToken(token);
+  if (!producer) throw new Error("Not found");
+  await writeProducerStock(producer.org_id, producer.id, productId, kind, qty, null);
+}
+
+/** The operator, in the app. */
+export async function producerStockAsOperator(orgId: string, producerId: string, productId: string, kind: ProducerStockKind, qty: number): Promise<void> {
+  await requireOperator();
+  await writeProducerStock(orgId, producerId, productId, kind, qty, displayName(await getSessionUser()));
 }
 
 /** The report that closes a run: filled, out of date and short, per product. */
