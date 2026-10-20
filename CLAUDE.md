@@ -175,6 +175,11 @@ Sinds 20-10-2026 telt ze er haar eigen voorraad met − en +: tabel **`ledoux_st
 haar vakken zelf aan (naam, hoeveel erin past; prijzen niet, die staan op de automaat): tabel **`ledoux_slots`** (beide RLS aan, alleen de
 servicerol). Die tabellen zijn van die site; Vendly leest of schrijft ze niet.
 
+**Alle drie de klantsites (Ledoux, Sferio, ChocaBake)** hebben op Voorraad naast "Aantallen aanpassen" ook
+**Vullijst maken** (20-10-2026): één lijst per product met hoeveel erbij moet en in welke vakken (`src/lib/fill-list.ts`,
+in alle drie gelijk), niet-getelde vakken eronder, te delen of kopiëren als tekst. De bron van elke site staat als zip
+bij Xin (geen git-repo); de `mail/*-verzendklaar.*` met het wachtwoord in klare tekst gaat nooit mee.
+
 ## Sferio (aparte site, zelfde databank)
 https://sferio.vercel.app (Vercel-project `sferio`) is hetzelfde voor Nadia Serlez (Sferio, woondecoratie),
 die vakken huurt in dezelfde Sferio-automaat. Ook geen git-repo. Haar verkoop telt per vak, zonder prijs, zolang
