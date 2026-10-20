@@ -767,6 +767,8 @@ export const nl: Messages = {
     claimFailed: "Dat lukte niet. Probeer het opnieuw of vraag een nieuwe link.",
     toApp: "Naar MATO Info",
     forgot: "Wachtwoord vergeten?",
+    showPassword: "Wachtwoord tonen",
+    hidePassword: "Wachtwoord verbergen",
     resetTitle: "Nieuw wachtwoord",
     resetHint: "Vul je e-mailadres in. Je krijgt een link om een nieuw wachtwoord te kiezen.",
     resetSend: "Stuur de link",

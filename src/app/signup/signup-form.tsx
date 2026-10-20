@@ -17,6 +17,7 @@ import {
 import { SuccessCheck } from "@/components/motion/success";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
@@ -147,10 +148,9 @@ export function SignupForm({
           </div>
           <div className={authField}>
             <Label htmlFor="password">{m.auth.password}</Label>
-            <Input
+            <PasswordInput
               id="password"
               name="password"
-              type="password"
               required
               minLength={8}
               autoComplete="new-password"
