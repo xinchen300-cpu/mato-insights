@@ -188,7 +188,8 @@ kopie van de Sferio-site voor ChocaBake's **eigen** automaat: terminal `APO20242
 serienummer heeft geen verkopen). Elke verkoop op die terminal telt; `chocabake_slots` geeft alleen namen en
 hoeveel erin past (de 23 vakken 1–39, gelijk aan hun automaatbeheer onder categorie "Cho Ca Bake"),
 `chocabake_stock_counts` hun telling (gestart op 20-10 02:45 met de "huidige hoeveelheid" uit dat scherm).
-Vakken 41–65 verkopen ook (tot 18-10) maar staan nergens in een indeling: op de site heten ze "Vak 56". Meer dan
+Vakken 41–65 verkopen ook (tot 18-10) en zijn ook van ChocaBake (Xin, 20-10-2026), maar staan nergens in een
+indeling: op de site heten ze "Vak 56" tot ChocaBake ze op Indeling een naam geeft. Meer dan
 1000 verkopen: de site haalt ze in pagina's op (`transactions_machine_sales_idx`). Ook geen git-repo. Het project
 moest met de hand op framework `nextjs` gezet worden (aangemaakt via de CLI zonder; anders "No Output Directory").
 
