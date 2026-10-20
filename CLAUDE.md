@@ -30,6 +30,10 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   `productie` het niet meer gebruikt.
 - Rol **nooit** uit vanuit de gedeelde werkmap. Op 16-10 belandde zo ongecommit werk live, en op
   18-10 stond er live code die nergens in git zat (teruggezet als `productie`, commit dcd1434).
+- **Live staat sinds 20-10-2026 `cloud/productie-release` @ c35aa4a** (de eigenaarsfixes plus het oogje bij het
+  wachtwoord), uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
+  `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
+  login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
 
 Dit wordt verkocht als SaaS om **Televend** te verslaan. Televends verwijten zijn harde
 eisen: saaie interface, €450 telemetriebox per machine, te veel instellingen en bugs,
