@@ -769,6 +769,8 @@ export const fr: Messages = {
     claimFailed: "Cela n'a pas fonctionné. Réessayez ou demandez un nouveau lien.",
     toApp: "Vers MATO Info",
     forgot: "Mot de passe oublié ?",
+    showPassword: "Afficher le mot de passe",
+    hidePassword: "Masquer le mot de passe",
     resetTitle: "Nouveau mot de passe",
     resetHint: "Indiquez votre adresse e-mail. Vous recevrez un lien pour choisir un nouveau mot de passe.",
     resetSend: "Envoyer le lien",

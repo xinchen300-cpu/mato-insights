@@ -769,6 +769,8 @@ export const en = {
     claimFailed: "That did not work. Try again or ask for a new link.",
     toApp: "Go to MATO Info",
     forgot: "Forgotten your password?",
+    showPassword: "Show password",
+    hidePassword: "Hide password",
     resetTitle: "New password",
     resetHint: "Fill in your e-mail address. You will get a link to choose a new password.",
     resetSend: "Send the link",

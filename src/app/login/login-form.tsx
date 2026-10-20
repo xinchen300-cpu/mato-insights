@@ -16,6 +16,7 @@ import {
 } from "@/components/auth-frame";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n/client";
 import { samePath } from "@/lib/safe-path";
@@ -65,10 +66,9 @@ export function LoginForm({ canSignUp }: { canSignUp: boolean }) {
           </div>
           <div className={authField}>
             <Label htmlFor="password">{m.auth.password}</Label>
-            <Input
+            <PasswordInput
               id="password"
               name="password"
-              type="password"
               required
               autoComplete="current-password"
               className={authInput}
