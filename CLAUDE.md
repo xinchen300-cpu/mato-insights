@@ -30,8 +30,8 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   `productie` het niet meer gebruikt.
 - Rol **nooit** uit vanuit de gedeelde werkmap. Op 16-10 belandde zo ongecommit werk live, en op
   18-10 stond er live code die nergens in git zat (teruggezet als `productie`, commit dcd1434).
-- **Live staat sinds 20-10-2026 `cloud/productie-release` @ c35aa4a** (de eigenaarsfixes plus het oogje bij het
-  wachtwoord), uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
+- **Live staat sinds 20-10-2026 `cloud/productie-release` @ a83332c** (de eigenaarsfixes, het oogje bij het
+  wachtwoord en daarna alleen de camera, zie hieronder), uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
 
@@ -170,6 +170,23 @@ alle producten is ingeklapt en "Gemiddelde verkoop" is weg.
   `APPROVED` en `amount > 0`, met de gelezen kolommen in `include`) brachten `stats_report` van ±0,9–3,7 s naar
   40–250 ms en de poll van Net verkocht van 170 naar 7 ms. Een nieuwe query op `transactions` die traag is:
   kijk eerst of hij zo'n index kan gebruiken.
+
+## Camera bij de automaat (UniFi Protect, 20-10-2026)
+Xin: "een knop, toon mijn automaat nu, en dan zie je een snapshot". Geen video: die heeft hij in de UniFi-app.
+- Op de automaatpagina (alleen de uitbater) **Toon automaat nu**: een foto van dit moment via Ubiquiti's cloud
+  (`api.ui.com/v1/connector/consoles/<console>/protect/integration/v1/cameras/<id>/snapshot`, `src/lib/unifi.ts`),
+  niets bewaard, route `/api/camera/[machineId]` (onder /api, zodat de service worker geen oude foto houdt). De camera
+  kies je bij Instellingen van de automaat; hij staat in `machines.unifi_console_id` / `unifi_camera_id` (toevoegend),
+  gelezen door `getMachineCamera` in data.ts.
+- `UNIFI_API_KEY` (Site Manager-sleutel van Xins UI-account; kan zijn hele console bedienen, dus alleen op de server)
+  staat als geheim op vendly, vendly-test, chocabake, sferio en ledoux. Alleen organisaties in `UNIFI_ORGS` zien of kiezen
+  camera's: live Mato Vending + Chens Garden (de eigenaar daar is Xin zelf, xinchen300+chens), test alleen Mato Vending.
+  Een andere klant van MATO Info mag Xins camera's nooit zien: komt er een tweede uitbater met UniFi, dan per org een eigen sleutel.
+- `vercel env pull` geeft geheimen terug als "[sensitive]": de sleutel testen kan alleen via de site zelf (fout →
+  Vercel-logs). UniFi laat 100 vragen per minuut per console toe.
+- De klantsites (ChocaBake, Sferio, Ledoux) lezen dezelfde kolommen voor hun eigen serienummers: blok **Camera** op
+  Voorraad met "Toon mijn automaat nu" (`lib/camera.ts`, `lib/camera-machines.ts`, route `/camera/[serial]`). Hun CSP laat
+  geen blob toe, dus de foto komt als `<img src="/camera/…">`. Op 20-10 gebouwd en gecommit, nog **niet live** op de klantsites.
 
 ## Ledoux (aparte site, zelfde databank)
 https://ledoux.matoautomaat.be (Vercel-project `ledoux`; ledoux-peach.vercel.app stuurt door) is het verkoopoverzicht van Delfien (Ledoux
