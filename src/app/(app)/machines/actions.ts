@@ -14,6 +14,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { displayName } from "@/lib/people";
 import { MACHINE_TYPES, SLOT_SIZES, type LayoutRowSpec, type MachineType, type Product, type SlotSize } from "@/lib/types";
+import { camerasEnabled, listCameras, type UnifiCamera } from "@/lib/unifi";
 import { imageFrom, removeImage, uploadImage } from "@/lib/upload";
 import { createProduct } from "../products/actions";
 
@@ -119,6 +120,33 @@ export async function updateMachineDetails(
   if (error) throw new Error(error.message);
 
   revalidatePath("/", "layout");
+}
+
+/** The cameras on the operator's UniFi, to pick the one aimed at a machine. */
+export async function listMachineCameras(): Promise<UnifiCamera[]> {
+  const orgId = await requireOrgId();
+  await requireOperator();
+  if (!camerasEnabled(orgId)) throw new Error("Not found");
+  return listCameras();
+}
+
+/** Links the camera aimed at this machine, or none. */
+export async function setMachineCamera(machineId: string, camera: { consoleId: string; cameraId: string } | null) {
+  const orgId = await requireOrgId();
+  await requireOperator();
+  await requireMachineAccess(orgId, machineId);
+  if (!camerasEnabled(orgId)) throw new Error("Not found");
+  // Only a camera that is really on this UniFi can be linked, never a made-up id.
+  if (camera && !(await listCameras()).some((c) => c.consoleId === camera.consoleId && c.id === camera.cameraId)) {
+    throw new Error("Not found");
+  }
+  const { error } = await createAdminClient()
+    .from("machines")
+    .update({ unifi_console_id: camera?.consoleId ?? null, unifi_camera_id: camera?.cameraId ?? null })
+    .eq("id", machineId)
+    .eq("org_id", orgId);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/machines/${machineId}`);
 }
 
 /** The photo on the machine's tile: a new one, or none to go back to the placeholder. */

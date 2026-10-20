@@ -9,6 +9,7 @@ import { terminalStatus, type TerminalStatus } from "@/lib/terminal-status";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
 import { reportDay } from "@/lib/stats";
 import { productionPlan, RATE_DAYS, type ProductionLine } from "@/lib/production";
+import { camerasEnabled } from "@/lib/unifi";
 import type {
   Producer,
   RunSummaryRow,
@@ -1909,6 +1910,27 @@ export async function getSetupState(orgId: string): Promise<SetupState> {
 export async function requireMachineAccess(orgId: string, machineId: string): Promise<void> {
   await denyFillerAccess();
   if (!(await getMachine(orgId, machineId))) throw new Error("Not found");
+}
+
+/**
+ * The UniFi camera aimed at a machine, for "Toon automaat nu". The operator's
+ * alone (the cameras are theirs, not a shop's or a filler's), and only where
+ * UniFi is set up for this organisation; null when none is linked.
+ */
+export async function getMachineCamera(orgId: string, machineId: string): Promise<{ consoleId: string; cameraId: string } | null> {
+  await requireOperator();
+  await requireMachineAccess(orgId, machineId);
+  if (!camerasEnabled(orgId)) return null;
+  const { data, error } = await createAdminClient()
+    .from("machines")
+    .select("unifi_console_id, unifi_camera_id")
+    .eq("org_id", orgId)
+    .eq("id", machineId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data?.unifi_console_id && data.unifi_camera_id
+    ? { consoleId: data.unifi_console_id as string, cameraId: data.unifi_camera_id as string }
+    : null;
 }
 
 /**
