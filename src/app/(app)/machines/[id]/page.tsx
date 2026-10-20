@@ -23,14 +23,18 @@ import {
   getRefillHistory,
   getSlotShelfLife,
   getStatsReport,
+  getMachineCamera,
 } from "@/lib/data";
 import { toFrontRows } from "@/lib/layout";
 import { mediaUrl } from "@/lib/media";
 import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
 import { compareMoneySince } from "@/lib/stats";
 import { fillLevel, levelColor } from "@/lib/stock";
+import { camerasEnabled } from "@/lib/unifi";
 import { cn } from "@/lib/utils";
 import { assignProduct, createProductForMachine } from "../actions";
+import { MachineCamera } from "./machine-camera";
+import { MachineCameraForm } from "./machine-camera-form";
 import { MachineDetailsForm } from "./machine-details-form";
 import { MachinePhotoForm } from "./machine-photo-form";
 import { MachineStatus, TerminalPanel } from "./terminal-panel";
@@ -109,6 +113,9 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   const operator = await isOperator();
   // The owner fills and counts on the filler's page, with its big minus and plus (Xin, 20-10-2026); a shop keeps its own form.
   const refillHref = operator ? `/refill/machines/${id}?from=machine` : `/machines/${id}/refill`;
+  // The UniFi camera aimed at it, where this organisation has one: the operator's alone (lib/unifi.ts).
+  const cameraReady = operator && camerasEnabled(orgId);
+  const camera = cameraReady ? await getMachineCamera(orgId, id) : null;
   // On a shared fridge a shop picks products for its own slots only.
   const ownSlots = shared ? await getOwnSelections(orgId, id) : null;
   const ownerIds = [machine.business_id, machine.shared_business_id].filter((id): id is string => Boolean(id));
@@ -210,6 +217,8 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
             </ul>
           )}
         </section>
+
+        {camera && <MachineCamera machineId={id} machineName={machine.name} />}
 
         {!tracksStock ? (
           <p className="rounded-2xl bg-surface px-5 py-4 text-[14px] text-muted-foreground sm:px-6">
@@ -340,6 +349,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
             </summary>
             <div className="flex flex-col gap-8 border-t border-border px-5 pb-6 pt-5 sm:px-6">
               <MachinePhotoForm machineId={machine.id} photoPath={machine.photo_path} />
+              {cameraReady && <MachineCameraForm machineId={machine.id} linked={camera} />}
               <MachineDetailsForm machine={machine} businesses={operator ? businesses : []} operator={operator} rentsToBusinesses={rents} />
             </div>
           </details>
