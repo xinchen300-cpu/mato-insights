@@ -182,12 +182,15 @@ het vak van haar is (`sferio_slots`: `counts_from` tot `archived_at`); voorraad 
 Een vak kan niet tegelijk in `ledoux_slots` en `sferio_slots` staan (beide sites weigeren het).
 
 ## ChocaBake (aparte site, zelfde databank, sinds 20-10-2026)
-Vercel-project `chocabake` (https://chocabake.vercel.app zodra hij live staat), een kopie van de Sferio-site
-voor ChocaBake's **eigen** automaat: terminal `APO20242801410`, in de databank "ChocaBake"
+https://chocabake.vercel.app (Vercel-project `chocabake`, live sinds 20-10-2026, login info@chocabake.be), een
+kopie van de Sferio-site voor ChocaBake's **eigen** automaat: terminal `APO20242801410`, in de databank "ChocaBake"
 (`e06ff0ca-fb78-4e3c-8024-44868b41ea2c`, org Mato Vending; een tweede, uitgesloten rij op hetzelfde
 serienummer heeft geen verkopen). Elke verkoop op die terminal telt; `chocabake_slots` geeft alleen namen en
-hoeveel erin past (gezaaid uit de indeling van MATO Info), `chocabake_stock_counts` hun telling. Meer dan 1000
-verkopen: de site haalt ze in pagina's op (`transactions_machine_sales_idx`). Ook geen git-repo.
+hoeveel erin past (de 23 vakken 1–39, gelijk aan hun automaatbeheer onder categorie "Cho Ca Bake"),
+`chocabake_stock_counts` hun telling (gestart op 20-10 02:45 met de "huidige hoeveelheid" uit dat scherm).
+Vakken 41–65 verkopen ook (tot 18-10) maar staan nergens in een indeling: op de site heten ze "Vak 56". Meer dan
+1000 verkopen: de site haalt ze in pagina's op (`transactions_machine_sales_idx`). Ook geen git-repo. Het project
+moest met de hand op framework `nextjs` gezet worden (aangemaakt via de CLI zonder; anders "No Output Directory").
 
 ## Rondes uit de cijfers gehaald (19-10-2026)
 Xin liet Alus opnieuw beginnen op niveau 1: zijn 20 oefenrondes (17–19 okt) staan in
