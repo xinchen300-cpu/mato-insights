@@ -198,7 +198,8 @@ Het zijn de 23 vakken 1–39 uit hun automaatbeheer (categorie "Cho Ca Bake"): s
 € 8 828,35. Niet meer mee: de 378 verkopen (€ 3 669,35) vanaf vak 40, en 160 (€ 621,20, jan–apr) op hun oude
 vaknummers 22–38 die niet in die lijst staan. `chocabake_stock_counts` is hun telling (gestart op 20-10 02:45
 met de "huidige hoeveelheid" uit dat scherm). Meer dan 1000 verkopen: de site haalt ze in pagina's op
-(`transactions_machine_sales_idx`). Ook geen git-repo. Het project
+(`transactions_machine_sales_idx`). Hun logo (van Xin, 246 px; een grotere versie maakt het scherper) staat in
+`public/chocabake-logo.png` en is ook het beginschermicoon. Ook geen git-repo. Het project
 moest met de hand op framework `nextjs` gezet worden (aangemaakt via de CLI zonder; anders "No Output Directory").
 
 ## Rondes uit de cijfers gehaald (19-10-2026)
