@@ -185,12 +185,15 @@ Een vak kan niet tegelijk in `ledoux_slots` en `sferio_slots` staan (beide sites
 https://chocabake.vercel.app (Vercel-project `chocabake`, live sinds 20-10-2026, login info@chocabake.be), een
 kopie van de Sferio-site voor ChocaBake's **eigen** automaat: terminal `APO20242801410`, in de databank "ChocaBake"
 (`e06ff0ca-fb78-4e3c-8024-44868b41ea2c`, org Mato Vending; een tweede, uitgesloten rij op hetzelfde
-serienummer heeft geen verkopen). Elke verkoop op die terminal telt; `chocabake_slots` geeft alleen namen en
-hoeveel erin past (de 23 vakken 1–39, gelijk aan hun automaatbeheer onder categorie "Cho Ca Bake"),
-`chocabake_stock_counts` hun telling (gestart op 20-10 02:45 met de "huidige hoeveelheid" uit dat scherm).
-Vakken 41–65 verkopen ook (tot 18-10) en zijn ook van ChocaBake (Xin, 20-10-2026), maar staan nergens in een
-indeling: op de site heten ze "Vak 56" tot ChocaBake ze op Indeling een naam geeft. Meer dan
-1000 verkopen: de site haalt ze in pagina's op (`transactions_machine_sales_idx`). Ook geen git-repo. Het project
+serienummer heeft geen verkopen). **Er zit ook een andere handelaar in die automaat** (rijen 4x–6x; Xin,
+20-10-2026: "only show and count the products and item ref on the picture"). Daarom telt, zoals bij Sferio,
+alleen een verkoop uit een vak in `chocabake_slots`, zolang het vak van hen is (`created_at` tot `archived_at`);
+de site vraagt alleen die vaknummers op. Vak 40 en hoger kan er nooit bij (`isOwnSlot`, ook in Indeling).
+Het zijn de 23 vakken 1–39 uit hun automaatbeheer (categorie "Cho Ca Bake"): sinds 22-01-2026 2109 stuks,
+€ 8 828,35. Niet meer mee: de 378 verkopen (€ 3 669,35) vanaf vak 40, en 160 (€ 621,20, jan–apr) op hun oude
+vaknummers 22–38 die niet in die lijst staan. `chocabake_stock_counts` is hun telling (gestart op 20-10 02:45
+met de "huidige hoeveelheid" uit dat scherm). Meer dan 1000 verkopen: de site haalt ze in pagina's op
+(`transactions_machine_sales_idx`). Ook geen git-repo. Het project
 moest met de hand op framework `nextjs` gezet worden (aangemaakt via de CLI zonder; anders "No Output Directory").
 
 ## Rondes uit de cijfers gehaald (19-10-2026)
