@@ -181,13 +181,15 @@ servicerol). Die tabellen zijn van die site; Vendly leest of schrijft ze niet.
 
 **Alle drie de klantsites (Ledoux, Sferio, ChocaBake)** hebben op Voorraad naast "Aantallen aanpassen" ook
 **Vullijst maken** (20-10-2026): één lijst per product met hoeveel erbij moet en in welke vakken (`src/lib/fill-list.ts`,
-in alle drie gelijk), niet-getelde vakken eronder, af te vinken, te delen of kopiëren als tekst; bovenaan Voorraad "x vakken
+in alle drie gelijk), niet-getelde vakken eronder, af te vinken (ook "Alles aanduiden"), te delen of kopiëren als tekst; bovenaan Voorraad "x vakken
 leeg · y stuks om alles vol te zetten". De bron van elke site staat als zip bij Xin (geen git-repo); de
 `mail/*-verzendklaar.*` met het wachtwoord in klare tekst gaat nooit mee.
 
 **Verkoop op de klantsites (20-10-2026, na een review door ChatGPT en Xins keuzes):** omzet groot met stuks, gemiddeld per
-dag, meest verkocht en de laatste verkoop ("wat klanten betaalden, incl. btw"); dan **Per dag** als lijst (tot 31 dagen per
-dag, daarboven per maand; Xin vond de staafgrafiek "niet zo duidelijk"); **Per product** op naam samengevoegd
+dag, meest verkocht en de laatste verkoop ("wat klanten betaalden, incl. btw"); dan **Verkoop per dag** als lijn
+(`components/sales-chart.tsx`, `lib/trend.ts`; Xin, naar een voorbeeld uit zijn automaatbeheer): eigen keuze 14 dagen /
+30 dagen / 12 maanden los van de periode bovenaan, aantikken toont dag, omzet en stuks, vandaag een open punt, niets vóór
+de eerste verkoop (staven en daarna een lijst vond Xin "niet zo duidelijk"); **Per product** op naam samengevoegd
 (`Report.products`, met vakken en prijzen in `parts`; Cookie in vak 35 en 37 is één product), sorteren op stuks/omzet en
 met de periodekeuze er nog eens bij; Ledoux daarna "Per automaat"; onderaan de laatste 5 verkopen en "Rapport downloaden".
 Bewust níet: vergelijking met vorige periode (Xin: geen trends op klantsites, en bij een paar honderd verkopen bijna
