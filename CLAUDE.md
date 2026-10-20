@@ -172,12 +172,19 @@ alle producten is ingeklapt en "Gemiddelde verkoop" is weg.
   kijk eerst of hij zo'n index kan gebruiken.
 
 ## Ledoux (aparte site, zelfde databank)
-https://ledoux-peach.vercel.app (Vercel-project `ledoux`) is het verkoopoverzicht van Delfien (Ledoux
+https://ledoux.matoautomaat.be (Vercel-project `ledoux`; ledoux-peach.vercel.app stuurt door) is het verkoopoverzicht van Delfien (Ledoux
 Chocolaterie), die vakken huurt in Sferio en de broodautomaat. Geen git-repo: de bron staat in de
 Vercel-deployments (CLI-uploads, op te halen met `vercel api /v6/deployments/<id>/files`) en op Xins Mac.
 Sinds 20-10-2026 telt ze er haar eigen voorraad met − en +: tabel **`ledoux_stock_counts`**, en past ze
 haar vakken zelf aan (naam, hoeveel erin past; prijzen niet, die staan op de automaat): tabel **`ledoux_slots`** (beide RLS aan, alleen de
 servicerol). Die tabellen zijn van die site; Vendly leest of schrijft ze niet.
+
+**Eigen adressen (20-10-2026):** de klantsites draaien op `<naam>.matoautomaat.be`. matoautomaat.be staat bij GoDaddy
+(DNS, ook de Outlook-mail via MX) en is in team `mato1` geverifieerd; per subdomein één CNAME naar de projecteigen
+`…vercel-dns-017.com`-waarde (`vercel api /v6/domains/<naam>/config?projectIdOrName=<project>`). Het oude
+`*.vercel.app`-adres stuurt met 308 door (redirect op het projectdomein). MATO Info zelf staat nog op vercel.app: een
+verhuizing (voorstel app.matoautomaat.be) moet tegelijk Supabase-auth-URL's, links in mails, de geïnstalleerde app en
+pushmeldingen (per adres) en de browseropslag van een lopende ronde meenemen.
 
 **Alle drie de klantsites (Ledoux, Sferio, ChocaBake)** hebben op Voorraad naast "Aantallen aanpassen" ook
 **Vullijst maken** (20-10-2026): één lijst per product met hoeveel erbij moet en in welke vakken (`src/lib/fill-list.ts`,
@@ -199,13 +206,14 @@ wachtwoord: de loginpagina mailt naar info@matoautomaat.be. De gedeelde onderdel
 `SalesByDay showMachine`).
 
 ## Sferio (aparte site, zelfde databank)
-https://sferio.vercel.app (Vercel-project `sferio`) is hetzelfde voor Nadia Serlez (Sferio, woondecoratie),
+https://sferio.matoautomaat.be (Vercel-project `sferio`; sferio.vercel.app stuurt door) is hetzelfde voor Nadia Serlez (Sferio, woondecoratie),
 die vakken huurt in dezelfde Sferio-automaat. Ook geen git-repo. Haar verkoop telt per vak, zonder prijs, zolang
 het vak van haar is (`sferio_slots`: `counts_from` tot `archived_at`); voorraad in `sferio_stock_counts`.
 Een vak kan niet tegelijk in `ledoux_slots` en `sferio_slots` staan (beide sites weigeren het).
 
 ## ChocaBake (aparte site, zelfde databank, sinds 20-10-2026)
-https://chocabake.vercel.app (Vercel-project `chocabake`, live sinds 20-10-2026, login info@chocabake.be), een
+https://chocabake.matoautomaat.be (Vercel-project `chocabake`, live sinds 20-10-2026, login info@chocabake.be; chocabake.vercel.app
+stuurt door), een
 kopie van de Sferio-site voor ChocaBake's **eigen** automaat: terminal `APO20242801410`, in de databank "ChocaBake"
 (`e06ff0ca-fb78-4e3c-8024-44868b41ea2c`, org Mato Vending; een tweede, uitgesloten rij op hetzelfde
 serienummer heeft geen verkopen). **Er zit ook een andere handelaar in die automaat** (rijen 4x–6x; Xin,
