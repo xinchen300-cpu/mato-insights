@@ -181,6 +181,14 @@ die vakken huurt in dezelfde Sferio-automaat. Ook geen git-repo. Haar verkoop te
 het vak van haar is (`sferio_slots`: `counts_from` tot `archived_at`); voorraad in `sferio_stock_counts`.
 Een vak kan niet tegelijk in `ledoux_slots` en `sferio_slots` staan (beide sites weigeren het).
 
+## ChocaBake (aparte site, zelfde databank, sinds 20-10-2026)
+Vercel-project `chocabake` (https://chocabake.vercel.app zodra hij live staat), een kopie van de Sferio-site
+voor ChocaBake's **eigen** automaat: terminal `APO20242801410`, in de databank "ChocaBake"
+(`e06ff0ca-fb78-4e3c-8024-44868b41ea2c`, org Mato Vending; een tweede, uitgesloten rij op hetzelfde
+serienummer heeft geen verkopen). Elke verkoop op die terminal telt; `chocabake_slots` geeft alleen namen en
+hoeveel erin past (gezaaid uit de indeling van MATO Info), `chocabake_stock_counts` hun telling. Meer dan 1000
+verkopen: de site haalt ze in pagina's op (`transactions_machine_sales_idx`). Ook geen git-repo.
+
 ## Rondes uit de cijfers gehaald (19-10-2026)
 Xin liet Alus opnieuw beginnen op niveau 1: zijn 20 oefenrondes (17–19 okt) staan in
 `refill_reset_archive` (de ronde als JSON plus zijn tekorten) én zijn verhuisd naar de lege organisatie
