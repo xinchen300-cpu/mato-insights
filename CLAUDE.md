@@ -204,6 +204,11 @@ altijd ruis), "Nu leeg" (Xin: overbodig), derving, houdbaarheid. Excel en PDF bl
 wachtwoord: de loginpagina mailt naar info@matoautomaat.be. De gedeelde onderdelen (`components/`, `lib/period.ts`,
 `lib/format.ts`, `lib/zone.ts`) zijn in de drie sites gelijk; Ledoux geeft de automaat mee (`ProductPart.machine`,
 `SalesByDay showMachine`).
+**Op de gsm (20-10-2026):** bovenaan Verkoop een kaartje, alleen op een gsm en niet als de site al vanaf het beginscherm
+open staat (`components/install-hint.tsx`: iPhone via Deel, Android via ⋮ of in één tik als Chrome `beforeinstallprompt`
+geeft; "Niet nu" onthoudt `gsm-hint-dismissed` in localStorage); onderaan elke pagina, ook de login, "Op je gsm zetten"
+(`components/gsm-help.tsx`). App-iconen uit het logo: `src/app/apple-icon.png` en `public/app-icon-192/512.png` in het
+manifest. Nieuwe wachtwoorden op 20-10 voor Ledoux en Sferio (alleen de hash staat op Vercel).
 
 ## Sferio (aparte site, zelfde databank)
 https://sferio.matoautomaat.be (Vercel-project `sferio`; sferio.vercel.app stuurt door) is hetzelfde voor Nadia Serlez (Sferio, woondecoratie),
