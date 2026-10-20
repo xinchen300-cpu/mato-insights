@@ -189,7 +189,9 @@ pushmeldingen (per adres) en de browseropslag van een lopende ronde meenemen.
 **Alle drie de klantsites (Ledoux, Sferio, ChocaBake)** hebben op Voorraad naast "Aantallen aanpassen" ook
 **Vullijst maken** (20-10-2026): één lijst per product met hoeveel erbij moet en in welke vakken (`src/lib/fill-list.ts`,
 in alle drie gelijk), niet-getelde vakken eronder, af te vinken (ook "Alles aanduiden"), te delen of kopiëren als tekst; bovenaan Voorraad "x vakken
-leeg · y stuks om alles vol te zetten". De bron van elke site staat als zip bij Xin (geen git-repo); de
+leeg · y stuks om alles vol te zetten". Na **Opslaan** een groen vinkje (20-10-2026, Xin: "dat ze een check mark groen
+zien"): onderaan een groene melding "Opgeslagen · N vakken bijgewerkt" die na 4 s weggaat (`.saved-toast` in
+`voorraad/stock-counter.tsx`), en de melding bovenaan wordt groen met een vinkje en blijft staan. De bron van elke site staat als zip bij Xin (geen git-repo); de
 `mail/*-verzendklaar.*` met het wachtwoord in klare tekst gaat nooit mee.
 
 **Verkoop op de klantsites (20-10-2026, na een review door ChatGPT en Xins keuzes):** omzet groot met stuks, gemiddeld per
