@@ -8,7 +8,7 @@ import { Avatar, initial } from "@/components/list-row";
 import { RollingNumber } from "@/components/motion/rolling-number";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
-import { RecordingLink } from "@/components/recording-link";
+import { RecordingHint, RecordingLink } from "@/components/recording-link";
 import type { LinkedCamera } from "@/lib/camera-link";
 import type { LiveSale } from "@/lib/data";
 import { addDays, isoDay } from "@/lib/expiry";
@@ -115,6 +115,7 @@ export function LiveSales({
           {t.liveSalesBadge}
         </span>
       </div>
+      {Object.keys(cameras).length > 0 && <RecordingHint text={m.machines.cameraOnComputer} className="px-3 pb-1" />}
       <ul className="flex flex-col">
         {shown.map((sale, index) => {
           const name = sale.productName ?? fmt(m.unassigned.selection, { number: sale.selection ?? "?" });
