@@ -1128,11 +1128,12 @@ export type LastRefill = { at: string; by: string | null; pieces: number };
 
 /**
  * When each machine was last filled, by whom, and how many pieces went in on
- * that visit (Xin, 19-10-2026). The operator's to see; anyone else gets none.
+ * that visit (Xin, 19-10-2026), in a round or through Voorraad aanpassen
+ * (21-10-2026). The operator's to see; anyone else gets none.
  */
 export async function getLastRefills(orgId: string): Promise<Map<string, LastRefill>> {
   if (!(await isOperator()) || (await getScope()).orgId !== orgId) return new Map();
-  const { data, error } = await createAdminClient().rpc("last_refills", { target_org: orgId });
+  const { data, error } = await createAdminClient().rpc("last_refills_all", { target_org: orgId });
   if (error) throw new Error(error.message);
   return new Map(
     ((data ?? []) as { machine_id: string; filled_at: string; filled_by: string | null; pieces: number }[]).map((row) => [
@@ -1149,12 +1150,14 @@ export async function getOrgName(orgId: string): Promise<string | null> {
   return (data?.name as string | null) ?? null;
 }
 
-export type RefillVisit = { machineId: string; at: string; pieces: number; by: string | null };
+/** `adjusted`: stock added through Voorraad aanpassen rather than on a round (21-10-2026). */
+export type RefillVisit = { machineId: string; at: string; pieces: number; by: string | null; adjusted: boolean };
 
 /**
  * Every time a machine was filled between two moments: when, how many pieces
- * and by whom (Xin, 20-10-2026). The operator's to see, for their own
- * machines (none asked is all of them); anyone else gets none.
+ * and by whom (Xin, 20-10-2026), also when it went through Voorraad aanpassen
+ * instead of a round (21-10-2026, Xin: "niet alleen op ronde"). The operator's
+ * to see, for their own machines (none asked is all of them); anyone else gets none.
  */
 export async function getRefillVisits(
   orgId: string,
@@ -1165,16 +1168,22 @@ export async function getRefillVisits(
   const own = new Set((await getMachines(orgId)).map((machine) => machine.id));
   const asked = machineIds === null ? null : machineIds.filter((id) => own.has(id));
   if (asked !== null && asked.length === 0) return [];
-  const { data, error } = await createAdminClient().rpc("refill_visits", {
+  const { data, error } = await createAdminClient().rpc("refill_visits_all", {
     target_org: orgId,
     from_ts: range.from,
     to_ts: range.to,
     machine_filter: asked,
   });
   if (error) throw new Error(error.message);
-  return ((data ?? []) as { machine_id: string; filled_at: string; pieces: number; filled_by: string | null }[])
+  return ((data ?? []) as { machine_id: string; filled_at: string; pieces: number; filled_by: string | null; adjusted: boolean }[])
     .filter((row) => own.has(row.machine_id))
-    .map((row) => ({ machineId: row.machine_id, at: row.filled_at, pieces: Number(row.pieces), by: row.filled_by }));
+    .map((row) => ({
+      machineId: row.machine_id,
+      at: row.filled_at,
+      pieces: Number(row.pieces),
+      by: row.filled_by,
+      adjusted: Boolean(row.adjusted),
+    }));
 }
 
 export async function getLastSales(orgId: string): Promise<Map<string, string | null>> {
