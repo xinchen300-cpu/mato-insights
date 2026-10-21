@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Camera, Maximize2, Minimize2, Radio, RefreshCw, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
@@ -16,16 +16,24 @@ const LIVE_FOR_MS = 60_000;
  * is asked only when someone looks; the photo lives in this page and is gone
  * when it closes. "Live" repeats it every few seconds for a minute, and
  * stops sooner when the page is left or a photo fails. A machine with several
- * cameras (21-10-2026) shows one at a time, picked above the buttons.
+ * cameras (21-10-2026) shows one at a time, picked above the buttons. On the
+ * overview (21-10-2026) it carries the machine in its title, and a choice of
+ * machine when more than one has a camera.
  */
 export function MachineCamera({
   machineId,
   machineName,
   cameras,
+  title,
+  picker,
 }: {
   machineId: string;
   machineName: string;
   cameras: { id: string; name: string }[];
+  /** Instead of "Camera", e.g. "Camera · Diksmuide" on the overview. */
+  title?: string;
+  /** A row above the camera choice, e.g. which machine on the overview. */
+  picker?: ReactNode;
 }) {
   const { m, f } = useI18n();
   const [selected, setSelected] = useState(cameras[0]?.id ?? "");
@@ -150,13 +158,14 @@ export function MachineCamera({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <div className="min-w-0 flex-1">
           <h2 className="flex items-center gap-2 text-[16px] font-semibold tracking-[-0.015em]">
-            {m.machines.camera}
+            {title ?? m.machines.camera}
             {live && <span className="size-2 animate-pulse rounded-full bg-negative" aria-hidden="true" />}
           </h2>
           <p className="mt-0.5 text-[13px] text-muted-foreground" aria-live="polite">
             {status}
           </p>
         </div>
+        {picker}
         {cameras.length > 1 && (
           <div className="flex w-full flex-wrap gap-1.5" role="group" aria-label={m.machines.cameraWhich}>
             {cameras.map((camera) => (

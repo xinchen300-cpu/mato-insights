@@ -17,7 +17,6 @@ import { withoutOrgName } from "@/lib/overview";
 import { RefillLog } from "@/components/stats/refill-log";
 import { mediaUrl } from "@/lib/media";
 import { isFiller, requireOrgId, requireRefillAccess } from "@/lib/org";
-import { cn } from "@/lib/utils";
 import {
   busiestWeekday,
   compareMoneySince,
@@ -25,11 +24,13 @@ import {
   fillDays,
   MIN_WEEKS,
   periodDays,
+  reportDay,
   weekdayStats,
 } from "@/lib/stats";
 import { compareLabelKey, parseStatsParams, type StatsSearchParams } from "@/lib/stats-params";
 import type { StatsReport } from "@/lib/types";
 import { FillerSales } from "./filler-sales";
+import { LeastPerMachine } from "./least-per-machine";
 import { MonthlyOverview, MonthlySkeleton } from "./monthly";
 import { StatsFilters } from "./stats-filters";
 import { MachineIcon } from "@/components/machine/machine-icon";
@@ -90,10 +91,15 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
     .filter((p) => p.units > 0)
     .sort((a, b) => b.units - a.units || b.revenue - a.revenue)
     .slice(0, 5);
-  const slowest = [...named].sort((a, b) => a.units - b.units || a.revenue - b.revenue).slice(0, 5);
   // Judging a product slow takes whole weeks: fewer and it is mostly luck.
-  const days = periodDays(report).length;
-  const longEnough = days >= MIN_WEEKS * 7;
+  const periodDayList = periodDays(report);
+  const longEnough = periodDayList.length >= MIN_WEEKS * 7;
+  // Minst verkocht per automaat (Xin, 21-10-2026), for the machines the filters leave: one asked, a business's, or all.
+  const leastMachines = (machine ? machines.filter((mc) => mc.id === machine) : visitMachines ? machines.filter((mc) => visitMachines.includes(mc.id)) : machines).map(
+    (mc) => ({ id: mc.id, name: machineNames.get(mc.id) ?? mc.name }),
+  );
+  // Today's layout only says what was in a machine while the period runs up to today.
+  const includesNow = periodDayList.at(-1) === reportDay(new Date(), report.timezone);
   const weekdays = weekdayStats(report);
   // Coloured only when one weekday really sells more, by the same test the
   // overview uses, and only when that day is also the longest bar here: the
@@ -149,6 +155,8 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
       <div className="flex flex-col gap-8 sm:gap-10">
         <Suspense>
           <StatsFilters
+            // A month picked or dates applied start the date fields over from the address.
+            key={`${period}|${from}|${to}`}
             period={period}
             from={from}
             to={to}
@@ -158,7 +166,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
             businesses={businesses.map((b) => ({ id: b.id, name: b.name }))}
             machines={machines.map((mc) => ({
               id: mc.id,
-              name: mc.name,
+              name: machineNames.get(mc.id) ?? mc.name,
               // A shared fridge belongs to both its businesses, here as everywhere else.
               businessIds: [mc.business_id, mc.shared_business_id].filter((id): id is string => Boolean(id)),
             }))}
@@ -271,18 +279,21 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
               </div>
             )}
 
-            {/* What sold best first. Slow sellers only once the period is long
-                enough to call anything slow; before that the block stays away. */}
-            <div className={cn("grid gap-8 sm:gap-10", longEnough && "lg:grid-cols-2 lg:gap-6")}>
-              <Section title={m.stats.bestSellers}>
-                <ProductRanking rows={best} prevStart={report.prev_start} m={m} f={f} />
-              </Section>
-              {longEnough && (
-                <Section title={m.stats.worstSellers} hint={m.stats.worstSellersHint}>
-                  <ProductRanking rows={slowest} prevStart={report.prev_start} m={m} f={f} />
+            {/* What sold best first; what sold least is per machine below (Xin, 21-10-2026), and only once
+                the period is long enough to call anything slow. */}
+            <Section title={m.stats.bestSellers}>
+              <ProductRanking rows={best} prevStart={report.prev_start} m={m} f={f} />
+            </Section>
+            {!product &&
+              (longEnough ? (
+                <Suspense>
+                  <LeastPerMachine orgId={orgId} filters={filters} machines={leastMachines} includesNow={includesNow} m={m} f={f} />
+                </Suspense>
+              ) : (
+                <Section title={m.stats.leastPerMachine}>
+                  <p className="surface-card px-5 py-4 text-[14px] text-muted-foreground">{fmt(m.stats.leastTooShort, { weeks: MIN_WEEKS })}</p>
                 </Section>
-              )}
-            </div>
+              ))}
 
 
 

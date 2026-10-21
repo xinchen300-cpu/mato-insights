@@ -11,7 +11,7 @@ const VISITS_SHOWN = 20;
 /**
  * Every time a machine was filled in the period, newest first, under a heading
  * per day with how often and how many pieces that day: when, how many and at
- * what time (Xin, 20-10-2026).
+ * what time (Xin, 20-10-2026). A fill through Voorraad aanpassen says so (21-10-2026).
  */
 export function RefillLog({
   visits,
@@ -48,7 +48,11 @@ export function RefillLog({
             <span className="tabular w-12 shrink-0 text-[15px] font-semibold">{f.time(visit.at)}</span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[15px] font-medium">{names.get(visit.machineId) ?? m.common.unknown}</span>
-              {visit.by && <span className="block truncate text-[12.5px] text-muted-foreground">{fmt(m.stats.refillBy, { name: visit.by })}</span>}
+              {(visit.by || visit.adjusted) && (
+                <span className="block truncate text-[12.5px] text-muted-foreground">
+                  {[visit.by && fmt(m.stats.refillBy, { name: visit.by }), visit.adjusted && m.stats.refillAdjusted].filter(Boolean).join(" · ")}
+                </span>
+              )}
             </span>
             <span className="tabular shrink-0 text-[15px] font-semibold">{fmt(m.stats.refillPieces, { n: visit.pieces })}</span>
           </li>

@@ -118,13 +118,14 @@ function sample() {
     productName: dishes[i % dishes.length],
     selection: String(11 + (i % 9)),
   }));
-  // Three days of rounds: every machine around nine, Torhout by hand in the afternoon.
+  // Three days of rounds: every machine around nine, Torhout by hand in the afternoon; some through Voorraad aanpassen.
   const visits = [0, 1, 2].flatMap((day) =>
     fleet.map((mc, i) => ({
       machineId: mc.id,
       at: iso(day * 24 * 60 + (mc.fill === null ? 60 : 6 * 60 - i * 20)),
       pieces: 4 + ((i * 7 + day * 3) % 15),
       by: "Alus",
+      adjusted: (i + day) % 3 === 0,
     })),
   );
   return { reports, machines, stock, refills, sales, visits };

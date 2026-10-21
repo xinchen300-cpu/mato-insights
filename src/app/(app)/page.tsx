@@ -1,24 +1,21 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarClock, ChefHat, ChevronRight, CircleDashed, Link2, ListChecks, PackageOpen, TriangleAlert, WifiOff, type LucideIcon } from "lucide-react";
-import { Avatar, ListRow, RowList } from "@/components/list-row";
+import { ChefHat, ListChecks } from "lucide-react";
 import { MachineRevenue } from "@/components/overview/machine-revenue";
+import { OverviewCamera } from "@/components/overview/overview-camera";
 import { revenueByMachine } from "@/lib/overview";
 import { ownRound, startable } from "@/lib/refill-start";
 import { StartRound } from "./refill/list/start-round";
-import { InsightsList } from "@/components/insights-list";
-import { SetupGuide, nextSetupStep } from "@/components/setup-guide";
-import { EmptyState, PageHeader, Section } from "@/components/page-header";
+import { SetupGuide } from "@/components/setup-guide";
+import { EmptyState, PageHeader } from "@/components/page-header";
 import { LiveRounds } from "@/components/refill/live-rounds";
 import { NextRound } from "@/components/refill/next-round";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { DISPLAY_TIME_ZONE, fmt, plural } from "@/i18n/format";
+import { DISPLAY_TIME_ZONE, fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import {
-  getExpiryAlerts,
   getLastRefills,
-  getLastSales,
   getLiveSales,
   getMachineCameras,
   getLastSyncedAt,
@@ -26,7 +23,6 @@ import {
   getMachines,
   getMachineStock,
   getStatsReport,
-  getUnassigned,
   getRoundSettings,
   getSetupState,
   hasProducerDishes,
@@ -34,26 +30,12 @@ import {
 } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { buildInsights } from "@/lib/insights";
 import { lastFullWeeks } from "@/lib/stats";
-import { terminalStatus } from "@/lib/terminal-status";
 import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
-import { fillLevel, needsAttention, slotsFilledByVendly } from "@/lib/stock";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { LiveSales } from "@/components/live-sales";
-import { isRecent } from "@/lib/unassigned";
 
 
-// Urgency of a to-do row, worst first: a dead terminal outranks a stale label.
-type Tone = "negative" | "warning" | "muted";
-const toneAvatar: Record<Tone, "negative" | "warning" | "neutral"> = {
-  negative: "negative",
-  warning: "warning",
-  muted: "neutral",
-};
-const LOW_ROWS = 3;
-/** To-dos shown before "Nog … meldingen" folds the rest away. */
-const TODO_ROWS = 4;
 /** "Meer zien" under Net verkocht opens this many. */
 const LIVE_ROWS = 40;
 /** Payter is asked every 15 seconds; only data this old is worth a word on the page. */
@@ -93,7 +75,7 @@ export default async function OverviewPage() {
 
   // Everything on the page is asked for at once, each loader with its own
   // checks, and the onboarding question below runs alongside instead of first.
-  // Weekday patterns only from whole weeks, and enough of them (see lib/stats).
+  // The last whole weeks only say whether anything sold lately, for the empty page below.
   const patternWeeks = 8;
   const loads = Promise.all([
     operator ? getOpenRounds(orgId) : Promise.resolve<OpenRound[]>([]),
@@ -103,9 +85,6 @@ export default async function OverviewPage() {
     getStatsReport(orgId, { period: "custom", ...lastFullWeeks(patternWeeks, DISPLAY_TIME_ZONE) }),
     getMachines(orgId),
     getMachineStock(orgId),
-    getUnassigned(orgId),
-    getExpiryAlerts(orgId),
-    getLastSales(orgId),
     getLastSyncedAt(orgId),
     getSetupState(orgId),
     getLiveSales(orgId, { limit: LIVE_ROWS }),
@@ -131,7 +110,7 @@ export default async function OverviewPage() {
     orgName = (org?.name as string | null) ?? null;
   }
 
-  const [openRounds, today, week, month, weeks, machines, stock, unassigned, expiring, lastSales, syncedAt, setup, recentSales, refills, kitchen, roundSettings, cameras] =
+  const [openRounds, today, week, month, weeks, machines, stock, syncedAt, setup, recentSales, refills, kitchen, roundSettings, cameras] =
     await loads;
   // Only the rounds actually out (started), and only for the operator.
   const liveRounds = openRounds.filter((round) => round.readyAt);
@@ -161,114 +140,6 @@ export default async function OverviewPage() {
     );
   }
 
-  const insights = buildInsights(
-    month,
-    weeks,
-    patternWeeks,
-    machines.map((mc) => ({ id: mc.id, name: mc.name, lastSale: lastSales.get(mc.id) ?? null })),
-  );
-  // A machine gone quiet is something to go and check, so it is a to-do; the
-  // rest is good to know and sits at the foot of the page.
-  const quiet = insights.flatMap((i) => (i.kind === "quietMachine" ? [i] : []));
-  const goodToKnow = insights.filter((i) => i.kind !== "quietMachine").slice(0, 3);
-
-  const lowByMachine = new Map<string, number>();
-  // A machine filled by hand has no stock to warn about.
-  for (const slot of slotsFilledByVendly(stock, machines)) {
-    if (!slot.product_id) continue;
-    if (needsAttention(fillLevel(slot.stock, slot.capacity))) {
-      lowByMachine.set(slot.machine_id, (lowByMachine.get(slot.machine_id) ?? 0) + 1);
-    }
-  }
-
-  // One number and the machine worst off; the list lives on its own page.
-  // Dates of a machine filled by hand are not known to Vendly either.
-  const dated = slotsFilledByVendly(expiring, machines);
-  const expiringUnits = dated.reduce((sum, a) => sum + a.qty_expired + a.qty_expiring_24h, 0);
-  const worstMachine = [...dated].sort(
-    (a, b) => b.qty_expired - a.qty_expired || b.qty_expiring_24h - a.qty_expiring_24h,
-  )[0];
-
-  const offline = machines.filter(
-    (mc) => terminalStatus(mc.last_connected_at, mc.last_disconnected_at) === "offline",
-  );
-
-  const recentUnassigned = unassigned.filter((g) => isRecent(g));
-
-  // Everything that asks for a decision today, gathered in one place instead of
-  // three separate banners further down the page.
-  const machineName = new Map(machines.map((mc) => [mc.id, mc.name]));
-  const lowSorted = [...lowByMachine.entries()].sort((a, b) => b[1] - a[1]);
-  const setupStep = operator && !setup.done ? nextSetupStep(setup, m) : null;
-  const todos: Todo[] = [
-    ...offline.map((mc) => ({
-      key: `offline-${mc.id}`,
-      icon: WifiOff,
-      tone: "negative" as const,
-      text: fmt(m.overview.todoOffline, { machine: mc.name, when: f.relative(mc.last_disconnected_at!) }),
-      href: `/machines/${mc.id}`,
-    })),
-    // A machine that is offline sells nothing anyway: once is enough, as offline.
-    ...quiet.filter((q) => !offline.some((mc) => mc.id === q.machineId)).map((q) => ({
-      key: `quiet-${q.machineId}`,
-      icon: TriangleAlert,
-      tone: "warning" as const,
-      text: fmt(m.overview.todoQuiet, { machine: q.machine, days: q.days }),
-      href: `/machines/${q.machineId}`,
-    })),
-    ...(expiringUnits > 0 && worstMachine
-      ? [
-          {
-            key: "expiry",
-            icon: CalendarClock,
-            tone: "warning" as const,
-            text: fmt(m.expiry.banner, { count: expiringUnits, machine: worstMachine.machine_name }),
-            href: "/expiry",
-          },
-        ]
-      : []),
-    ...lowSorted.slice(0, LOW_ROWS).map(([id, count]) => ({
-      key: `low-${id}`,
-      icon: PackageOpen,
-      tone: "warning" as const,
-      text: `${machineName.get(id) ?? ""} · ${fmt(m.overview.slotsLow, { count })}`,
-      href: `/machines/${id}`,
-    })),
-    ...(lowSorted.length > LOW_ROWS
-      ? [
-          {
-            key: "low-more",
-            icon: PackageOpen,
-            tone: "muted" as const,
-            text: fmt(m.overview.todoMoreLow, { count: lowSorted.length - LOW_ROWS }),
-            href: "/machines",
-          },
-        ]
-      : []),
-    ...(setupStep
-      ? [
-          {
-            key: "setup",
-            icon: CircleDashed,
-            tone: "muted" as const,
-            text: setupStep.short,
-            href: setupStep.href,
-          },
-        ]
-      : []),
-    ...(recentUnassigned.length > 0
-      ? [
-          {
-            key: "unassigned",
-            icon: Link2,
-            tone: "muted" as const,
-            text: plural(recentUnassigned.length, m.overview.unassignedOne, m.overview.unassigned),
-            href: "/unassigned",
-          },
-        ]
-      : []),
-  ];
-
   // Only a sync that stalled gets a word under the title.
   const stale = isStale(syncedAt);
   // Something that only began selling after the earlier period started gets
@@ -284,6 +155,14 @@ export default async function OverviewPage() {
   // Their own open round holds its machines, so the start button alone would
   // vanish while it is open: the round to carry on with takes its place.
   const own = ownRound(openRounds);
+  // The machines with a camera, in the order of the money above, for the camera under Net verkocht.
+  const cameraMachines = revenue.machines
+    .filter((mc) => cameras[mc.id]?.length)
+    .map((mc) => ({
+      id: mc.id,
+      name: mc.name,
+      cameras: cameras[mc.id].map((camera, i) => ({ id: camera.cameraId, name: camera.name ?? `${m.machines.cameraUnnamed} ${i + 1}` })),
+    }));
 
   return (
     <>
@@ -299,8 +178,9 @@ export default async function OverviewPage() {
         }
       />
 
-      {/* What needs doing, then the money machine by machine and what just sold.
-          One thing per block (Xin, 19-10-2026); the month's chart went (20-10-2026). */}
+      {/* The day's buttons, then the money machine by machine and what just sold. One thing per block
+          (Xin, 19-10-2026); the month's chart went (20-10-2026), "Vandaag te doen" and "Goed om te
+          weten" went too (21-10-2026, Xin: "delete vandaag te doen … goed om te weten mag ook weg"). */}
       <div className="flex flex-col gap-8">
         {/* A round that is out right now comes first: who, how long, where. */}
         {liveRounds.some((round) => round.id !== own?.id) && (
@@ -333,56 +213,15 @@ export default async function OverviewPage() {
           </nav>
           </div>
         )}
-        {/* What needs doing today first, above the money (UX review, 17-10-2026); a long list folds. */}
-        {todos.length > 0 && (
-          <Section title={m.overview.todo}>
-            <RowList>
-              {todos.slice(0, TODO_ROWS).map((t) => (
-                <TodoRow key={t.key} todo={t} />
-              ))}
-            </RowList>
-            {todos.length > TODO_ROWS && (
-              <details className="group">
-                <summary className="flex h-11 cursor-pointer list-none items-center gap-1.5 px-3 text-[14.5px] font-semibold text-muted-foreground [&::-webkit-details-marker]:hidden">
-                  <ChevronRight className="size-4 transition-transform group-open:rotate-90" aria-hidden="true" />
-                  {fmt(m.overview.moreTodos, { n: todos.length - TODO_ROWS })}
-                </summary>
-                <RowList>
-                  {todos.slice(TODO_ROWS).map((t) => (
-                    <TodoRow key={t.key} todo={t} />
-                  ))}
-                </RowList>
-              </details>
-            )}
-          </Section>
-        )}
 
         <MachineRevenue machines={revenue.machines} totals={revenue.totals} />
 
         {/* What just sold, sliding in as it happens; "Meer zien" opens the day's list. */}
         <LiveSales initial={recentSales} cameras={cameras} />
 
-        <InsightsList insights={goodToKnow} m={m} f={f} />
+        {/* What the camera sees now, without going to the machine (Xin, 21-10-2026). */}
+        {cameraMachines.length > 0 && <OverviewCamera machines={cameraMachines} />}
       </div>
     </>
-  );
-}
-
-type Todo = { key: string; icon: LucideIcon; tone: Tone; text: string; href: string };
-
-function TodoRow({ todo }: { todo: Todo }) {
-  return (
-    <li>
-      <ListRow
-        href={todo.href}
-        leading={
-          <Avatar tone={toneAvatar[todo.tone]}>
-            <todo.icon />
-          </Avatar>
-        }
-        title={<span className="whitespace-normal font-medium">{todo.text}</span>}
-        chevron
-      />
-    </li>
   );
 }
