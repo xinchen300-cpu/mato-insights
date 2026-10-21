@@ -94,7 +94,7 @@ const isJpeg = (image: ArrayBuffer) => {
 
 /**
  * Cameras that said they cannot make a full HD photo (Diksmuide's, 21-10-2026):
- * asked for the usual one straight away, so "Bijna live" costs one call per
+ * asked for the usual one straight away, so "Live" costs one call per
  * photo against UniFi's 100 a minute. Kept for as long as this server runs.
  */
 const NO_FULL_HD = new Set<string>();

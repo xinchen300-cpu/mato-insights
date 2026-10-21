@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { useI18n } from "@/i18n/client";
 
-/** "Bijna live" (Xin, 21-10-2026): a new photo every few seconds, never longer than a minute. */
+/** "Live" (Xin, 21-10-2026; first called "Bijna live"): a new photo every few seconds, never longer than a minute. */
 const LIVE_EVERY_MS = 3_000;
 const LIVE_FOR_MS = 60_000;
 
@@ -14,7 +14,7 @@ const LIVE_FOR_MS = 60_000;
  * "Toon automaat nu" (Xin, 20-10-2026): a photo of this moment from the UniFi
  * camera aimed at the machine. Only on a tap, never by itself, so the camera
  * is asked only when someone looks; the photo lives in this page and is gone
- * when it closes. "Bijna live" repeats it every few seconds for a minute, and
+ * when it closes. "Live" repeats it every few seconds for a minute, and
  * stops sooner when the page is left or a photo fails.
  */
 export function MachineCamera({ machineId, machineName }: { machineId: string; machineName: string }) {
