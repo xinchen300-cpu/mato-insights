@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { LogOut, Settings } from "lucide-react";
 import { VendlyWordmark } from "@/components/brand/vendly-mark";
+import { FillerAvatar } from "@/components/filler/avatar";
+import { cleanLook } from "@/lib/avatar";
+import { displayName } from "@/lib/people";
 import { getI18n } from "@/i18n/server";
 import { isFiller } from "@/lib/org";
 import { createClient } from "@/lib/supabase/server";
@@ -22,13 +25,20 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
   // A filler sees the machines and the refill work only: no overview, no settings, no figures to hide.
   const filler = await isFiller();
   const home = filler ? "/refill" : "/";
+  // Profiel (21-10-2026): one's own avatar, or the first letter of one's name, opens it.
+  const look = user ? cleanLook(user.user_metadata?.avatar) : null;
+  const face = (size: string) => (
+    <span className={`grid ${size} shrink-0 place-items-center overflow-hidden rounded-full bg-primary/12 text-[11px] font-bold uppercase text-foreground`}>
+      {look ? <FillerAvatar look={look} className="size-full" /> : (displayName(user) || user?.email || "?").charAt(0)}
+    </span>
+  );
 
   return (
     <div className="min-h-svh lg:pl-64">
       {/* Large screens: one calm rail. The pages up top, the rest at the bottom. */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r bg-card/50 px-4 pb-5 pt-6 lg:flex">
         <Link href={home} aria-label={filler ? m.nav.home : m.nav.overview} className="px-3">
-          <VendlyWordmark />
+          <VendlyWordmark name={m.brand.name} />
         </Link>
         <div className="mt-9">
           <SidebarNav filler={filler} />
@@ -52,6 +62,12 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
             </>
           )}
           {user && (
+            <Link href="/profile" className={railRow}>
+              {face("size-[22px] -ml-0.5")}
+              <span className="truncate">{m.nav.profile}</span>
+            </Link>
+          )}
+          {user && (
             <SignOutForm question={m.auth.confirmSignOut}>
               <button type="submit" title={user.email ?? m.auth.signOut} className={railRow}>
                 <LogOut className="size-[18px] shrink-0" strokeWidth={1.9} aria-hidden="true" />
@@ -66,7 +82,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur-xl lg:hidden">
         <div className="mx-auto flex h-14 max-w-5xl items-center gap-2 px-4 sm:px-6">
           <Link href={home} aria-label={filler ? m.nav.home : m.nav.overview}>
-            <VendlyWordmark />
+            <VendlyWordmark name={m.brand.name} />
           </Link>
           <div className="ml-auto flex items-center gap-1">
             {filler && <LanguageToggle only={fillerLocales} />}
@@ -82,6 +98,15 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
                   <Settings className="size-[18px]" />
                 </Link>
               </>
+            )}
+            {user && (
+              <Link
+                href="/profile"
+                aria-label={m.nav.profile}
+                className="grid size-9 place-items-center rounded-full transition-colors hover:bg-surface"
+              >
+                {face("size-7")}
+              </Link>
             )}
             {user && (
               <SignOutForm question={m.auth.confirmSignOut}>

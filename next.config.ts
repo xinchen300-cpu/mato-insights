@@ -15,6 +15,11 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // pdfkit reads its font metrics from loose .afm files; without this Vercel
+  // leaves them out and the sales PDF (Statistics → Export) falls over.
+  outputFileTracingIncludes: {
+    "/statistics/pdf": ["./node_modules/pdfkit/js/data/*.afm"],
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

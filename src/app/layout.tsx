@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono, Montserrat } from "next/font/google";
 import { I18nProvider } from "@/i18n/client";
 import { getI18n, getLocale } from "@/i18n/server";
+import { getOrgBrand } from "@/lib/org";
 import "./globals.css";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
@@ -19,11 +20,13 @@ const TEST = process.env.VENDLY_ENV === "test";
 // In the reader's language: this is what a shared link (an invitation in WhatsApp) shows.
 export async function generateMetadata(): Promise<Metadata> {
   const { m } = await getI18n();
+  // MATO Info, or the organisation's own name for it (the demo account: "MATO").
+  const name = TEST ? `${m.brand.name} test` : m.brand.name;
   return {
-    title: TEST ? { default: "MATO Info test", template: "%s · MATO Info test" } : { default: "MATO Info", template: "%s · MATO Info" },
+    title: { default: name, template: `%s · ${name}` },
     description: `${m.brand.subtitle}. ${m.brand.tagline}.`,
-    applicationName: "MATO Info",
-    appleWebApp: { capable: true, title: "MATO Info", statusBarStyle: "default" },
+    applicationName: m.brand.name,
+    appleWebApp: { capable: true, title: m.brand.name, statusBarStyle: "default" },
     icons: { apple: "/pwa-icon/180" },
   };
 }
@@ -59,8 +62,7 @@ const APP_SCRIPT = [
 ].join("");
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const locale = await getLocale();
-  const { m } = await getI18n();
+  const [locale, { m }, brand] = await Promise.all([getLocale(), getI18n(), getOrgBrand()]);
 
   return (
     <html
@@ -78,7 +80,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           }}
         />
         <script dangerouslySetInnerHTML={{ __html: APP_SCRIPT }} />
-        <I18nProvider locale={locale}>{children}</I18nProvider>
+        <I18nProvider locale={locale} brand={brand}>
+          {children}
+        </I18nProvider>
         {TEST && (
           // A stripe along the top and a label in the middle, both above everything and
           // never in the way of a tap.

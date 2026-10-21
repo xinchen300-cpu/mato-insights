@@ -1163,6 +1163,21 @@ export async function getOrgName(orgId: string): Promise<string | null> {
   return (data?.name as string | null) ?? null;
 }
 
+/**
+ * What the profile page says about the account's organisation (Xin, 21-10-2026): its name, whether it is a demo with
+ * invented sales, and, for the operator only, how many people can open it.
+ */
+export async function getAccountFacts(orgId: string): Promise<{ orgName: string | null; isDemo: boolean; teamSize: number | null }> {
+  if ((await getScope()).orgId !== orgId) return { orgName: null, isDemo: false, teamSize: null };
+  const admin = createAdminClient();
+  const operator = await isOperator();
+  const [org, members] = await Promise.all([
+    admin.from("organizations").select("name, is_demo").eq("id", orgId).maybeSingle(),
+    operator ? admin.from("memberships").select("user_id", { count: "exact", head: true }).eq("org_id", orgId) : Promise.resolve(null),
+  ]);
+  return { orgName: (org.data?.name as string | null) ?? null, isDemo: Boolean(org.data?.is_demo), teamSize: members?.count ?? null };
+}
+
 /** `adjusted`: stock added through Voorraad aanpassen rather than on a round (21-10-2026). */
 export type RefillVisit = { machineId: string; at: string; pieces: number; by: string | null; adjusted: boolean };
 
