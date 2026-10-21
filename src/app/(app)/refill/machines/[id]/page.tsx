@@ -9,6 +9,7 @@ import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getDishes, getLastSales, getMachines, getMachineStock, getOpenRounds } from "@/lib/data";
 import { requireRefillAccess } from "@/lib/org";
+import { filledOnOpenRound, heldByOpenRound } from "@/lib/refill-start";
 import { bandBg, fillLevel, machineFill, machineTotals, needsAttention } from "@/lib/stock";
 import { terminalStatus } from "@/lib/terminal-status";
 import { cn } from "@/lib/utils";
@@ -57,8 +58,10 @@ export default async function FillMachinePage({
   const low = stocked.filter((slot) => needsAttention(fillLevel(slot.stock, slot.capacity))).length;
   const status = terminalStatus(machine.last_connected_at, machine.last_disconnected_at);
   const lastSale = lastSales.get(id) ?? null;
-  // Already on a round that is not finished: carry on with that one instead of starting another.
-  const round = open.find((candidate) => candidate.machines.some((mc) => mc.id === id && !mc.done)) ?? null;
+  // Already on a round that is not finished: carry on with that one instead of starting another. Also once
+  // filled on it: it counts as filled only when that round is completed (21-10-2026), and a second round would fill it twice.
+  const round = open.find((candidate) => heldByOpenRound([candidate]).has(id)) ?? null;
+  const filledOnRound = filledOnOpenRound(open).has(id);
 
   return (
     <>
@@ -90,6 +93,7 @@ export default async function FillMachinePage({
                 total?.counted ? fmt(m.refill.piecesIn, { n: total.stock, cap: total.capacity }) : null,
                 low > 0 ? fmt(m.overview.slotsLow, { count: low }) : null,
                 lastSale ? fmt(m.round.lastSale, { when: f.dateTime(lastSale) }) : null,
+                filledOnRound ? m.refill.filledOnRound : null,
               ]
                 .filter(Boolean)
                 .join(" · ")}

@@ -243,7 +243,8 @@ export async function correctStock(machineId: string, entries: { selection: stri
       : [];
   });
   if (clean.length === 0) return;
-  const { error } = await createAdminClient().rpc("record_stock", {
+  // Measured against the stock the person saw, which leaves out a round still under way (21-10-2026).
+  const { error } = await createAdminClient().rpc("record_stock_settled", {
     target_org: orgId,
     target_machine: machineId,
     event_type: "correction",

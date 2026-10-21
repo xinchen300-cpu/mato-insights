@@ -452,6 +452,9 @@ export const nl: Messages = {
     liveNow: "volgende: {machine}",
     liveLastDone: "{machine} klaar om {time}",
     onOpenRound: "Staat al op een open ronde",
+    // A machine filled on a round still open counts as filled only once the round is completed (21-10-2026).
+    filledOnRound: "Gevuld in de ronde · telt mee als de ronde af is",
+    filledOnRoundShort: "Wacht op einde ronde",
     allOnRound: "Elke automaat staat al op een open ronde",
     cancelRound: "Ronde annuleren",
     cancelConfirm: "De ronde verdwijnt. Er is nog niets gevuld, dus je voorraad blijft zoals hij is.",

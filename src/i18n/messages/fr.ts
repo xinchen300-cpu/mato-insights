@@ -452,6 +452,8 @@ export const fr: Messages = {
     liveNow: "suivant : {machine}",
     liveLastDone: "{machine} terminé à {time}",
     onOpenRound: "Déjà sur une tournée ouverte",
+    filledOnRound: "Rempli pendant la tournée · compte quand la tournée est terminée",
+    filledOnRoundShort: "Attend la fin de la tournée",
     allOnRound: "Chaque distributeur est déjà sur une tournée ouverte",
     cancelRound: "Annuler la tournée",
     cancelConfirm: "La tournée disparaît. Rien n'a encore été rempli, votre stock reste tel quel.",

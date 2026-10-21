@@ -452,6 +452,8 @@ export const en = {
     liveNow: "next: {machine}",
     liveLastDone: "{machine} done at {time}",
     onOpenRound: "Already on an open round",
+    filledOnRound: "Filled on the round · counts once the round is done",
+    filledOnRoundShort: "Waiting for the round to end",
     allOnRound: "Every machine is already on an open round",
     cancelRound: "Cancel round",
     cancelConfirm: "The round disappears. Nothing has been filled yet, so your stock stays as it is.",

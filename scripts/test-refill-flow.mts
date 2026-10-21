@@ -423,7 +423,7 @@ import { PERIODS, revenueByMachine, withoutOrgName } from "../src/lib/overview.t
 }
 
 // ── "Vul route beginnen" for the owner too (src/lib/refill-start.ts) ──
-import { ownRound, startable } from "../src/lib/refill-start.ts";
+import { filledOnOpenRound, ownRound, startable } from "../src/lib/refill-start.ts";
 {
   const mc = (id: string, refill_manual = false) => ({ id, refill_manual });
   const slots = [
@@ -433,10 +433,14 @@ import { ownRound, startable } from "../src/lib/refill-start.ts";
     { machine_id: "d", product_id: "p" },
     { machine_id: "e", product_id: "p" },
   ];
-  const start = startable([mc("a"), mc("b"), mc("c"), mc("d", true), mc("e")], slots, [{ machines: [{ id: "e", done: false }, { id: "a", done: true }] }], ["b", "a"]);
+  const open = [{ machines: [{ id: "e", done: false, skipped: false }, { id: "a", done: true, skipped: true }, { id: "f", done: true, skipped: false }] }];
+  const start = startable([mc("a"), mc("b"), mc("c"), mc("d", true), mc("e"), mc("f")], [...slots, { machine_id: "f", product_id: "p" }], open, ["b", "a"]);
   ok("start: machines with a product, in the route's order, the rest after", start.ids.join() === "b,a");
   ok("start: none filled by hand, none without a product", !start.ids.includes("d") && !start.ids.includes("c"));
-  ok("start: one still on an open round is left off; one done on it is not", start.busy.has("e") && !start.ids.includes("e") && start.ids.includes("a"));
+  ok("start: one still on an open round is left off; one it skipped is not", start.busy.has("e") && !start.ids.includes("e") && start.ids.includes("a"));
+  // Filled, but the round is not completed: it counts as filled only then (21-10-2026), so no second round.
+  ok("start: one filled on a round still open waits for that round", start.busy.has("f") && !start.ids.includes("f"));
+  ok("open round: filled ones wait, skipped and unvisited ones do not", [...filledOnOpenRound(open)].join() === "f");
 
   // Newest first, as getOpenRounds gives them.
   const round = (id: string, mine: boolean, readyAt: string | null = null) => ({ id, mine, readyAt });

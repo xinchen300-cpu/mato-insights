@@ -4,7 +4,7 @@ import { ChefHat, ListChecks } from "lucide-react";
 import { MachineRevenue } from "@/components/overview/machine-revenue";
 import { OverviewCamera } from "@/components/overview/overview-camera";
 import { revenueByMachine } from "@/lib/overview";
-import { ownRound, startable } from "@/lib/refill-start";
+import { filledOnOpenRound, ownRound, startable } from "@/lib/refill-start";
 import { StartRound } from "./refill/list/start-round";
 import { SetupGuide } from "@/components/setup-guide";
 import { EmptyState, PageHeader } from "@/components/page-header";
@@ -149,7 +149,15 @@ export default async function OverviewPage() {
   // Every machine with its money for today, this week and this month (Xin,
   // 19-10-2026: per machine rather than one total), how full it is and when it
   // was last filled; all of them together is one line above.
-  const revenue = revenueByMachine({ reports: { today, week, month }, machines, stock, refills, orgName, newSince });
+  const revenue = revenueByMachine({
+    reports: { today, week, month },
+    machines,
+    stock,
+    refills,
+    onRound: filledOnOpenRound(openRounds),
+    orgName,
+    newSince,
+  });
   // What "Vul route beginnen" puts on a round, as on the filler's home.
   const roundStart = startable(machines, stock, openRounds, roundSettings?.route ?? []);
   // Their own open round holds its machines, so the start button alone would

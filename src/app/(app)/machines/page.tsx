@@ -6,7 +6,18 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getBusinesses, getLastRefills, getLastSales, getMachines, getMachineStock, getRoundSettings, getStatsReport, rentsToBusinesses } from "@/lib/data";
+import {
+  getBusinesses,
+  getLastRefills,
+  getLastSales,
+  getMachines,
+  getMachineStock,
+  getOpenRounds,
+  getRoundSettings,
+  getStatsReport,
+  rentsToBusinesses,
+} from "@/lib/data";
+import { filledOnOpenRound } from "@/lib/refill-start";
 import { refilledText } from "@/lib/refilled";
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
 import { orderByRoute } from "@/lib/round-settings";
@@ -28,9 +39,17 @@ export async function generateMetadata() {
  */
 async function FillerMachines({ orgId }: { orgId: string }) {
   const { m } = await getI18n();
-  const [everyMachine, everySlot, settings] = await Promise.all([getMachines(orgId), getMachineStock(orgId), getRoundSettings(orgId)]);
+  const [everyMachine, everySlot, settings, rounds] = await Promise.all([
+    getMachines(orgId),
+    getMachineStock(orgId),
+    getRoundSettings(orgId),
+    getOpenRounds(orgId),
+  ]);
   // A machine filled by hand is not the filler's to fill here.
-  const grid = gridMachines(filledByVendly(everyMachine), slotsFilledByVendly(everySlot, everyMachine), settings.route, { withoutLayout: true });
+  const grid = gridMachines(filledByVendly(everyMachine), slotsFilledByVendly(everySlot, everyMachine), settings.route, {
+    withoutLayout: true,
+    onRound: filledOnOpenRound(rounds),
+  });
   return (
     <>
       <PageHeader title={m.machines.title} />
@@ -51,7 +70,7 @@ export default async function MachinesPage() {
   const orgId = await requireOrgId();
   // The operator's machines follow the route, the same order as the filler's tiles and the rounds.
   const operator = await isOperator();
-  const [machines, stock, lastSales, businesses, rents, route, today, refills] = await Promise.all([
+  const [machines, stock, lastSales, businesses, rents, route, today, refills, rounds] = await Promise.all([
     getMachines(orgId),
     getMachineStock(orgId),
     getLastSales(orgId),
@@ -60,7 +79,10 @@ export default async function MachinesPage() {
     operator ? getRoundSettings(orgId).then((settings) => settings.route) : Promise.resolve(null),
     getStatsReport(orgId, { period: "today" }),
     getLastRefills(orgId),
+    operator ? getOpenRounds(orgId) : Promise.resolve([]),
   ]);
+  // Filled on a round still open: how full it is counts once that round is completed (21-10-2026).
+  const onRound = filledOnOpenRound(rounds);
   const todayOf = new Map(today.by_machine.map((row) => [row.machine_id, row.revenue]));
 
   const statusLabel = (mc: (typeof machines)[number]) => {
@@ -139,7 +161,9 @@ export default async function MachinesPage() {
               // One line under the name: red when slots run low, grey for what is
               // missing, otherwise today's money and when it was filled (or last sold).
               const line =
-                tracksStock && s && s.low > 0
+                tracksStock && onRound.has(mc.id)
+                  ? { text: m.refill.filledOnRoundShort, alert: false }
+                  : tracksStock && s && s.low > 0
                   ? { text: fmt(m.overview.slotsLow, { count: s.low }), alert: true }
                   : tracksStock && (!s || s.slots === 0)
                     ? { text: m.machines.noLayout, alert: false }

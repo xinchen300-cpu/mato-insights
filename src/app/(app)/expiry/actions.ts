@@ -27,7 +27,8 @@ export async function pullExpired(machineId: string, selection: string, qty: num
     return;
   }
 
-  const slots = await getMachineStock(orgId, [machineId]);
+  // The alert counts what a round still open already put in, so the stock it takes from does too.
+  const slots = await getMachineStock(orgId, [machineId], { withOpenRounds: true });
   const slot = slots.find((s) => s.selection_number === selection);
   if (!slot || slot.stock === null) throw new Error("Slot not counted");
 
