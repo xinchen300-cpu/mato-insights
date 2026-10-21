@@ -45,6 +45,8 @@ export const fr: Messages = {
     unassigned: "Non liées",
     businesses: "Commerces",
     language: "Langue",
+    darkTheme: "Thème sombre",
+    lightTheme: "Thème clair",
     hideNumbers: "Masquer les chiffres",
     showNumbers: "Afficher les chiffres",
   },

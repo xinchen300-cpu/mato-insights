@@ -29,7 +29,7 @@ export function VendlyMark({ className }: { className?: string }) {
 /** [mato info]: the logo. The words take the text colour; the brackets stay gold. */
 export function VendlyWordmark({ className }: { className?: string }) {
   return (
-    <svg viewBox="4 16 239 58" role="img" aria-label="MATO Info" className={className ?? "h-[30px] w-auto text-[#2a2520]"}>
+    <svg viewBox="4 16 239 58" role="img" aria-label="MATO Info" className={className ?? "h-[30px] w-auto text-brand-ink"}>
       <path d="M22,20 L8,20 L8,70 L22,70" fill="none" stroke={GOLD} strokeWidth="4.6" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M225,20 L239,20 L239,70 L225,70" fill="none" stroke={GOLD} strokeWidth="4.6" strokeLinecap="round" strokeLinejoin="round" />
       <text

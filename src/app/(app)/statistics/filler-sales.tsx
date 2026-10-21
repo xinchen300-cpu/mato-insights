@@ -138,7 +138,7 @@ function MonthCard({ month, names, m, f }: { month: MonthOfRounds; names: Record
           </dl>
           {month.busiest && (
             <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-xl bg-primary/12 px-3.5 py-2.5 text-[15px]">
-              <CalendarCheck className="size-[18px] shrink-0 text-[#8a6117]" aria-hidden="true" />
+              <CalendarCheck className="size-[18px] shrink-0 text-gold-ink" aria-hidden="true" />
               <span className="font-semibold">{t.soldBusiest}</span>
               <span>{fmt(t.soldBusiestValue, { day: f.weekdayDay(month.busiest.day), items: f.number(month.busiest.items) })}</span>
             </p>

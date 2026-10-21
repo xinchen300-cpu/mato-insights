@@ -1509,7 +1509,7 @@ export function RoundFlow({
             who && (
               <span
                 className={cn(
-                  "grid shrink-0 place-items-center rounded-full bg-primary/15 font-bold text-[#8a6117]",
+                  "grid shrink-0 place-items-center rounded-full bg-primary/15 font-bold text-gold-ink",
                   readyAt ? "size-9 text-[15px]" : "size-12 text-[19px]",
                 )}
                 aria-hidden="true"
@@ -1549,9 +1549,9 @@ export function RoundFlow({
         {/* This round's own note first, then what the operator says before every round. */}
         {(initial.notes || initial.settings.message) && (
           <div className="mt-3 flex gap-3 rounded-2xl bg-primary/10 px-4 py-3">
-            <MessageSquareText className="mt-0.5 size-5 shrink-0 text-[#8a6117]" aria-hidden="true" />
+            <MessageSquareText className="mt-0.5 size-5 shrink-0 text-gold-ink" aria-hidden="true" />
             <div className="flex min-w-0 flex-col gap-1.5">
-              <p className="text-[13px] font-semibold text-[#8a6117]">{t.messageTitle}</p>
+              <p className="text-[13px] font-semibold text-gold-ink">{t.messageTitle}</p>
               {initial.notes && <p className="whitespace-pre-wrap text-[15px] leading-snug">{initial.notes}</p>}
               {initial.settings.message && <p className="whitespace-pre-wrap text-[15px] leading-snug">{initial.settings.message}</p>}
             </div>
@@ -1737,7 +1737,7 @@ function MachineThumb({ path, className }: { path: string | null; className?: st
   return (
     <span
       className={cn(
-        "relative grid shrink-0 place-items-center overflow-hidden bg-[linear-gradient(160deg,#f6f2ea,#ece6da)] shadow-[inset_0_0_0_1px_rgb(0_0_0/0.04)]",
+        "relative grid shrink-0 place-items-center overflow-hidden bg-[linear-gradient(160deg,var(--photo-from),var(--photo-to))] shadow-[inset_0_0_0_1px_rgb(0_0_0/0.04)]",
         className,
       )}
       aria-hidden="true"

@@ -26,7 +26,11 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export const viewport: Viewport = {
-  themeColor: "#f6f6f7",
+  // The bar around the app on a phone, light or dark like the app; the script below follows a choice made in the app.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f6f6f7" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f0f11" },
+  ],
   // Edge to edge on a phone: the bars at the bottom pad themselves above the home bar (safe-area-inset).
   viewportFit: "cover",
 };
@@ -35,6 +39,14 @@ export const viewport: Viewport = {
 // only once, early, before the page has started: keep that offer for the
 // install card on Bijvullen. And the service worker, which keeps Vendly's own
 // files on the phone; only in a real build, where those files never change.
+// Light or dark before the first paint, so a dark phone never sees a white flash: the person's own choice
+// (ThemeToggle, "mato:theme"), else the phone's setting, which is followed when it changes (at sunset).
+const THEME_SCRIPT =
+  "try{var r=document.documentElement,q=matchMedia('(prefers-color-scheme: dark)'),s=function(){var t=null;try{t=localStorage.getItem('mato:theme')}catch(e){}" +
+  "var d=t==='dark'||(t!=='light'&&q.matches);r.classList.toggle('dark',d);" +
+  "document.querySelectorAll('meta[name=\"theme-color\"]').forEach(function(m){m.setAttribute('content',d?'#0f0f11':'#f6f6f7')})};" +
+  "s();q.addEventListener('change',s)}catch(e){}";
+
 const APP_SCRIPT = [
   "addEventListener('beforeinstallprompt',function(e){window.__vendlyInstall=e;dispatchEvent(new Event('vendly:installable'))});",
   "addEventListener('appinstalled',function(){window.__vendlyInstall=null;dispatchEvent(new Event('vendly:installable'))});",
@@ -53,6 +65,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       className={`${inter.variable} ${montserrat.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         {/* Restores the "hide figures" switch before first paint, so they never flash. */}
         <script
           dangerouslySetInnerHTML={{

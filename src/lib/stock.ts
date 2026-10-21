@@ -38,9 +38,9 @@ export function machineFill(stock: number, capacity: number, counted: boolean): 
 
 // The strong shades: these carry text (white on the pill, or the % itself), so they keep 4.5:1.
 export const bandText: Record<FillBand, string> = {
-  red: "text-level-low-strong",
-  orange: "text-level-half-strong",
-  green: "text-level-full-strong",
+  red: "text-level-low-ink",
+  orange: "text-level-half-ink",
+  green: "text-level-full-ink",
 };
 
 export const bandBg: Record<FillBand, string> = {

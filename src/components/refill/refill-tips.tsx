@@ -36,7 +36,7 @@ export function RefillTips({ tips, className }: { tips: string[]; className?: st
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex min-h-11 w-full items-center gap-2 px-4 text-left text-[14px] font-semibold text-[#8a6117]"
+        className="flex min-h-11 w-full items-center gap-2 px-4 text-left text-[14px] font-semibold text-gold-ink"
       >
         <Lightbulb className="size-4 shrink-0" aria-hidden="true" />
         <span className="flex-1">{m.refill.tipsTitle}</span>
@@ -46,7 +46,7 @@ export function RefillTips({ tips, className }: { tips: string[]; className?: st
         <ul className="flex flex-col gap-1.5 px-4 pb-3.5 text-[14.5px] leading-snug">
           {tips.map((tip) => (
             <li key={tip} className="flex gap-2.5">
-              <span className="mt-[0.55em] size-1.5 shrink-0 rounded-full bg-[#8a6117]/50" aria-hidden="true" />
+              <span className="mt-[0.55em] size-1.5 shrink-0 rounded-full bg-gold-ink/50" aria-hidden="true" />
               <span>{tip}</span>
             </li>
           ))}

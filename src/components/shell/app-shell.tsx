@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fillerLocales } from "@/i18n/config";
 import { HideNumbers } from "./hide-numbers";
 import { LanguageToggle } from "./language-toggle";
+import { ThemeToggle } from "./theme-toggle";
 import { MobileNav, SidebarNav } from "./nav";
 import { SignOutForm } from "./sign-out";
 
@@ -33,6 +34,8 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
           <SidebarNav filler={filler} />
         </div>
         <div className="mt-auto flex flex-col gap-1">
+          {/* Light or dark, for everyone (Xin, 21-10-2026). */}
+          <ThemeToggle variant="row" />
           {/* A filler picks Dutch or French here; the owner does so in the settings. */}
           {filler && (
             <div className="px-3 pb-2">
@@ -67,6 +70,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
           <div className="ml-auto flex items-center gap-1">
             {filler && <LanguageToggle only={fillerLocales} />}
+            <ThemeToggle />
             {!filler && (
               <>
                 <HideNumbers />

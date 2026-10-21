@@ -35,7 +35,7 @@ export default async function PrintRefillSheetPage({ params }: { params: Promise
     : sheet.lines.reduce((sum, l) => sum + l.to_add, 0);
 
   return (
-    <div className="mx-auto max-w-[210mm] bg-white p-8 text-foreground shadow-none print:p-0 [&_table]:bg-white">
+    <div className="light mx-auto max-w-[210mm] bg-white p-8 text-foreground shadow-none print:p-0 [&_table]:bg-white">
       <style>{`@page { size: A4; margin: 14mm; } @media print { body { background: white; } }`}</style>
       <div className="mb-6 flex items-start justify-between gap-4 border-b pb-4">
         <div>
