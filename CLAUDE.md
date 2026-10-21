@@ -30,8 +30,8 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   `productie` het niet meer gebruikt.
 - Rol **nooit** uit vanuit de gedeelde werkmap. Op 16-10 belandde zo ongecommit werk live, en op
   18-10 stond er live code die nergens in git zat (teruggezet als `productie`, commit dcd1434).
-- **Live staat sinds 21-10-2026 `cloud/productie-release` @ 95f5e19** (de eigenaarsfixes, het oogje bij het
-  wachtwoord en daarna alleen de camera met Bijna live, zie hieronder), uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
+- **Live staat sinds 21-10-2026 `cloud/productie-release` @ df76dca** (de eigenaarsfixes, het oogje bij het
+  wachtwoord en daarna alleen de camera met Live, zie hieronder), uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
 
@@ -182,12 +182,13 @@ Xin: "een knop, toon mijn automaat nu, en dan zie je een snapshot". Geen video: 
   staat als geheim op vendly, vendly-test, chocabake, sferio en ledoux. Alleen organisaties in `UNIFI_ORGS` zien of kiezen
   camera's: live Mato Vending + Chens Garden (de eigenaar daar is Xin zelf, xinchen300+chens), test alleen Mato Vending.
   Een andere klant van MATO Info mag Xins camera's nooit zien: komt er een tweede uitbater met UniFi, dan per org een eigen sleutel.
-- **Bijna live** (21-10-2026): om de 3 seconden een nieuwe foto zolang de pagina open is; stopt na een minuut, bij Stop,
+- **Live** (21-10-2026; eerst "Bijna live", Xin: "je mag het live noemen"): om de 3 seconden een nieuwe foto zolang de pagina open is; stopt na een minuut, bij Stop,
   als de pagina of app weggaat, of bij een mislukte foto (getest: 20 foto's per minuut). Geen echte video: daarvoor is
   een tussenprogramma (go2rtc) bij de console nodig, Xin houdt het bij de UniFi-app.
 - Eerst wordt een scherpe foto (`highQuality=true`) gevraagd. De camera bij **Diksmuide** antwoordt "Camera does not
   support full HD snapshot" (`featureFlags.supportFullHdSnapshot` = false): dan de gewone foto, lagere kwaliteit, hoger
-  kan niet via de API. `NO_FULL_HD` in `unifi.ts` onthoudt zo'n camera, zodat elke foto één vraag aan UniFi kost.
+  kan niet via de API. `NO_FULL_HD` in `unifi.ts` onthoudt zo'n camera, zodat elke foto één vraag aan UniFi kost. De officiële API (v7.3.70) kent geen oude beelden of
+  opnames: een foto kan alleen van nu.
   Een mislukte foto wordt gelogd met UniFi's antwoord (nooit de sleutel); Vercel bewaart runtime-logs maar 30 minuten.
 - `vercel env pull` geeft geheimen terug als "[sensitive]": de sleutel testen kan alleen via de site zelf (fout →
   Vercel-logs). UniFi laat 100 vragen per minuut per console toe.
