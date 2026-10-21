@@ -30,8 +30,9 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   `productie` het niet meer gebruikt.
 - Rol **nooit** uit vanuit de gedeelde werkmap. Op 16-10 belandde zo ongecommit werk live, en op
   18-10 stond er live code die nergens in git zat (teruggezet als `productie`, commit dcd1434).
-- **Live staat sinds 21-10-2026 `cloud/productie-release` @ 9f75831** (de eigenaarsfixes, het oogje bij het
-  wachtwoord en daarna alleen de camera: Live, elke betaling op camera (alleen op een computer) en volledig scherm, zie hieronder), uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
+- **Live staat sinds 21-10-2026 `cloud/productie-release` @ 234b885** (de eigenaarsfixes, het oogje bij het
+  wachtwoord, de camera: Live, elke betaling op camera (alleen op een computer) en volledig scherm, en daarna het
+  overzicht zonder meldingen, de camera onder Net verkocht en de statistieken per maand en automaat, zie hieronder), uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
 
@@ -133,11 +134,15 @@ zoals ervoor; `organizations.cost_per_hour` bleef €16 (Xin: "ik betaal mijn ch
 
 ## Overzicht van de uitbater (19-10-2026)
 Xin: "omzet per automaat, niet één totaal". Het overzicht toont eerst snelknoppen (sinds 20-10 Vul route beginnen, Keukenlijst,
-Vullijst), de meldingen (4, de rest onder "Nog … meldingen"), dan **Omzet per automaat** met Vandaag/Week/Maand
+Vullijst), dan **Omzet per automaat** ("Vandaag te doen" en "Goed om te weten" zijn sinds 21-10-2026 weg, Xin: "delete
+vandaag te doen … goed om te weten mag ook weg"; daarmee ook de loads die alleen die blokken voedden) met Vandaag/Week/Maand
 (`src/components/overview/machine-revenue.tsx`): per automaat geld, stuks, alleen een échte verandering, hoe vol,
 en wanneer gevuld (`last_refills`, `getLastRefills`, alleen voor de uitbater). Het totaal is één regel erboven.
 De eigen bedrijfsnaam valt weg uit de automaatnamen ("Koekelare"). Net verkocht toont 5, "Meer zien" tot 40 per
-dag. De cijfers bouwt `revenueByMachine` in `src/lib/overview.ts` (getest in `test:flow`); voorbeeld met
+dag. **Onder Net verkocht de camera** (21-10-2026, Xin: "camera feature in net verkocht, alleen Diksmuide"):
+`OverviewCamera` (`src/components/overview/overview-camera.tsx`) met dezelfde `MachineCamera` als de automaatpagina (Toon
+automaat nu, Live, volledig scherm), voor elke automaat met een gekoppelde camera (`getMachineCameras`, alleen de uitbater);
+bij Chens alleen Diksmuide, titel "Camera · Diksmuide"; met meer automaten eerst een keuze van automaat. De cijfers bouwt `revenueByMachine` in `src/lib/overview.ts` (getest in `test:flow`); voorbeeld met
 verzonnen cijfers langs dezelfde weg: `/dev/owner`. **Nooit een waarde (lijst, constante, hulpfunctie) uit een
 `"use client"`-bestand in een serverbestand importeren**: die komt daar als stand-in aan. Zo brak `PERIODS.map`
 op 19-10 het live overzicht (teruggerold naar de vorige versie); `check:guards` vangt dat nu
@@ -150,7 +155,15 @@ met elke automaat die iets mist en niet op een open ronde staat, en meteen erin 
 true})` → `/vullen`). Ook de tegels en "Zelf automaten kiezen" van Alus. "Bijvullen" op een automaat opent voor de uitbater Alus' pagina met de grote − en + (`/refill/machines/[id]?from=machine`); "Voorraad aanpassen" (tot 21-10 "Voorraad corrigeren") zet sinds 21-10 de vakken op de automaatpagina zelf in aanpasmodus (Xin: "meteen aanpassen zonder dat je wordt verwezen naar bijvullen"; `StockAdjust` met `embedded` in `src/components/machine/stock-adjust.tsx`, dezelfde als op Alus' pagina, opslaan als `correction`). `/machines/[id]/refill` stuurt hem daarheen, een zaak houdt dat oude formulier. `/refill/new` bestaat nog maar
 wordt nergens meer gelinkt. **Statistieken**: per automaat staat nu onder het totaal, daarna **Bijvullingen**
 (`refill_visits`, `getRefillVisits`, alleen de uitbater): per dag wanneer, hoeveel stuks, door wie; de lijst van
-alle producten is ingeklapt en "Gemiddelde verkoop" is weg.
+alle producten is ingeklapt en "Gemiddelde verkoop" is weg. Sinds 21-10-2026 (Xin: "ook bijvullingen via aantal aanpassen
+en niet alleen op ronde") lezen Bijvullingen en "gevuld …" op het overzicht `refill_visits_all` / `last_refills_all`
+(toevoegend, naast de oude): ook een `correction` met delta > 0, gemarkeerd "via aanpassen" (`RefillVisit.adjusted`);
+Alus vult 's ochtends vaak zo. **Statistieken per maand en automaat** (21-10-2026): "Maand kiezen" (de laatste 12; een gekozen
+maand is `period=custom` met de hele maand, de datumvelden blijven dan dicht tot "Zelf kiezen"), de automaten als knoppen
+in plaats van een lijstje, en **Minst verkocht per automaat** (`statistics/least-per-machine.tsx`): per automaat zijn
+gerechten van minst verkocht naar meest (3, de rest ingeklapt), uit een eigen `stats_report` per automaat; gerechten die
+nu in de automaat liggen en niets verkochten tellen mee zolang de periode tot vandaag loopt. Pas vanaf 4 weken (`MIN_WEEKS`),
+anders een zin; vervangt het oude "Minst verkocht" over alle automaten.
 
 **Daarna (20-10-2026, Xin: "vul route beginnen verdwijnt soms", "alles traag"):**
 - Een eigen open ronde houdt zijn automaten bezet, dus de startknop alleen verdween. Nu staat daar **Ga verder
