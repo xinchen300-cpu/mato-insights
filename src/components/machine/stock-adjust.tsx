@@ -11,15 +11,27 @@ import { haptic } from "@/lib/haptics";
 import { toFrontRows } from "@/lib/layout";
 import type { SlotStock } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { correctStock } from "../../actions";
+import { correctStock } from "@/app/(app)/refill/actions";
 
 /**
  * The machine's slots as a picture for whoever fills it, with the counts set
  * right on it (Xin, 17-10-2026): one button switches it on, then every slot
  * has a big minus and plus under its product, so a count is one tap away.
  * Nothing is sent before "save", as one correction.
+ *
+ * On the machine's own page the owner adjusts right there, without being sent
+ * to the refill page (Xin, 21-10-2026): `embedded` gives that page's own picture
+ * of the slots while not adjusting, the button's label and the buttons beside it.
  */
-export function StockAdjust({ machineId, slots }: { machineId: string; slots: SlotStock[] }) {
+export function StockAdjust({
+  machineId,
+  slots,
+  embedded,
+}: {
+  machineId: string;
+  slots: SlotStock[];
+  embedded?: { idle: React.ReactNode; label: string; actions?: React.ReactNode };
+}) {
   const { m } = useI18n();
   const router = useRouter();
   const [busy, startTransition] = useTransition();
@@ -115,22 +127,13 @@ export function StockAdjust({ machineId, slots }: { machineId: string; slots: Sl
     );
   };
 
-  return (
-    <Section title={m.refill.stockTitle} hint={editing ? m.refill.countsEditingHint : m.refill.countsHint}>
-      {!editing && (
-        <Button
-          size="lg"
-          variant="outline"
-          onClick={() => {
-            setResult(null);
-            setEditing(true);
-          }}
-          className="w-full sm:w-auto sm:self-start"
-        >
-          <SlidersHorizontal />
-          {m.refill.adjustCounts}
-        </Button>
-      )}
+  function start() {
+    setResult(null);
+    setEditing(true);
+  }
+
+  const picture = (
+    <>
       <FrontView rows={rows} roomy={editing} renderSlotFooter={editing ? footer : undefined} />
       <StockLegend
         labels={{
@@ -141,26 +144,69 @@ export function StockAdjust({ machineId, slots }: { machineId: string; slots: Sl
           unknown: m.machines.legendUnknown,
         }}
       />
-      {result === "saved" && <p className="px-1 text-sm font-semibold text-positive">{m.stock.correctionSaved}</p>}
+    </>
+  );
+  const saved = result === "saved" && <p className="px-1 text-sm font-semibold text-positive">{m.stock.correctionSaved}</p>;
+  const bar = editing && (
+    // Clears the tab bar on phones, the iPhone's home bar included.
+    <div className="surface-card sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 mt-2 flex flex-col gap-2 bg-card/95 p-3 backdrop-blur-xl lg:bottom-4">
+      <Button size="lg" variant="outline" onClick={fillAll} disabled={busy || allFull} className="w-full sm:w-auto sm:self-start">
+        <PackagePlus />
+        {m.refill.fillAllSlots}
+      </Button>
+      {/* Side by side where they fit, under each other on a narrow phone, never over the edge. */}
+      <div className="flex flex-wrap gap-2">
+        <Button size="lg" onClick={save} disabled={busy || changed.length === 0} className="grow sm:grow-0">
+          {busy ? m.common.saving : m.stock.saveCorrection}
+        </Button>
+        <Button size="lg" variant="outline" onClick={stop} disabled={busy} className="grow sm:grow-0">
+          {m.common.cancel}
+        </Button>
+      </div>
+      {result === "error" && <span className="px-1 text-sm text-negative">{m.common.error}</span>}
+    </div>
+  );
 
-      {editing && (
-        // Clears the tab bar on phones, the iPhone's home bar included.
-        <div className="surface-card sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 mt-2 flex flex-col gap-2 bg-card/95 p-3 backdrop-blur-xl lg:bottom-4">
-          <Button size="lg" variant="outline" onClick={fillAll} disabled={busy || allFull} className="w-full sm:w-auto sm:self-start">
-            <PackagePlus />
-            {m.refill.fillAllSlots}
-          </Button>
-          <div className="flex gap-2">
-            <Button size="lg" onClick={save} disabled={busy || changed.length === 0} className="flex-1 sm:flex-none">
-              {busy ? m.common.saving : m.stock.saveCorrection}
+  if (embedded) {
+    return editing ? (
+      <div className="flex flex-col gap-3">
+        <p className="px-1 text-[13px] text-muted-foreground">{m.refill.countsEditingHint}</p>
+        {picture}
+        {bar}
+      </div>
+    ) : (
+      <>
+        {embedded.idle}
+        {saved && <div className="mt-4">{saved}</div>}
+        <div className="mt-6 flex flex-wrap gap-2">
+          {slots.length > 0 && (
+            <Button variant="secondary" onClick={start}>
+              <SlidersHorizontal />
+              {embedded.label}
             </Button>
-            <Button size="lg" variant="outline" onClick={stop} disabled={busy}>
-              {m.common.cancel}
-            </Button>
-          </div>
-          {result === "error" && <span className="px-1 text-sm text-negative">{m.common.error}</span>}
+          )}
+          {embedded.actions}
         </div>
+      </>
+    );
+  }
+
+  return (
+    <Section title={m.refill.stockTitle} hint={editing ? m.refill.countsEditingHint : m.refill.countsHint}>
+      {!editing && (
+        <Button
+          size="lg"
+          variant="outline"
+          onClick={start}
+          className="w-full sm:w-auto sm:self-start"
+        >
+          <SlidersHorizontal />
+          {m.refill.adjustCounts}
+        </Button>
       )}
+      {picture}
+      {saved}
+      {bar}
     </Section>
   );
 }

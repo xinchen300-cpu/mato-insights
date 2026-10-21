@@ -331,7 +331,7 @@ export const fr: Messages = {
     fill: "Plein",
     empty: "Vide",
     saveRefill: "Enregistrer le remplissage",
-    saveCorrection: "Enregistrer la correction",
+    saveCorrection: "Enregistrer le stock",
     refillSaved: "Remplissage enregistré",
     correctionSaved: "Stock modifié",
     nothingChanged: "Rien n'a changé.",

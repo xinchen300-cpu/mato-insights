@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MachinePhoto } from "@/components/machine/machine-photo";
+import { StockAdjust } from "@/components/machine/stock-adjust";
 import { StatusDot } from "@/components/machine/status-badge";
 import { PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
@@ -13,7 +14,6 @@ import { terminalStatus } from "@/lib/terminal-status";
 import { cn } from "@/lib/utils";
 import { FillButton } from "./fill-button";
 import { LayoutEditor } from "./layout-editor";
-import { StockAdjust } from "./stock-adjust";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
