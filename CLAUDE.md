@@ -253,8 +253,8 @@ dag, meest verkocht en de laatste verkoop ("wat klanten betaalden, incl. btw"); 
 de eerste verkoop (staven en daarna een lijst vond Xin "niet zo duidelijk"); **Per product** op naam samengevoegd
 (`Report.products`, met vakken en prijzen in `parts`; Cookie in vak 35 en 37 is één product), sorteren op stuks/omzet en
 met de periodekeuze er nog eens bij; Ledoux daarna "Per automaat"; onderaan de laatste verkopen en "Rapport downloaden".
-**Lijsten (21-10-2026, Xin: "per product lijst gaat te ver door"):** Per product toont de top 10, Toon meer de rest, Toon minder
-weer 10. Laatste verkopen (nu een client-component) toont 10, per Toon meer 20 extra, en Toon minder; daarboven een zoekveld
+**Lijsten (21-10-2026, Xin: "per product lijst gaat te ver door", daarna "only show top 5"):** Per product toont de top 5
+(`TOP` in `product-bars.tsx`), Toon meer de rest, Toon minder weer 5. Laatste verkopen (nu een client-component) toont 10, per Toon meer 20 extra, en Toon minder; daarboven een zoekveld
 (`lib/sale-search.ts`, zonder imports): een dag ("12/10", "12 okt", "gisteren"), een maand ("okt"), een prijs ("3,75", ook
 "4" = € 4,00), "vak 35" of anders tekst in product/automaat, binnen de gekozen periode. Een dag of maand buiten die periode
 (maar niet vóór de eerste verkoop) krijgt een link naar precies die dagen (`?periode=custom&van=…&tot=…`).
