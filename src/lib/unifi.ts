@@ -93,13 +93,20 @@ const isJpeg = (image: ArrayBuffer) => {
 };
 
 /**
+ * Cameras that said they cannot make a full HD photo (Diksmuide's, 21-10-2026):
+ * asked for the usual one straight away, so "Bijna live" costs one call per
+ * photo against UniFi's 100 a minute. Kept for as long as this server runs.
+ */
+const NO_FULL_HD = new Set<string>();
+
+/**
  * A photo of this moment: sharp (1080p or more) to see the slots, or the
  * camera's usual one when the sharp one fails or takes too long. A photo the
  * connector labels as something else still counts if it is one. Every failure
  * is logged with what UniFi answered, never with the key.
  */
 export async function cameraSnapshot(consoleId: string, cameraId: string): Promise<{ image: ArrayBuffer; type: string }> {
-  for (const sharp of [true, false]) {
+  for (const sharp of NO_FULL_HD.has(cameraId) ? [false] : [true, false]) {
     const path = protect(consoleId, `/cameras/${encodeURIComponent(cameraId)}/snapshot${sharp ? "?highQuality=true" : ""}`);
     try {
       const res = await call(path, "*/*", sharp ? 12_000 : TIMEOUT_MS);
@@ -109,6 +116,11 @@ export async function cameraSnapshot(consoleId: string, cameraId: string): Promi
         return { image, type: type.startsWith("image/") ? type : "image/jpeg" };
       }
       const said = type.includes("json") || type.startsWith("text/") ? new TextDecoder().decode(image.slice(0, 300)) : `${image.byteLength} bytes`;
+      // UniFi's own answer for such a camera: "Camera does not support full HD snapshot".
+      if (sharp && res.status === 400 && /full HD/i.test(said)) {
+        NO_FULL_HD.add(cameraId);
+        continue;
+      }
       console.error("UniFi snapshot refused", { sharp, status: res.status, type, said });
     } catch (error) {
       console.error("UniFi snapshot failed", { sharp, error: String(error) });

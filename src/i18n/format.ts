@@ -54,6 +54,7 @@ export function makeFormatters(locale: Locale) {
     timeZone,
   });
   const clock = new Intl.DateTimeFormat(tag, { hour: "2-digit", minute: "2-digit", timeZone });
+  const clockSeconds = new Intl.DateTimeFormat(tag, { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone });
   const relative = new Intl.RelativeTimeFormat(tag, { numeric: "auto" });
 
   return {
@@ -77,6 +78,8 @@ export function makeFormatters(locale: Locale) {
     monthShort: (month: string) => monthShort.format(new Date(`${month}-15T12:00:00Z`)),
     dateTime: (value: string | Date) => dateTime.format(new Date(value)),
     time: (value: string | Date) => clock.format(new Date(value)),
+    /** "14:32:05": where seconds matter, as for a photo every few seconds. */
+    timeSeconds: (value: string | Date) => clockSeconds.format(new Date(value)),
     /** "3 minutes ago", "yesterday", … Only render this on the server. */
     relative: (value: string | Date) => {
       const seconds = (new Date(value).getTime() - Date.now()) / 1000;
