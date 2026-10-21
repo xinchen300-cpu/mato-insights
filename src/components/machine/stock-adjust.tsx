@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { CircleCheck, Minus, PackagePlus, Plus, SlidersHorizontal } from "lucide-react";
+import { Check, CircleCheck, Minus, PackagePlus, Plus, SlidersHorizontal } from "lucide-react";
 import { FrontView, StockLegend, type FrontSlot } from "@/components/machine/front-view";
 import { Section } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -15,8 +15,8 @@ import type { SlotStock } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { correctStock } from "@/app/(app)/refill/actions";
 
-/** How long the green check stays at the bottom after saving. */
-const TOAST_MS = 4000;
+/** How long the big green check stays in the middle of the screen after saving; a tap closes it sooner. */
+const TOAST_MS = 2000;
 
 /**
  * The machine's slots as a picture for whoever fills it, with the counts set
@@ -43,7 +43,8 @@ export function StockAdjust({
   const [editing, setEditing] = useState(false);
   const [levels, setLevels] = useState<Record<string, number>>({});
   const [result, setResult] = useState<"saved" | "error" | null>(null);
-  // How many slots the last save changed, while the green check shows at the bottom (Xin, 21-10-2026).
+  // How many slots the last save changed, while the big green check shows (Xin, 21-10-2026: "in het midden van
+  // het scherm, in het groot, een groen vinkje").
   const [toast, setToast] = useState<number | null>(null);
   useEffect(() => {
     if (toast === null) return;
@@ -161,7 +162,8 @@ export function StockAdjust({
       />
     </>
   );
-  // A green check that stays above the slots, and one at the bottom for a few seconds, wherever the page was scrolled to.
+  // A big green check in the middle of the screen for a moment, wherever the page was scrolled to, and a small one
+  // that stays above the slots.
   const saved = result === "saved" && (
     <p role="status" className="flex items-center gap-1.5 px-1 text-[15px] font-semibold text-positive">
       <CircleCheck className="size-5 shrink-0" aria-hidden="true" />
@@ -171,13 +173,20 @@ export function StockAdjust({
   const savedToast =
     toast !== null &&
     createPortal(
-      <p
+      <div
         aria-hidden="true"
-        className="fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-50 mx-auto flex max-w-sm items-center justify-center gap-2 rounded-2xl bg-positive px-4 py-3 text-[15px] font-semibold text-white shadow-lg lg:bottom-6"
+        onClick={() => setToast(null)}
+        className="fixed inset-0 z-50 grid place-items-center bg-black/15 p-6 duration-200 animate-in fade-in-0"
       >
-        <CircleCheck className="size-5 shrink-0" strokeWidth={2.5} />
-        {plural(toast, m.stock.savedSlotsOne, m.stock.savedSlots)}
-      </p>,
+        <div className="flex w-full max-w-xs flex-col items-center gap-5 rounded-3xl bg-card px-6 py-8 shadow-[var(--shadow-pop)] duration-300 animate-in zoom-in-75">
+          <span className="grid size-28 place-items-center rounded-full bg-positive text-white">
+            <Check className="size-16" strokeWidth={3.25} />
+          </span>
+          <p className="text-center text-[19px] font-semibold leading-snug tracking-[-0.01em]">
+            {plural(toast, m.stock.savedSlotsOne, m.stock.savedSlots)}
+          </p>
+        </div>
+      </div>,
       document.body,
     );
   const bar = editing && (
