@@ -1,17 +1,22 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Minus, PackagePlus, Plus, SlidersHorizontal } from "lucide-react";
+import { CircleCheck, Minus, PackagePlus, Plus, SlidersHorizontal } from "lucide-react";
 import { FrontView, StockLegend, type FrontSlot } from "@/components/machine/front-view";
 import { Section } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/client";
+import { plural } from "@/i18n/format";
 import { haptic } from "@/lib/haptics";
 import { toFrontRows } from "@/lib/layout";
 import type { SlotStock } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { correctStock } from "@/app/(app)/refill/actions";
+
+/** How long the green check stays at the bottom after saving. */
+const TOAST_MS = 4000;
 
 /**
  * The machine's slots as a picture for whoever fills it, with the counts set
@@ -38,6 +43,13 @@ export function StockAdjust({
   const [editing, setEditing] = useState(false);
   const [levels, setLevels] = useState<Record<string, number>>({});
   const [result, setResult] = useState<"saved" | "error" | null>(null);
+  // How many slots the last save changed, while the green check shows at the bottom (Xin, 21-10-2026).
+  const [toast, setToast] = useState<number | null>(null);
+  useEffect(() => {
+    if (toast === null) return;
+    const timer = window.setTimeout(() => setToast(null), TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   const bySlot = new Map(slots.map((slot) => [slot.slot_id, slot]));
   // A slot nobody counted yet changes as soon as it is given a number, even 0.
@@ -71,6 +83,8 @@ export function StockAdjust({
 
   function save() {
     setResult(null);
+    setToast(null);
+    const count = changed.length;
     startTransition(async () => {
       try {
         await correctStock(
@@ -80,6 +94,7 @@ export function StockAdjust({
         haptic("success");
         stop();
         setResult("saved");
+        setToast(count);
         router.refresh();
       } catch {
         setResult("error");
@@ -146,7 +161,25 @@ export function StockAdjust({
       />
     </>
   );
-  const saved = result === "saved" && <p className="px-1 text-sm font-semibold text-positive">{m.stock.correctionSaved}</p>;
+  // A green check that stays above the slots, and one at the bottom for a few seconds, wherever the page was scrolled to.
+  const saved = result === "saved" && (
+    <p role="status" className="flex items-center gap-1.5 px-1 text-[15px] font-semibold text-positive">
+      <CircleCheck className="size-5 shrink-0" aria-hidden="true" />
+      {m.stock.correctionSaved}
+    </p>
+  );
+  const savedToast =
+    toast !== null &&
+    createPortal(
+      <p
+        aria-hidden="true"
+        className="fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-50 mx-auto flex max-w-sm items-center justify-center gap-2 rounded-2xl bg-positive px-4 py-3 text-[15px] font-semibold text-white shadow-lg lg:bottom-6"
+      >
+        <CircleCheck className="size-5 shrink-0" strokeWidth={2.5} />
+        {plural(toast, m.stock.savedSlotsOne, m.stock.savedSlots)}
+      </p>,
+      document.body,
+    );
   const bar = editing && (
     // Clears the tab bar on phones, the iPhone's home bar included.
     <div className="surface-card sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 mt-2 flex flex-col gap-2 bg-card/95 p-3 backdrop-blur-xl lg:bottom-4">
@@ -176,8 +209,9 @@ export function StockAdjust({
       </div>
     ) : (
       <>
+        {saved && <div className="mb-4">{saved}</div>}
         {embedded.idle}
-        {saved && <div className="mt-4">{saved}</div>}
+        {savedToast}
         <div className="mt-6 flex flex-wrap gap-2">
           {slots.length > 0 && (
             <Button variant="secondary" onClick={start}>
@@ -204,9 +238,10 @@ export function StockAdjust({
           {m.refill.adjustCounts}
         </Button>
       )}
+      {!editing && saved}
       {picture}
-      {saved}
       {bar}
+      {savedToast}
     </Section>
   );
 }
