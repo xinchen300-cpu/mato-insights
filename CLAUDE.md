@@ -30,10 +30,10 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   `productie` het niet meer gebruikt.
 - Rol **nooit** uit vanuit de gedeelde werkmap. Op 16-10 belandde zo ongecommit werk live, en op
   18-10 stond er live code die nergens in git zat (teruggezet als `productie`, commit dcd1434).
-- **Live staat sinds 21-10-2026 `cloud/productie-release` @ 6fef40f** (de eigenaarsfixes, het oogje bij het
+- **Live staat sinds 21-10-2026 `cloud/productie-release` @ dc173e4** (de eigenaarsfixes, het oogje bij het
   wachtwoord, de camera: Live, elke betaling op camera (alleen op een computer) en volledig scherm, het
   overzicht zonder meldingen, de camera onder Net verkocht, de statistieken per maand en automaat, en een ronde die
-  pas telt als hij af is, en het groene vinkje na Voorraad aanpassen, zie hieronder), uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
+  pas telt als hij af is, het groene vinkje na Voorraad aanpassen en het donkere thema, zie hieronder), uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
 
@@ -199,6 +199,22 @@ zag; ook het oude formulier van een zaak). Een gevulde automaat op een open rond
 "Wacht op einde ronde" (`filledOnOpenRound`; overzicht, Automaten, tegels, automaatpagina's). Een ronde verwijderen
 zet `refill_sheet_id` op null (FK `on delete set null`): wat al gevuld was, telt dan meteen. Een ronde die nooit
 afgerond wordt, telt nooit. De avondmelding (`evening_digest`) leest nog de oude `machine_stock`.
+
+## Donker thema (21-10-2026, overal)
+Xin: "een dark version theme bij alle versies". **Zonder keuze volgt alles de instelling van de gsm** (ook als die 's avonds
+wisselt); een knop kiest licht of donker en onthoudt dat in die browser. Een script in `layout.tsx` zet de klasse `dark`
+op `<html>` vóór er getekend wordt (geen witte flits), uit `localStorage` en anders `prefers-color-scheme`, en past
+`meta[name=theme-color]` aan.
+- **MATO Info:** `ThemeToggle` (`src/components/shell/theme-toggle.tsx`, sleutel `mato:theme`): maan/zon in de bovenbalk,
+  een rij in de zijbalk, voor de uitbater én Alus; teksten `m.nav.darkTheme` / `lightTheme`. De donkere waarden staan onder
+  `.dark` in `globals.css`, binnen `@media not print` (papier blijft licht); `.light` houdt een stuk licht in het donker (de
+  afdrukbare vullijst). Vaste kleuren werden tokens: `text-gold-ink` (was `#8a6117`), `hover:bg-hover` (`#e6e6e9`),
+  `--photo-from/--photo-to` (grond achter een automaat zonder foto), `text-brand-ink` (woorden van het logo),
+  `text-level-*-ink` (vulniveau als tekst; de `-strong` blijven voor de pillen met witte tekst), `--shimmer`. **Nieuwe
+  kleur? Altijd een token, nooit een hex in een component.** De offline-pagina volgt de gsm met een eigen media query.
+- **Klantsites:** dezelfde aanpak, knop "Donker"/"Licht" naast Afmelden (`components/theme-toggle.tsx`, sleutel `theme`),
+  `.dark` met de eigen tinten van elke site, `--soft` (de automaat, de productbalk) en `--hero` (de omzetkaart, die op `--ink`
+  stond en in het donker anders licht werd). Het logo blijft op zijn witte kaart.
 
 ## Camera bij de automaat (UniFi Protect, 20-10-2026)
 Xin: "een knop, toon mijn automaat nu, en dan zie je een snapshot". Geen video: die heeft hij in de UniFi-app.
