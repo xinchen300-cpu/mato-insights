@@ -10,7 +10,7 @@ import { DISPLAY_TIME_ZONE } from "@/i18n/format";
 import { reportDay } from "@/lib/stats";
 import { productionPlan, RATE_DAYS, type ProductionLine } from "@/lib/production";
 import { camerasEnabled } from "@/lib/unifi";
-import type { CameraRef } from "@/lib/camera-link";
+import type { LinkedCamera } from "@/lib/camera-link";
 import type {
   Producer,
   RunSummaryRow,
@@ -1913,46 +1913,47 @@ export async function requireMachineAccess(orgId: string, machineId: string): Pr
   if (!(await getMachine(orgId, machineId))) throw new Error("Not found");
 }
 
+type CameraRow = { machine_id: string; console_id: string; camera_id: string; name: string | null };
+const toLinked = (row: CameraRow): LinkedCamera => ({ consoleId: row.console_id, cameraId: row.camera_id, name: row.name });
+
 /**
- * The UniFi camera aimed at a machine, for "Toon automaat nu". The operator's
- * alone (the cameras are theirs, not a shop's or a filler's), and only where
- * UniFi is set up for this organisation; null when none is linked.
+ * The UniFi cameras aimed at a machine (machine_cameras; since 21-10-2026 a
+ * machine can have several), for "Toon automaat nu", Live and the recording of
+ * each payment. The operator's alone (the cameras are theirs, not a shop's or
+ * a filler's), and only where UniFi is set up for this organisation.
  */
-export async function getMachineCamera(orgId: string, machineId: string): Promise<{ consoleId: string; cameraId: string } | null> {
+export async function getCamerasOf(orgId: string, machineId: string): Promise<LinkedCamera[]> {
   await requireOperator();
   await requireMachineAccess(orgId, machineId);
-  if (!camerasEnabled(orgId)) return null;
+  if (!camerasEnabled(orgId)) return [];
   const { data, error } = await createAdminClient()
-    .from("machines")
-    .select("unifi_console_id, unifi_camera_id")
-    .eq("org_id", orgId)
-    .eq("id", machineId)
-    .maybeSingle();
+    .from("machine_cameras")
+    .select("machine_id, console_id, camera_id, name")
+    .eq("machine_id", machineId)
+    .order("position")
+    .order("created_at");
   if (error) throw new Error(error.message);
-  return data?.unifi_console_id && data.unifi_camera_id
-    ? { consoleId: data.unifi_console_id as string, cameraId: data.unifi_camera_id as string }
-    : null;
+  return ((data ?? []) as CameraRow[]).map(toLinked);
 }
 
 /**
- * The camera of every machine that has one, by machine id, for "watch on
- * camera" next to each payment. The operator's alone, like the camera itself;
- * empty for anyone else and where UniFi is not set up.
+ * The cameras of every machine that has one, by machine id, for "watch on
+ * camera" next to each payment. The operator's alone, like the cameras
+ * themselves; empty for anyone else and where UniFi is not set up.
  */
-export async function getMachineCameras(orgId: string): Promise<Record<string, CameraRef>> {
+export async function getMachineCameras(orgId: string): Promise<Record<string, LinkedCamera[]>> {
   if (!(await isOperator()) || !camerasEnabled(orgId)) return {};
   const { data, error } = await createAdminClient()
-    .from("machines")
-    .select("id, unifi_console_id, unifi_camera_id")
-    .eq("org_id", orgId)
-    .eq("excluded", false)
-    .not("unifi_camera_id", "is", null);
+    .from("machine_cameras")
+    .select("machine_id, console_id, camera_id, name, machines!inner(org_id, excluded)")
+    .eq("machines.org_id", orgId)
+    .eq("machines.excluded", false)
+    .order("position")
+    .order("created_at");
   if (error) throw new Error(error.message);
-  return Object.fromEntries(
-    (data ?? [])
-      .filter((row) => row.unifi_console_id && row.unifi_camera_id)
-      .map((row) => [row.id as string, { consoleId: row.unifi_console_id as string, cameraId: row.unifi_camera_id as string }]),
-  );
+  const byMachine: Record<string, LinkedCamera[]> = {};
+  for (const row of (data ?? []) as unknown as CameraRow[]) (byMachine[row.machine_id] ??= []).push(toLinked(row));
+  return byMachine;
 }
 
 /**

@@ -9,7 +9,7 @@ import { RollingNumber } from "@/components/motion/rolling-number";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
 import { RecordingLink } from "@/components/recording-link";
-import { recordingUrl, type CameraRef } from "@/lib/camera-link";
+import type { LinkedCamera } from "@/lib/camera-link";
 import type { LiveSale } from "@/lib/data";
 import { addDays, isoDay } from "@/lib/expiry";
 import { cn } from "@/lib/utils";
@@ -32,7 +32,7 @@ export function LiveSales({
 }: {
   initial: LiveSale[];
   /** The machines with a UniFi camera: each of their sales opens its recording (the operator's alone). */
-  cameras?: Record<string, CameraRef>;
+  cameras?: Record<string, LinkedCamera[]>;
 }) {
   const { m, f } = useI18n();
   const t = m.overview;
@@ -146,12 +146,12 @@ export function LiveSales({
                     {isNew ? <RollingNumber value={f.euro(sale.amount)} /> : f.euro(sale.amount)}
                   </span>
                 </Link>
-                {cameras[sale.machineId] && (
-                  <RecordingLink
-                    href={recordingUrl(cameras[sale.machineId], sale.occurredAt)}
-                    label={fmt(m.machines.cameraWatchAt, { time: f.time(sale.occurredAt) })}
-                  />
-                )}
+                <RecordingLink
+                  cameras={cameras[sale.machineId] ?? []}
+                  at={sale.occurredAt}
+                  label={fmt(m.machines.cameraWatchAt, { time: f.time(sale.occurredAt) })}
+                  unnamed={m.machines.cameraUnnamed}
+                />
               </div>
             </li>
           );

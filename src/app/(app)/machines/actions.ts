@@ -130,23 +130,43 @@ export async function listMachineCameras(): Promise<UnifiCamera[]> {
   return listCameras();
 }
 
-/** Links the camera aimed at this machine, or none. */
-export async function setMachineCamera(machineId: string, camera: { consoleId: string; cameraId: string } | null) {
+/**
+ * The cameras aimed at this machine, in this order, or none (21-10-2026: a
+ * machine can have several). Each must really be on this UniFi, never a
+ * made-up id; one already linked that UniFi no longer lists may stay.
+ */
+export async function setMachineCameras(machineId: string, picks: { consoleId: string; cameraId: string }[]) {
   const orgId = await requireOrgId();
   await requireOperator();
   await requireMachineAccess(orgId, machineId);
   if (!camerasEnabled(orgId)) throw new Error("Not found");
-  // Only a camera that is really on this UniFi can be linked, never a made-up id.
-  if (camera && !(await listCameras()).some((c) => c.consoleId === camera.consoleId && c.id === camera.cameraId)) {
-    throw new Error("Not found");
+  const admin = createAdminClient();
+  const [available, current] = await Promise.all([
+    picks.length ? listCameras() : Promise.resolve([]),
+    admin.from("machine_cameras").select("console_id, camera_id, name").eq("machine_id", machineId),
+  ]);
+  if (current.error) throw new Error(current.error.message);
+  const unique = [...new Map(picks.map((pick) => [pick.cameraId, pick])).values()].slice(0, 8);
+  const rows = unique.map((pick, position) => {
+    const found = available.find((c) => c.consoleId === pick.consoleId && c.id === pick.cameraId);
+    const kept = (current.data ?? []).find((c) => c.console_id === pick.consoleId && c.camera_id === pick.cameraId);
+    if (!found && !kept) throw new Error("Not found");
+    return { machine_id: machineId, console_id: pick.consoleId, camera_id: pick.cameraId, name: found?.name ?? (kept?.name as string | null) ?? null, position };
+  });
+  const { error: clearError } = await admin.from("machine_cameras").delete().eq("machine_id", machineId);
+  if (clearError) throw new Error(clearError.message);
+  if (rows.length) {
+    const { error } = await admin.from("machine_cameras").insert(rows);
+    if (error) throw new Error(error.message);
   }
-  const { error } = await createAdminClient()
+  // The first camera also in the columns of the first version, so they never point at a camera taken away.
+  const { error } = await admin
     .from("machines")
-    .update({ unifi_console_id: camera?.consoleId ?? null, unifi_camera_id: camera?.cameraId ?? null })
+    .update({ unifi_console_id: rows[0]?.console_id ?? null, unifi_camera_id: rows[0]?.camera_id ?? null })
     .eq("id", machineId)
     .eq("org_id", orgId);
   if (error) throw new Error(error.message);
-  revalidatePath(`/machines/${machineId}`);
+  revalidatePath("/", "layout");
 }
 
 /** The photo on the machine's tile: a new one, or none to go back to the placeholder. */

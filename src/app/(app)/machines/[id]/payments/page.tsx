@@ -7,8 +7,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { fmt, weekdayIndex } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { RecordingLink } from "@/components/recording-link";
-import { recordingUrl } from "@/lib/camera-link";
-import { getMachine, getMachineCamera, getPayments } from "@/lib/data";
+import { getCamerasOf, getMachine, getPayments } from "@/lib/data";
 import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
 import { camerasEnabled } from "@/lib/unifi";
 import type { PaymentEntry } from "@/lib/types";
@@ -44,8 +43,8 @@ export default async function PaymentsPage({
   const page = Math.max(1, Math.min(1000, Number.parseInt(p ?? "1", 10) || 1));
   const { rows, more } = await getPayments(orgId, id, { limit: PER_PAGE, offset: (page - 1) * PER_PAGE });
   const reasonLabels = m.status.reasons as Record<string, string>;
-  // Its UniFi camera, for the operator: each payment opens its recording (lib/camera-link.ts).
-  const camera = (await isOperator()) && camerasEnabled(orgId) ? await getMachineCamera(orgId, id) : null;
+  // Its UniFi cameras, for the operator: each payment opens its recording (lib/camera-link.ts).
+  const cameras = (await isOperator()) && camerasEnabled(orgId) ? await getCamerasOf(orgId, id) : [];
 
   // One section per day, in the order the payments came.
   const days: { day: string; label: string; rows: PaymentEntry[] }[] = [];
@@ -96,12 +95,12 @@ export default async function PaymentsPage({
                           }
                         />
                       </div>
-                      {camera && (
-                        <RecordingLink
-                          href={recordingUrl(camera, payment.occurred_at)}
-                          label={fmt(m.machines.cameraWatchAt, { time: f.time(payment.occurred_at) })}
-                        />
-                      )}
+                      <RecordingLink
+                        cameras={cameras}
+                        at={payment.occurred_at}
+                        label={fmt(m.machines.cameraWatchAt, { time: f.time(payment.occurred_at) })}
+                        unnamed={m.machines.cameraUnnamed}
+                      />
                     </li>
                   );
                 })}
