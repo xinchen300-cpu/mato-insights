@@ -10,6 +10,8 @@ import type { Messages } from "@/i18n/messages";
 import { shareIsReal } from "@/lib/stats";
 import { terminalStatus } from "@/lib/terminal-status";
 import { cn } from "@/lib/utils";
+import { RecordingLink } from "@/components/recording-link";
+import { recordingUrl, type CameraRef } from "@/lib/camera-link";
 import type { Machine, PaymentEntry, PaymentHealth } from "@/lib/types";
 
 // Above this share of payments breaking off, the machine or its connection
@@ -38,12 +40,15 @@ export function TerminalPanel({
   machine,
   health,
   payments,
+  camera = null,
   m,
   f,
 }: {
   machine: Machine;
   health: PaymentHealth | undefined;
   payments: PaymentEntry[];
+  /** Its UniFi camera, for the operator: each payment opens its recording. */
+  camera?: CameraRef | null;
   m: Messages;
   f: Formatters;
 }) {
@@ -157,26 +162,34 @@ export function TerminalPanel({
             {recent.map((payment, i) => {
               const paid = payment.disposition === "APPROVED";
               return (
-                <li key={`${payment.occurred_at}-${i}`}>
-                  <ListRow
-                    leading={
-                      <Avatar tone={paid ? "neutral" : "negative"}>
-                        {payment.product_name ? initial(payment.product_name) : <Link2 />}
-                      </Avatar>
-                    }
-                    title={
-                      payment.product_name ??
-                      (payment.selection_number ? fmt(m.expiry.selection, { number: payment.selection_number }) : m.common.unknown)
-                    }
-                    subtitle={`${f.dateTime(payment.occurred_at)} · ${
-                      paid ? m.status.paid : (reasonLabels[payment.disposition] ?? payment.disposition)
-                    }`}
-                    value={
-                      <span className={paid ? undefined : "font-medium text-muted-foreground line-through"}>
-                        {f.euro(payment.amount)}
-                      </span>
-                    }
-                  />
+                <li key={`${payment.occurred_at}-${i}`} className="flex items-center gap-1">
+                  <div className="min-w-0 flex-1">
+                    <ListRow
+                      leading={
+                        <Avatar tone={paid ? "neutral" : "negative"}>
+                          {payment.product_name ? initial(payment.product_name) : <Link2 />}
+                        </Avatar>
+                      }
+                      title={
+                        payment.product_name ??
+                        (payment.selection_number ? fmt(m.expiry.selection, { number: payment.selection_number }) : m.common.unknown)
+                      }
+                      subtitle={`${f.dateTime(payment.occurred_at)} · ${
+                        paid ? m.status.paid : (reasonLabels[payment.disposition] ?? payment.disposition)
+                      }`}
+                      value={
+                        <span className={paid ? undefined : "font-medium text-muted-foreground line-through"}>
+                          {f.euro(payment.amount)}
+                        </span>
+                      }
+                    />
+                  </div>
+                  {camera && (
+                    <RecordingLink
+                      href={recordingUrl(camera, payment.occurred_at)}
+                      label={fmt(m.machines.cameraWatchAt, { time: f.time(payment.occurred_at) })}
+                    />
+                  )}
                 </li>
               );
             })}
