@@ -28,13 +28,13 @@ export function camerasEnabled(orgId: string | null | undefined): boolean {
   return Boolean(orgId && apiKey() && ORGS.has(orgId));
 }
 
-async function call(path: string, accept = "application/json"): Promise<Response> {
+async function call(path: string, accept = "application/json", timeout = TIMEOUT_MS): Promise<Response> {
   const key = apiKey();
   if (!key) throw new Error("UniFi is not set up");
   return fetch(`${API}${path}`, {
     headers: { "X-API-Key": key, Accept: accept },
     cache: "no-store",
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeout),
   });
 }
 
@@ -87,10 +87,32 @@ export async function listCameras(): Promise<UnifiCamera[]> {
   return perConsole.flat().sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** A photo of this moment, sharp enough (1080p or more) to see the slots. */
+const isJpeg = (image: ArrayBuffer) => {
+  const head = new Uint8Array(image, 0, Math.min(3, image.byteLength));
+  return head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff;
+};
+
+/**
+ * A photo of this moment: sharp (1080p or more) to see the slots, or the
+ * camera's usual one when the sharp one fails or takes too long. A photo the
+ * connector labels as something else still counts if it is one. Every failure
+ * is logged with what UniFi answered, never with the key.
+ */
 export async function cameraSnapshot(consoleId: string, cameraId: string): Promise<{ image: ArrayBuffer; type: string }> {
-  const res = await call(protect(consoleId, `/cameras/${encodeURIComponent(cameraId)}/snapshot?highQuality=true`), "image/*");
-  const type = res.headers.get("content-type") ?? "";
-  if (!res.ok || !type.startsWith("image/")) throw new Error(`UniFi snapshot: ${res.status}`);
-  return { image: await res.arrayBuffer(), type };
+  for (const sharp of [true, false]) {
+    const path = protect(consoleId, `/cameras/${encodeURIComponent(cameraId)}/snapshot${sharp ? "?highQuality=true" : ""}`);
+    try {
+      const res = await call(path, "*/*", sharp ? 12_000 : TIMEOUT_MS);
+      const image = await res.arrayBuffer();
+      const type = res.headers.get("content-type") ?? "";
+      if (res.ok && (type.startsWith("image/") || isJpeg(image))) {
+        return { image, type: type.startsWith("image/") ? type : "image/jpeg" };
+      }
+      const said = type.includes("json") || type.startsWith("text/") ? new TextDecoder().decode(image.slice(0, 300)) : `${image.byteLength} bytes`;
+      console.error("UniFi snapshot refused", { sharp, status: res.status, type, said });
+    } catch (error) {
+      console.error("UniFi snapshot failed", { sharp, error: String(error) });
+    }
+  }
+  throw new Error("UniFi snapshot failed");
 }
