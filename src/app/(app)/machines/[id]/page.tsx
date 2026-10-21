@@ -5,6 +5,7 @@ import { KpiHero } from "@/components/kpi";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { OWNER_TONES, OwnerLegend, StockLegend, type FrontSlot } from "@/components/machine/front-view";
 import { SlotProducts } from "@/components/machine/slot-products";
+import { StockAdjust } from "@/components/machine/stock-adjust";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { DISPLAY_TIME_ZONE, fmt, plural, weekdayIndex } from "@/i18n/format";
@@ -267,39 +268,62 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
               </p>
             )}
 
-            <div className="mt-7 sm:mt-8">
-              <SlotProducts
-                rows={toFrontRows(slots, shared ? toneOf : undefined).map((row) => row.map(decorate))}
-                products={products}
-                editable={ownSlots}
-                onAssign={assignProduct.bind(null, id)}
-                onCreate={createProductForMachine.bind(null, id)}
-              />
-            </div>
-            <div className="mt-4 flex flex-col gap-2">
-              {shared && <OwnerLegend owners={owners} />}
-              <StockLegend
-                labels={{
-                  full: m.machines.legendFull,
-                  half: m.machines.legendHalf,
-                  low: m.machines.legendLow,
-                  empty: m.machines.legendEmpty,
-                  unknown: anyUncounted ? m.machines.legendUnknown : undefined,
-                }}
-              />
-            </div>
-            <div className="mt-6 flex flex-wrap gap-2">
-              <Link href={operator ? refillHref : `/machines/${id}/refill?mode=correction`} className={buttonVariants({ variant: "secondary" })}>
-                <Pencil />
-                {m.machines.correct}
-              </Link>
-              {editLayout && (
+            {(() => {
+              // The slots with their products, and the legend under them.
+              const picture = (
+                <>
+                  <div className="mt-7 sm:mt-8">
+                    <SlotProducts
+                      rows={toFrontRows(slots, shared ? toneOf : undefined).map((row) => row.map(decorate))}
+                      products={products}
+                      editable={ownSlots}
+                      onAssign={assignProduct.bind(null, id)}
+                      onCreate={createProductForMachine.bind(null, id)}
+                    />
+                  </div>
+                  <div className="mt-4 flex flex-col gap-2">
+                    {shared && <OwnerLegend owners={owners} />}
+                    <StockLegend
+                      labels={{
+                        full: m.machines.legendFull,
+                        half: m.machines.legendHalf,
+                        low: m.machines.legendLow,
+                        empty: m.machines.legendEmpty,
+                        unknown: anyUncounted ? m.machines.legendUnknown : undefined,
+                      }}
+                    />
+                  </div>
+                </>
+              );
+              const layoutLink = editLayout && (
                 <Link href={`/machines/${id}/layout`} className={buttonVariants({ variant: "secondary" })}>
                   <LayoutGrid />
                   {m.machines.editLayout}
                 </Link>
-              )}
-            </div>
+              );
+              // The owner adjusts the counts right here, with the big minus and plus (Xin, 21-10-2026:
+              // "meteen aanpassen zonder dat je wordt verwezen naar bijvullen"); a shop keeps its own form.
+              return operator ? (
+                <div className="mt-7 sm:mt-8">
+                  <StockAdjust
+                    machineId={id}
+                    slots={slots.filter((slot) => slot.product_id)}
+                    embedded={{ idle: picture, label: m.machines.correct, actions: layoutLink }}
+                  />
+                </div>
+              ) : (
+                <>
+                  {picture}
+                  <div className="mt-6 flex flex-wrap gap-2">
+                    <Link href={`/machines/${id}/refill?mode=correction`} className={buttonVariants({ variant: "secondary" })}>
+                      <Pencil />
+                      {m.machines.correct}
+                    </Link>
+                    {layoutLink}
+                  </div>
+                </>
+              );
+            })()}
           </section>
         )}
 

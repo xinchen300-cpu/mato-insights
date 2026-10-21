@@ -329,7 +329,7 @@ export const nl: Messages = {
     fill: "Vol",
     empty: "Leeg",
     saveRefill: "Bijvulling opslaan",
-    saveCorrection: "Correctie opslaan",
+    saveCorrection: "Voorraad opslaan",
     refillSaved: "Bijvulling opgeslagen",
     correctionSaved: "Voorraad aangepast",
     nothingChanged: "Er is niets veranderd.",

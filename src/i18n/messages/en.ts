@@ -329,7 +329,7 @@ export const en = {
     fill: "Full",
     empty: "Empty",
     saveRefill: "Save refill",
-    saveCorrection: "Save correction",
+    saveCorrection: "Save stock",
     refillSaved: "Refill saved",
     correctionSaved: "Stock adjusted",
     nothingChanged: "Nothing changed.",
