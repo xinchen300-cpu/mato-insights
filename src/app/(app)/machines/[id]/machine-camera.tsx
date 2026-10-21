@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, Radio, RefreshCw, Square } from "lucide-react";
+import { Camera, Radio, RefreshCw, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { useI18n } from "@/i18n/client";
@@ -31,6 +31,15 @@ export function MachineCamera({ machineId, machineName }: { machineId: string; m
     if (timer.current) window.clearTimeout(timer.current);
     timer.current = null;
     setLive(false);
+  }
+
+  /** Done looking (Xin, 21-10-2026): no more photos, and the camera block back to its button. */
+  function close() {
+    stopLive();
+    if (url.current) URL.revokeObjectURL(url.current);
+    url.current = null;
+    setShot(null);
+    setState("idle");
   }
 
   // Leaving the page or the app stops the photos; the blob goes with the page.
@@ -100,7 +109,7 @@ export function MachineCamera({ machineId, machineName }: { machineId: string; m
         </div>
         <div className="flex w-full gap-2 sm:w-auto">
           {live ? (
-            <Button onClick={stopLive} className="flex-1 sm:flex-none">
+            <Button onClick={close} className="flex-1 sm:flex-none">
               <Square />
               {m.machines.cameraLiveStop}
             </Button>
@@ -114,6 +123,12 @@ export function MachineCamera({ machineId, machineName }: { machineId: string; m
                 <Radio />
                 {m.machines.cameraLive}
               </Button>
+              {(shot || state === "error") && (
+                <Button variant="ghost" onClick={close} className="flex-1 sm:flex-none">
+                  <X />
+                  {m.common.close}
+                </Button>
+              )}
             </>
           )}
         </div>
