@@ -8,6 +8,8 @@ import { Avatar, initial } from "@/components/list-row";
 import { RollingNumber } from "@/components/motion/rolling-number";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
+import { RecordingLink } from "@/components/recording-link";
+import { recordingUrl, type CameraRef } from "@/lib/camera-link";
 import type { LiveSale } from "@/lib/data";
 import { addDays, isoDay } from "@/lib/expiry";
 import { cn } from "@/lib/utils";
@@ -24,7 +26,14 @@ const MORE = 40;
  * "Meer zien" opens the longer list, under a heading per day. A tab nobody
  * looks at asks for nothing.
  */
-export function LiveSales({ initial: first }: { initial: LiveSale[] }) {
+export function LiveSales({
+  initial: first,
+  cameras = {},
+}: {
+  initial: LiveSale[];
+  /** The machines with a UniFi camera: each of their sales opens its recording (the operator's alone). */
+  cameras?: Record<string, CameraRef>;
+}) {
   const { m, f } = useI18n();
   const t = m.overview;
   const router = useRouter();
@@ -121,21 +130,29 @@ export function LiveSales({ initial: first }: { initial: LiveSale[] }) {
               )}
             >
               {heading && <p className="px-3 pb-1 pt-3 text-[13px] font-semibold text-muted-foreground">{heading}</p>}
-              <Link
-                href={`/machines/${sale.machineId}`}
-                className="hover-surface flex min-h-14 items-center gap-3 rounded-xl px-3 py-2.5"
-              >
-                <Avatar tone={isNew ? "positive" : "neutral"}>{initial(name)}</Avatar>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold tracking-[-0.01em]">{name}</span>
-                  <span className="block truncate text-[13px] text-muted-foreground">
-                    {sale.machineName} · {open ? f.time(sale.occurredAt) : when(sale.occurredAt)}
+              <div className="flex items-center gap-1">
+                <Link
+                  href={`/machines/${sale.machineId}`}
+                  className="hover-surface flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-2.5"
+                >
+                  <Avatar tone={isNew ? "positive" : "neutral"}>{initial(name)}</Avatar>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-semibold tracking-[-0.01em]">{name}</span>
+                    <span className="block truncate text-[13px] text-muted-foreground">
+                      {open ? f.time(sale.occurredAt) : when(sale.occurredAt)} · {sale.machineName}
+                    </span>
                   </span>
-                </span>
-                <span className="tabular shrink-0 text-[15px] font-semibold">
-                  {isNew ? <RollingNumber value={f.euro(sale.amount)} /> : f.euro(sale.amount)}
-                </span>
-              </Link>
+                  <span className="tabular shrink-0 text-[15px] font-semibold">
+                    {isNew ? <RollingNumber value={f.euro(sale.amount)} /> : f.euro(sale.amount)}
+                  </span>
+                </Link>
+                {cameras[sale.machineId] && (
+                  <RecordingLink
+                    href={recordingUrl(cameras[sale.machineId], sale.occurredAt)}
+                    label={fmt(m.machines.cameraWatchAt, { time: f.time(sale.occurredAt) })}
+                  />
+                )}
+              </div>
             </li>
           );
         })}

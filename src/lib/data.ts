@@ -10,6 +10,7 @@ import { DISPLAY_TIME_ZONE } from "@/i18n/format";
 import { reportDay } from "@/lib/stats";
 import { productionPlan, RATE_DAYS, type ProductionLine } from "@/lib/production";
 import { camerasEnabled } from "@/lib/unifi";
+import type { CameraRef } from "@/lib/camera-link";
 import type {
   Producer,
   RunSummaryRow,
@@ -1934,6 +1935,27 @@ export async function getMachineCamera(orgId: string, machineId: string): Promis
   return data?.unifi_console_id && data.unifi_camera_id
     ? { consoleId: data.unifi_console_id as string, cameraId: data.unifi_camera_id as string }
     : null;
+}
+
+/**
+ * The camera of every machine that has one, by machine id, for "watch on
+ * camera" next to each payment. The operator's alone, like the camera itself;
+ * empty for anyone else and where UniFi is not set up.
+ */
+export async function getMachineCameras(orgId: string): Promise<Record<string, CameraRef>> {
+  if (!(await isOperator()) || !camerasEnabled(orgId)) return {};
+  const { data, error } = await createAdminClient()
+    .from("machines")
+    .select("id, unifi_console_id, unifi_camera_id")
+    .eq("org_id", orgId)
+    .eq("excluded", false)
+    .not("unifi_camera_id", "is", null);
+  if (error) throw new Error(error.message);
+  return Object.fromEntries(
+    (data ?? [])
+      .filter((row) => row.unifi_console_id && row.unifi_camera_id)
+      .map((row) => [row.id as string, { consoleId: row.unifi_console_id as string, cameraId: row.unifi_camera_id as string }]),
+  );
 }
 
 /**

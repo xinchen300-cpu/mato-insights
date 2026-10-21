@@ -261,6 +261,7 @@ export const nl: Messages = {
     cameraLiveStop: "Stop",
     cameraLiveHint: "Elke 3 seconden een nieuwe foto. Stopt vanzelf na een minuut.",
     cameraLiveAt: "Live · {time}",
+    cameraWatchAt: "Opname van {time} bekijken in UniFi Protect",
     businessSecond: "Tweede zaak",
     sharedSlotsHint: "Kies in de indeling welke rijen of vakken van de tweede zaak zijn. De rest telt voor de eerste.",
     secondBusinessHint: "Alleen als twee zaken de vakken van deze automaat delen.",

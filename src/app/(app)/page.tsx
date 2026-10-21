@@ -20,6 +20,7 @@ import {
   getLastRefills,
   getLastSales,
   getLiveSales,
+  getMachineCameras,
   getLastSyncedAt,
   getOpenRounds,
   getMachines,
@@ -111,6 +112,8 @@ export default async function OverviewPage() {
     getLastRefills(orgId),
     hasProducerDishes(orgId),
     operator ? getRoundSettings(orgId) : Promise.resolve(null),
+    // The cameras by machine, so each sale in Net verkocht opens its recording (empty for anyone but the operator).
+    getMachineCameras(orgId),
   ]);
   // A redirect below leaves it unawaited: a failure in it must not go unhandled.
   loads.catch(() => undefined);
@@ -128,7 +131,7 @@ export default async function OverviewPage() {
     orgName = (org?.name as string | null) ?? null;
   }
 
-  const [openRounds, today, week, month, weeks, machines, stock, unassigned, expiring, lastSales, syncedAt, setup, recentSales, refills, kitchen, roundSettings] =
+  const [openRounds, today, week, month, weeks, machines, stock, unassigned, expiring, lastSales, syncedAt, setup, recentSales, refills, kitchen, roundSettings, cameras] =
     await loads;
   // Only the rounds actually out (started), and only for the operator.
   const liveRounds = openRounds.filter((round) => round.readyAt);
@@ -357,7 +360,7 @@ export default async function OverviewPage() {
         <MachineRevenue machines={revenue.machines} totals={revenue.totals} />
 
         {/* What just sold, sliding in as it happens; "Meer zien" opens the day's list. */}
-        <LiveSales initial={recentSales} />
+        <LiveSales initial={recentSales} cameras={cameras} />
 
         <InsightsList insights={goodToKnow} m={m} f={f} />
       </div>

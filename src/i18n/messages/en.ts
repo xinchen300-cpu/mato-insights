@@ -261,6 +261,7 @@ export const en = {
     cameraLiveStop: "Stop",
     cameraLiveHint: "A new photo every 3 seconds. Stops by itself after a minute.",
     cameraLiveAt: "Live · {time}",
+    cameraWatchAt: "Watch the recording at {time} in UniFi Protect",
     businessSecond: "Second business",
     sharedSlotsHint: "In the layout, choose which rows or slots belong to the second business. Everything else counts for the first.",
     secondBusinessHint: "Only when two businesses share this machine's slots.",

@@ -303,7 +303,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
           </section>
         )}
 
-        <TerminalPanel machine={machine} health={health.get(id)} payments={payments} m={m} f={f} />
+        <TerminalPanel machine={machine} health={health.get(id)} payments={payments} camera={camera} m={m} f={f} />
 
         {tracksStock && recentHistory.length > 0 && (
           <Section title={m.machines.history}>
