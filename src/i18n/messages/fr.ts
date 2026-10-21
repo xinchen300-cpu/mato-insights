@@ -340,6 +340,8 @@ export const fr: Messages = {
     saveCorrection: "Enregistrer le stock",
     refillSaved: "Remplissage enregistré",
     correctionSaved: "Stock modifié",
+    savedSlots: "Enregistré · {count} cases mises à jour",
+    savedSlotsOne: "Enregistré · 1 case mise à jour",
     nothingChanged: "Rien n'a changé.",
     noProduct: "Aucun produit",
     totalAdded: "{count} articles ajoutés",

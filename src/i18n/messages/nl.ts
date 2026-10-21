@@ -340,6 +340,8 @@ export const nl: Messages = {
     saveCorrection: "Voorraad opslaan",
     refillSaved: "Bijvulling opgeslagen",
     correctionSaved: "Voorraad aangepast",
+    savedSlots: "Opgeslagen · {count} vakken bijgewerkt",
+    savedSlotsOne: "Opgeslagen · 1 vak bijgewerkt",
     nothingChanged: "Er is niets veranderd.",
     noProduct: "Geen product",
     totalAdded: "{count} stuks bijgevuld",

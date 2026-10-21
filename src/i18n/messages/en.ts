@@ -340,6 +340,8 @@ export const en = {
     saveCorrection: "Save stock",
     refillSaved: "Refill saved",
     correctionSaved: "Stock adjusted",
+    savedSlots: "Saved · {count} slots updated",
+    savedSlotsOne: "Saved · 1 slot updated",
     nothingChanged: "Nothing changed.",
     noProduct: "No product",
     totalAdded: "{count} items added",
