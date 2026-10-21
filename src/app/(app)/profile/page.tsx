@@ -94,7 +94,9 @@ export default async function ProfilePage() {
                   title={m.profile.thisMonth}
                   value={f.euro(month.totals.revenue)}
                   valueSub={
-                    <span className="tabular text-muted-foreground">{plural(month.totals.units, m.common.salesOne, m.common.salesOther)}</span>
+                    <span className="tabular text-muted-foreground">
+                      {month.totals.units === 1 ? m.common.salesOne : fmt(m.common.salesOther, { count: f.number(month.totals.units) })}
+                    </span>
                   }
                 />
               </li>
