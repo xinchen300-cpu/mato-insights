@@ -258,6 +258,12 @@ weer 10. Laatste verkopen (nu een client-component) toont 10, per Toon meer 20 e
 (`lib/sale-search.ts`, zonder imports): een dag ("12/10", "12 okt", "gisteren"), een maand ("okt"), een prijs ("3,75", ook
 "4" = € 4,00), "vak 35" of anders tekst in product/automaat, binnen de gekozen periode. Een dag of maand buiten die periode
 (maar niet vóór de eerste verkoop) krijgt een link naar precies die dagen (`?periode=custom&van=…&tot=…`).
+**Rapport downloaden met een eigen periode (21-10-2026, Xin: "meer filters, filteren op datum, per maand of zo"):**
+`components/report-download.tsx` + `lib/report-range.ts` (zonder imports). Standaard de periode van bovenaan; verder elke
+maand sinds de eerste verkoop (met het aantal verkopen), elk jaar, alles, of twee eigen datums; eronder de dagen, het aantal
+verkopen en de omzet (`totalsIn` op `dayTotals(all)`). De links gaan naar dezelfde `/export` met `periode=custom&van&tot`;
+een hele maand of heel jaar heet in Excel/PDF "september 2026"/"2026" (`wholePeriod` op de gevraagde datums, in
+`lib/export.ts`). Het blok staat er nu ook als de periode bovenaan leeg is. Getest: venster en Excel tellen hetzelfde.
 Bewust níet: vergelijking met vorige periode (Xin: geen trends op klantsites, en bij een paar honderd verkopen bijna
 altijd ruis), "Nu leeg" (Xin: overbodig), derving, houdbaarheid. Excel en PDF blijven per vak en prijs. Een vergeten
 wachtwoord: de loginpagina mailt naar info@matoautomaat.be. De gedeelde onderdelen (`components/`, `lib/period.ts`,
