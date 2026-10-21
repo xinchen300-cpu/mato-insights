@@ -31,7 +31,7 @@ const fieldSelectClass =
 // A filter pill: soft grey at rest, near-black once it narrows the list.
 const pillClass =
   "inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-full text-base font-medium outline-none transition-[background-color,color,box-shadow] duration-150 md:h-9 md:text-[13.5px]";
-const pillIdle = "bg-surface text-foreground hover:bg-[#e6e6e9]";
+const pillIdle = "bg-surface text-foreground hover:bg-hover";
 const pillActive = "bg-foreground text-background";
 
 export function ProductGrid({

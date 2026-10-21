@@ -20,7 +20,7 @@ export function MachinePhoto({
   return (
     <span
       className={cn(
-        "relative block aspect-[4/3] w-full overflow-hidden bg-[linear-gradient(160deg,#f6f2ea,#ece6da)]",
+        "relative block aspect-[4/3] w-full overflow-hidden bg-[linear-gradient(160deg,var(--photo-from),var(--photo-to))]",
         className,
       )}
     >

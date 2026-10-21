@@ -46,6 +46,8 @@ export const nl: Messages = {
     unassigned: "Niet gekoppeld",
     businesses: "Zaken",
     language: "Taal",
+    darkTheme: "Donker thema",
+    lightTheme: "Licht thema",
     hideNumbers: "Cijfers verbergen",
     showNumbers: "Cijfers tonen",
   },

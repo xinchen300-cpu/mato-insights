@@ -83,7 +83,7 @@ export function StatsFilters({
   const selectClass = (active: boolean) =>
     cn(
       "field-sizing-content h-10 max-w-full min-w-0 cursor-pointer appearance-none truncate rounded-full pl-4 pr-9 text-base font-medium outline-none transition-[background-color,color,box-shadow] duration-150 focus-visible:ring-3 focus-visible:ring-ring/40 md:h-9 md:text-[13.5px] [&>option]:bg-card [&>option]:text-foreground",
-      active ? "bg-foreground text-background" : "bg-surface text-foreground hover:bg-[#e6e6e9]",
+      active ? "bg-foreground text-background" : "bg-surface text-foreground hover:bg-hover",
     );
   const chevron = (active: boolean) => (
     <ChevronDown

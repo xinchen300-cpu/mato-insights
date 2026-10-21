@@ -98,7 +98,7 @@ export function ProductionListView({
       {toCount.length > 0 && (
         <section className="flex flex-col gap-2.5">
           <div className="flex flex-col gap-1 px-1">
-            <h2 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-[#8a6117]">{t.countFirst}</h2>
+            <h2 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-gold-ink">{t.countFirst}</h2>
             <p className="text-[13.5px] leading-snug text-muted-foreground">{t.countFirstHint}</p>
           </div>
           <ul className="flex flex-col gap-2">
@@ -248,7 +248,7 @@ function DishRow({
             <span
               className={cn(
                 "inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[12.5px] font-semibold",
-                line.trend === "up" ? "bg-positive/12 text-positive" : "bg-warning/15 text-[#8a6117]",
+                line.trend === "up" ? "bg-positive/12 text-positive" : "bg-warning/15 text-gold-ink",
               )}
             >
               {line.trend === "up" ? <TrendingUp className="size-3.5" aria-hidden="true" /> : <TrendingDown className="size-3.5" aria-hidden="true" />}

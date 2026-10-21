@@ -46,6 +46,8 @@ export const en = {
     unassigned: "Unassigned",
     businesses: "Businesses",
     language: "Language",
+    darkTheme: "Dark theme",
+    lightTheme: "Light theme",
     hideNumbers: "Hide figures",
     showNumbers: "Show figures",
   },

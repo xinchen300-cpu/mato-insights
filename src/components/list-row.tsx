@@ -69,7 +69,7 @@ export function Avatar({
 }) {
   const tones = {
     neutral: "bg-surface text-foreground",
-    gold: "bg-primary/12 text-[#8a6117]",
+    gold: "bg-primary/12 text-gold-ink",
     positive: "bg-positive/12 text-positive",
     negative: "bg-negative/10 text-negative",
     warning: "bg-warning/12 text-warning",

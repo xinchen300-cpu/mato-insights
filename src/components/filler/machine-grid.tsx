@@ -96,7 +96,7 @@ export function MachineGrid({ machines, m, from }: { machines: GridMachine[]; m:
                   machine.status === "offline"
                     ? "font-semibold text-negative"
                     : machine.low > 0 && !machine.onRound
-                      ? "font-medium text-level-low-strong"
+                      ? "font-medium text-level-low-ink"
                       : "text-muted-foreground",
                 )}
               >

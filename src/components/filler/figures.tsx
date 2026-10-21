@@ -114,7 +114,7 @@ export function FillerFigures({ stats, names, look }: { stats: FillerStats; name
                   ...(round.skipped ? [fmt(t.skippedTag, { n: round.skipped })] : []),
                 ].join(" · ")}
                 value={round.minutes !== null ? time(round.minutes) : "—"}
-                valueSub={round.record ? <span className="font-semibold text-[#8a6117]">{t.recordTag}</span> : undefined}
+                valueSub={round.record ? <span className="font-semibold text-gold-ink">{t.recordTag}</span> : undefined}
               />
             </li>
           ))}
@@ -241,7 +241,7 @@ export function FiguresCard({ stats, look }: { stats: FillerStats; look: AvatarL
       </span>
       {stats.records > 0 && (
         <span
-          className="flex shrink-0 items-center gap-1 rounded-full bg-primary/12 px-2.5 py-1 text-[13px] font-bold text-[#8a6117]"
+          className="flex shrink-0 items-center gap-1 rounded-full bg-primary/12 px-2.5 py-1 text-[13px] font-bold text-gold-ink"
           title={t.recordsTitle}
         >
           <Medal className="size-3.5" aria-hidden="true" />

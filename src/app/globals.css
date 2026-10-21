@@ -2,7 +2,8 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-/* Light-only app: keep the components' dark: styles from following the OS setting. */
+/* Dark follows the class on <html> (set before paint by the layout's script: the phone's setting, or the
+   person's own choice), never the OS setting on its own, so the switch can overrule it. */
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -40,6 +41,12 @@
   --color-level-half-strong: var(--level-half-strong);
   --color-level-low-strong: var(--level-low-strong);
   --color-level-empty: var(--level-empty);
+  --color-level-full-ink: var(--level-full-ink);
+  --color-level-half-ink: var(--level-half-ink);
+  --color-level-low-ink: var(--level-low-ink);
+  --color-gold-ink: var(--gold-ink);
+  --color-hover: var(--hover);
+  --color-brand-ink: var(--brand-ink);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -56,7 +63,8 @@
   --radius-4xl: 28px;
 }
 
-:root {
+:root,
+.light {
   --radius: 12px;
 
   /* Calm and neutral, like a good banking app: a near-white ground, white
@@ -97,6 +105,10 @@
   --level-full-strong: #137a49;
   --level-half-strong: #9a5b0e;
   --level-low-strong: #b83a2f;
+  /* The levels as text on the page: here the strong ones, in the dark the bright ones. */
+  --level-full-ink: #137a49;
+  --level-half-ink: #9a5b0e;
+  --level-low-ink: #b83a2f;
 
   --chart-1: #b5862a;
   --chart-2: #8a6117;
@@ -107,6 +119,79 @@
   /* One soft lift for surfaces that float above the page, nothing heavier. */
   --shadow-card: 0 1px 2px rgb(14 14 16 / 0.04), 0 1px 1px rgb(14 14 16 / 0.02);
   --shadow-pop: 0 12px 32px rgb(14 14 16 / 0.12), 0 2px 6px rgb(14 14 16 / 0.06);
+
+  /* Gold as text (MATO's brown-gold), a pressed chip, the warm ground behind a machine without a photo, the logo's words. */
+  --gold-ink: #8a6117;
+  --hover: #e6e6e9;
+  --photo-from: #f6f2ea;
+  --photo-to: #ece6da;
+  --brand-ink: #2a2520;
+  --shimmer: #f8f8fa;
+  color-scheme: light;
+}
+
+/* Dark (Xin, 21-10-2026: "een dark version theme bij alle versies"): a near-black ground, cards a step lighter,
+   the same gold. Text keeps at least 4.5:1 on the cards; the fill pills keep white text at 4.5:1. Never on paper:
+   a printed page stays light. */
+@media not print {
+  .dark {
+    --background: #0f0f11;
+    --surface: #1f1f23;
+    --foreground: #ededf0;
+    --card: #18181b;
+    --card-foreground: #ededf0;
+    --popover: #1c1c20;
+    --popover-foreground: #ededf0;
+    --primary: #c99a3c;
+    --primary-foreground: #0e0e10;
+    --secondary: #222226;
+    --secondary-foreground: #ededf0;
+    --muted: #222226;
+    --muted-foreground: #a1a1aa;
+    --accent: #26262b;
+    --accent-foreground: #ededf0;
+    --destructive: #f2756b;
+    --border: rgb(255 255 255 / 0.08);
+    --input: rgb(255 255 255 / 0.17);
+    --ring: #c99a3c;
+    --heading: #f4f4f6;
+
+    --positive: #3ecf85;
+    --negative: #f2756b;
+    --warning: #f0a54a;
+
+    --level-full: #2fbf73;
+    --level-half: #e6a640;
+    --level-low: #e8604d;
+    --level-empty: #2c2c31;
+    --level-full-strong: #17824f;
+    --level-half-strong: #a8650f;
+    --level-low-strong: #c4413a;
+    --level-full-ink: #3ecf85;
+    --level-half-ink: #f0a54a;
+    --level-low-ink: #f2756b;
+
+    --chart-1: #c99a3c;
+    --chart-2: #e0b45c;
+    --chart-3: #2fbf73;
+    --chart-4: #e8604d;
+    --chart-5: #3a3a40;
+
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.5);
+    --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.55), 0 2px 6px rgb(0 0 0 / 0.4);
+
+    --gold-ink: #e0b45c;
+    --hover: #2a2a2f;
+    --photo-from: #26231f;
+    --photo-to: #1d1b18;
+    --brand-ink: #ece8e3;
+    --shimmer: #2a2a2f;
+    color-scheme: dark;
+  }
+  /* A part that must stay light inside the dark (a page made to print). */
+  .dark .light {
+    color-scheme: light;
+  }
 }
 
 @layer base {
@@ -208,7 +293,7 @@
   /* Loading placeholders: a calm shimmer in the shape of what is coming. */
   .skeleton {
     border-radius: var(--radius-md);
-    background: linear-gradient(90deg, var(--surface) 25%, #f8f8fa 50%, var(--surface) 75%);
+    background: linear-gradient(90deg, var(--surface) 25%, var(--shimmer) 50%, var(--surface) 75%);
     background-size: 200% 100%;
     animation: skeleton-shimmer 1.4s ease-in-out infinite;
   }

@@ -515,7 +515,7 @@ export function Wizard({
                           {fmt(m.billing.tooSmall, { count: chosen })}
                         </span>
                       ) : best ? (
-                        <span id={why} className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#8a6117]">
+                        <span id={why} className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-gold-ink">
                           <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
                           {plural(chosen, m.billing.fitsOne, m.billing.fits)}
                         </span>
