@@ -30,9 +30,10 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   `productie` het niet meer gebruikt.
 - Rol **nooit** uit vanuit de gedeelde werkmap. Op 16-10 belandde zo ongecommit werk live, en op
   18-10 stond er live code die nergens in git zat (teruggezet als `productie`, commit dcd1434).
-- **Live staat sinds 21-10-2026 `cloud/productie-release` @ 234b885** (de eigenaarsfixes, het oogje bij het
-  wachtwoord, de camera: Live, elke betaling op camera (alleen op een computer) en volledig scherm, en daarna het
-  overzicht zonder meldingen, de camera onder Net verkocht en de statistieken per maand en automaat, zie hieronder), uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
+- **Live staat sinds 21-10-2026 `cloud/productie-release` @ 099ae54** (de eigenaarsfixes, het oogje bij het
+  wachtwoord, de camera: Live, elke betaling op camera (alleen op een computer) en volledig scherm, het
+  overzicht zonder meldingen, de camera onder Net verkocht, de statistieken per maand en automaat, en een ronde die
+  pas telt als hij af is, zie hieronder), uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
 
@@ -181,6 +182,23 @@ anders een zin; vervangt het oude "Minst verkocht" over alle automaten.
   `APPROVED` en `amount > 0`, met de gelezen kolommen in `include`) brachten `stats_report` van ±0,9–3,7 s naar
   40–250 ms en de poll van Net verkocht van 170 naar 7 ms. Een nieuwe query op `transactions` die traag is:
   kijk eerst of hij zo'n index kan gebruiken.
+
+**Een ronde telt pas als hij af is (21-10-2026, Xin: "only gets refilled and to the right percentage when he
+completes the complete route"; voor Alus en voor de uitbater).** Een stop schrijft zijn `stock_events` nog meteen
+(`refill_finish_stop`, met `refill_sheet_id`): de ronde zelf heeft ze nodig (wat een stop veranderde, Terugzetten,
+de delta's van de volgende stop). Maar alles buiten de ronde leest **`*_settled`**-functies (toevoegend, naast de
+oude) die events overslaan van een ronde met `completed_at is null` (`stock_event_pending`): `machine_stock_settled`
+(`getMachineStock` standaard), `refill_plan_settled` (vullijst en een nieuwe ronde), `slot_freshness_settled`
+(houdbaarheid op de automaatpagina), `last_refills_settled`, `refill_visits_settled`, `producer_fridge_settled`
+(keuken: automaat en koelkast blijven samen kloppen). `getRefillHistory` laat ze ook weg. Is de ronde af, dan telt
+elke automaat vanaf het moment dat hij gevuld werd, min wat er sindsdien verkocht is. **Alleen de ronde** leest
+`getMachineStock(…, { withOpenRounds: true })` (`getRefillRound`), net als de vervaldatum-actie (die volgt
+`expiry_alerts`, nog de oude). Voorraad aanpassen telt meteen: `record_stock_settled` (delta tegen wat de persoon
+zag; ook het oude formulier van een zaak). Een gevulde automaat op een open ronde blijft door die ronde bezet
+(`heldByOpenRound`: alles behalve overgeslagen) en toont "Gevuld in de ronde · telt mee als de ronde af is" /
+"Wacht op einde ronde" (`filledOnOpenRound`; overzicht, Automaten, tegels, automaatpagina's). Een ronde verwijderen
+zet `refill_sheet_id` op null (FK `on delete set null`): wat al gevuld was, telt dan meteen. Een ronde die nooit
+afgerond wordt, telt nooit. De avondmelding (`evening_digest`) leest nog de oude `machine_stock`.
 
 ## Camera bij de automaat (UniFi Protect, 20-10-2026)
 Xin: "een knop, toon mijn automaat nu, en dan zie je een snapshot". Geen video: die heeft hij in de UniFi-app.
