@@ -4,6 +4,11 @@
 
 **Naam:** naar de gebruiker toe heet dit **MATO Info** (Xin, 19-10-2026: "change name vendly to mato info"; logo `[mato info]`, merk `[m]`). Eerder: "MATO Insights" van 30-09 tot 11-10-2026 en even op 14-10 (commit 5fbd0a3), daarna "Vendly" (logo `[vendly]`, merk `[v]`) van 16-10 tot 19-10. De naam staat in `src/app/layout.tsx`, `src/app/manifest.ts`, het logo `src/components/brand/vendly-mark.tsx` (bestand en componentnamen bleven), de app-iconen (`src/app/icon.svg`, `src/app/pwa-icon`), de offline-pagina en als `m.brand.name` / op ±30 plaatsen in elk `messages/*.ts`. Schrijf "MATO Insights" nergens meer in tekst die een gebruiker leest. **Wat alleen naar de uitbater gaat, blijft "Vendly"** (Xin, 19-10-2026: "no just change mato info for alus"): de mails van `vendly-billing`, de avondmelding van `vendly-notify`, de pushmeldingen over een ronde in `src/app/vullen/[id]/actions.ts`, de standaardtitel in `public/sw.js` en de Mollie-omschrijvingen in `src/lib/subscription.ts`. `public/brand/vendly-*.svg` (drukwerk) zijn nog de oude bestanden. De repo heet `mato-insights`; het Vercel-project heet `vendly`.
 
+**Eigen merknaam per organisatie** (21-10-2026, Xin: "change mato info on this account to MATO"): `organizations.brand_name`
+(toevoegend; alleen het demo-account: "MATO"). `getOrgBrand` in `src/lib/org.ts`, en `branded()` in `src/i18n/brand.ts`
+vervangt "MATO Info" in alle `m`-teksten (server en client, via `I18nProvider brand`), de paginatitels en het logo
+(`VendlyWordmark name`, `[mato]`; de sluitende haak volgt de gemeten letterbreedtes in `ADVANCE`). Leeg = MATO Info.
+
 **Drie dingen moeten `vendly` blijven heten, hernoemen breekt ze** (ook `vendly:hide-numbers` in localStorage hoort daarbij):
 - `LOCALE_COOKIE = "vendly-locale"` in `src/i18n/config.ts` — hernoemen wist ieders taalkeuze.
 - De opslagsleutels in de browser voor een bijvulronde — hernoemen kost een vuller zijn halve ronde.
@@ -33,7 +38,9 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
 - **Live staat sinds 21-10-2026 `cloud/productie-release` @ dc173e4** (de eigenaarsfixes, het oogje bij het
   wachtwoord, de camera: Live, elke betaling op camera (alleen op een computer) en volledig scherm, het
   overzicht zonder meldingen, de camera onder Net verkocht, de statistieken per maand en automaat, en een ronde die
-  pas telt als hij af is, het groene vinkje na Voorraad aanpassen en het donkere thema, zie hieronder), uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
+  pas telt als hij af is, het groene vinkje na Voorraad aanpassen en het donkere thema, zie hieronder); sinds de avond van 21-10
+  @ 2da6284 ook de export voor de boekhouding, Alles samen op de vullijst, Profiel, de kaart en de eigen merknaam (zie
+  "Export, vullijst, profiel en kaart"). Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
 
@@ -364,6 +371,31 @@ keuken geteld de avond ervoor. **`demo_tick`** (pg_cron, elk uur om :05, alle `i
 eerder opnieuw af, zodat Net verkocht altijd leeft, en vult sinds 21-10 om 06:05 alleen een automaat onder 65 %, met wat er echt
 ontbrak (eerder: elke dag alles vol, delta = diepte). Opnieuw beginnen = de verkopen en stock_events van die org weghalen (een
 `delete` in een `do`-blok gaat wel via de MCP) en opnieuw genereren.
+
+## Export, vullijst, profiel en kaart (21-10-2026, voor iedereen)
+Xin vroeg ze voor het demo-account; ze staan voor elke uitbater (ook Chens) en vuller.
+- **Statistieken → Exporteren** ("export per date, or per month … easy to give to accounting"): een venster
+  (`statistics/export-menu.tsx`) met Zoals hierboven, een maand (sinds de eerste verkoop), een jaar of eigen datums, en PDF, Excel
+  of CSV. De zaak/automaat/product-filters van de pagina blijven. Alle drie lezen `getSalesExport` (`src/lib/sales-export.ts`, langs
+  `getStatsReport`, dus dezelfde afscherming): per dag (ook dagen zonder verkoop, nooit na vandaag), per maand als het er meer zijn,
+  per product en per automaat. Wat geen product heeft (Gits' Televend-dagtotalen) staat als één regel "Zonder productdetail", zodat
+  de producten optellen tot het totaal. Bedragen incl. btw. De PDF (`statistics/pdf`, pdfkit, Helvetica: een smalle spatie wordt
+  een gewone) toont de dagen tot 93 dagen, daarboven alleen de maanden; `next.config.ts` houdt de `.afm`-bestanden van pdfkit in de
+  trace. Excel (exceljs): Overzicht, Per dag (echte datums), Per product, Per automaat. CSV met `;` en `,`, zoals voorheen.
+- **Vullijst**: bovenaan **Alles samen** (elk gerecht over alle automaten, meeste eerst, "voor Koekelare · …"), dan per automaat, en
+  **Lijst delen** (deelvenster van de gsm, anders kopiëren). Op Bijvullen (uitbater en vuller) de knop **Wat neem ik mee?** ernaartoe.
+- **Profiel** (`/profile`, in de bovenbalk als avatar of eerste letter, in de zijbalk als rij): avatar maken of aanpassen (dezelfde
+  `AvatarEditor`; `saveAvatar` vraagt nu alleen een aanmelding), naam (`saveProfileName`, `user_metadata.name`, max. 40 tekens, die
+  rondes en lijsten tonen), e-mail, rol, organisatie of zaak, account sinds, laatst aangemeld, taal; in cijfers: deze maand (niet voor
+  een vuller), automaten, producten, mensen in het team (alleen de uitbater, `getAccountFacts`), je cijfers (wie vult). Een demo zegt
+  dat de verkopen verzonnen zijn. Wacht: `requireSignedIn()` (org.ts), ook toegelaten in `check:guards` voor pagina's over je eigen account.
+- **Kaart** op Bijvullen (uitbater en vuller, `components/refill/machine-map.tsx`, Leaflet + OpenStreetMap-tegels met vermelding):
+  een speld per adres in de kleur van hoe vol (de leegste automaat op dat adres beslist, "×2" bij twee), het vertrekpunt als "D", een tik
+  geeft de automaat (naar `/refill/machines/…`) en Navigeren (Waze). Adressen komen uit `machines.address`; zonder adres staat de naam
+  onder de kaart (Torhout Chens Garden). Coördinaten in de tabel **`geocodes`** (sleutel `lower(btrim(adres))`, RLS aan, alleen de
+  servicerol), opgezocht met Nominatim (max. 4 per bezoek, één per seconde, met naam in de User-Agent) **na** de pagina (`after()`),
+  dus een nieuw adres staat er vanaf het volgende bezoek (`src/lib/geo.ts`, `src/lib/machine-map.ts`). In het donker worden de tegels
+  omgekeerd; Leaflet blijft onder de bovenbalk (`isolation: isolate` op `.machine-map`).
 
 ## Rondes uit de cijfers gehaald (19-10-2026)
 Xin liet Alus opnieuw beginnen op niveau 1: zijn 20 oefenrondes (17–19 okt) staan in
