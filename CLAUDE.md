@@ -30,7 +30,7 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   `productie` het niet meer gebruikt.
 - Rol **nooit** uit vanuit de gedeelde werkmap. Op 16-10 belandde zo ongecommit werk live, en op
   18-10 stond er live code die nergens in git zat (teruggezet als `productie`, commit dcd1434).
-- **Live staat sinds 21-10-2026 `cloud/productie-release` @ d2f04fe** (de eigenaarsfixes, het oogje bij het
+- **Live staat sinds 21-10-2026 `cloud/productie-release` @ e414c06** (de eigenaarsfixes, het oogje bij het
   wachtwoord en daarna alleen de camera: Live en elke betaling op camera, zie hieronder), uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
@@ -147,9 +147,7 @@ op 19-10 het live overzicht (teruggerold naar de vorige versie); `check:guards` 
 Xin: "Nieuwe ronde vervangen door de feature van Alus". De uitbater krijgt dezelfde grote knop **Vul route
 beginnen** (Bijvullen en overzicht; `StartRound fill`, `startable` in `src/lib/refill-start.ts`): één ronde
 met elke automaat die iets mist en niet op een open ronde staat, en meteen erin (`createRefillSheet(…, {fill:
-true})` → `/vullen`). Ook de tegels en "Zelf automaten kiezen" van Alus. "Bijvullen" en "Voorraad aanpassen" (tot 21-10 "Voorraad corrigeren"; Xin: "het is gewoon voorraad aanpassen")
-op een automaat openen voor de uitbater Alus' pagina met de grote − en + (`/refill/machines/[id]?from=machine`);
-`/machines/[id]/refill` stuurt hem daarheen, een zaak houdt dat oude formulier. `/refill/new` bestaat nog maar
+true})` → `/vullen`). Ook de tegels en "Zelf automaten kiezen" van Alus. "Bijvullen" op een automaat opent voor de uitbater Alus' pagina met de grote − en + (`/refill/machines/[id]?from=machine`); "Voorraad aanpassen" (tot 21-10 "Voorraad corrigeren") zet sinds 21-10 de vakken op de automaatpagina zelf in aanpasmodus (Xin: "meteen aanpassen zonder dat je wordt verwezen naar bijvullen"; `StockAdjust` met `embedded` in `src/components/machine/stock-adjust.tsx`, dezelfde als op Alus' pagina, opslaan als `correction`). `/machines/[id]/refill` stuurt hem daarheen, een zaak houdt dat oude formulier. `/refill/new` bestaat nog maar
 wordt nergens meer gelinkt. **Statistieken**: per automaat staat nu onder het totaal, daarna **Bijvullingen**
 (`refill_visits`, `getRefillVisits`, alleen de uitbater): per dag wanneer, hoeveel stuks, door wie; de lijst van
 alle producten is ingeklapt en "Gemiddelde verkoop" is weg.
