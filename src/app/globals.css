@@ -742,7 +742,7 @@
   min-width: 180px;
   font-size: 13px;
 }
-.map-popup p {
+.machine-map .map-popup p {
   margin: 0;
   color: var(--muted-foreground);
 }
@@ -756,9 +756,9 @@
   font-size: 14px;
 }
 .map-popup-row span,
-.map-popup-nav {
+.machine-map .map-popup-nav {
   font-weight: 600;
-  color: var(--gold-ink, inherit);
+  color: var(--gold-ink);
 }
 .map-popup-nav {
   text-decoration: none;
