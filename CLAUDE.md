@@ -30,8 +30,8 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   `productie` het niet meer gebruikt.
 - Rol **nooit** uit vanuit de gedeelde werkmap. Op 16-10 belandde zo ongecommit werk live, en op
   18-10 stond er live code die nergens in git zat (teruggezet als `productie`, commit dcd1434).
-- **Live staat sinds 21-10-2026 `cloud/productie-release` @ dd7e101** (de eigenaarsfixes, het oogje bij het
-  wachtwoord en daarna alleen de camera: Live en elke betaling op camera, zie hieronder), uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
+- **Live staat sinds 21-10-2026 `cloud/productie-release` @ e98b48d** (de eigenaarsfixes, het oogje bij het
+  wachtwoord en daarna alleen de camera: Live, elke betaling op camera en volledig scherm, zie hieronder), uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
 
@@ -184,6 +184,10 @@ Xin: "een knop, toon mijn automaat nu, en dan zie je een snapshot". Geen video: 
   als de pagina of app weggaat, of bij een mislukte foto (getest: 20 foto's per minuut). Geen echte video: daarvoor is
   een tussenprogramma (go2rtc) bij de console nodig, Xin houdt het bij de UniFi-app.
   Tijdens Live heet de knop **Stop met kijken** en na een foto staat er **Sluiten**: beide stoppen en sluiten het blok.
+  **Volledig scherm** (21-10-2026, Xin: "dat je ook in full screen kan zetten"): op de foto tikken of het knopje in de hoek.
+  Waar de browser het toelaat de echte fullscreen-API, op een iPhone (kan dat alleen voor video) een zwarte laag over het venster.
+  Live loopt erin door; het kruisje, Esc, op de foto tikken of Stop met kijken sluiten het. Er staat altijd maar één `<img>`,
+  zodat elke foto één keer gevraagd wordt. Op de klantsites hetzelfde (`.camera-full` in `globals.css`).
 - Eerst wordt een scherpe foto (`highQuality=true`) gevraagd. De camera bij **Diksmuide** antwoordt "Camera does not
   support full HD snapshot" (`featureFlags.supportFullHdSnapshot` = false): dan de gewone foto, lagere kwaliteit, hoger
   kan niet via de API. `NO_FULL_HD` in `unifi.ts` onthoudt zo'n camera, zodat elke foto één vraag aan UniFi kost. De officiële API (v7.3.70) kent geen oude beelden of
