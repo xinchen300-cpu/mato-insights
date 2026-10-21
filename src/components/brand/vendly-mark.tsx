@@ -7,6 +7,20 @@
 const GOLD = "#A6752C";
 const INK = "#2A2520";
 
+// How wide each letter is in the logo's Inter at 42px with its letter spacing, measured in the browser
+// (21-10-2026): an own name gets its closing bracket as close as "mato info" does ("mato" is 97 wide).
+const ADVANCE: Record<string, number> = {
+  a: 22.9, b: 25, c: 23.2, d: 25, e: 23.6, f: 15.1, g: 25, h: 24.5, i: 9.7, j: 9.7, k: 22.7, l: 9.7, m: 36.6,
+  n: 24.4, o: 24.3, p: 25, q: 25, r: 15.4, s: 21.8, t: 13.6, u: 24.5, v: 23.4, w: 34, x: 22.6, y: 23.5, z: 22.5,
+  "0": 26.5, "1": 16.5, "2": 24.9, "3": 25.5, "4": 26.7, "5": 24.5, "6": 25.6, "7": 23, "8": 25.6, "9": 25.6,
+  " ": 8.4, "&": 26.6, "-": 18.3, ".": 12.1,
+};
+
+function textWidth(label: string): number {
+  const plain = label.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return Math.round([...plain].reduce((sum, c) => sum + (ADVANCE[c] ?? 24), 0));
+}
+
 /** [m]: the mark on its own, for small places. */
 export function VendlyMark({ className }: { className?: string }) {
   return (
@@ -32,8 +46,7 @@ export function VendlyMark({ className }: { className?: string }) {
  */
 export function VendlyWordmark({ className, name = "MATO Info" }: { className?: string; name?: string }) {
   const label = name.toLowerCase();
-  // "mato info" is 179 wide: about 19.9 per letter, so the brackets sit as close to a shorter name.
-  const width = label === "mato info" ? 179 : Math.round(label.length * 19.9);
+  const width = label === "mato info" ? 179 : textWidth(label);
   const right = 46 + width;
   return (
     <svg viewBox={`4 16 ${right + 10} 58`} role="img" aria-label={name} className={className ?? "h-[30px] w-auto text-brand-ink"}>

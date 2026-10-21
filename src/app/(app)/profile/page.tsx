@@ -92,10 +92,9 @@ export default async function ProfilePage() {
               <li>
                 <ListRow
                   title={m.profile.thisMonth}
-                  value={
-                    <span className="tabular">
-                      {fmt(m.profile.thisMonthValue, { amount: f.euro(month.totals.revenue), count: f.number(month.totals.units) })}
-                    </span>
+                  value={f.euro(month.totals.revenue)}
+                  valueSub={
+                    <span className="tabular text-muted-foreground">{plural(month.totals.units, m.common.salesOne, m.common.salesOther)}</span>
                   }
                 />
               </li>

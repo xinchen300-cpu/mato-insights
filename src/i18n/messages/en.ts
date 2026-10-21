@@ -1445,7 +1445,6 @@ export const en = {
     language: "Language",
     inNumbers: "In numbers",
     thisMonth: "Sold this month",
-    thisMonthValue: "{amount} · {count} sales",
     machines: "Machines",
     products: "Products",
     team: "People in your team",

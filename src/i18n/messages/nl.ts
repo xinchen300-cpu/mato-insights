@@ -1446,7 +1446,6 @@ export const nl: Messages = {
     language: "Taal",
     inNumbers: "In cijfers",
     thisMonth: "Verkocht deze maand",
-    thisMonthValue: "{amount} · {count} verkopen",
     machines: "Automaten",
     products: "Producten",
     team: "Mensen in je team",

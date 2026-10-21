@@ -1445,7 +1445,6 @@ export const fr: Messages = {
     language: "Langue",
     inNumbers: "En chiffres",
     thisMonth: "Vendu ce mois-ci",
-    thisMonthValue: "{amount} · {count} ventes",
     machines: "Distributeurs",
     products: "Produits",
     team: "Personnes dans votre équipe",
