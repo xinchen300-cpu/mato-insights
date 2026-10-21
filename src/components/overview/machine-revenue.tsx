@@ -117,7 +117,8 @@ export function MachineRevenue({ machines, totals }: { machines: RevenueMachine[
                       {[
                         plural(figure.units, m.common.salesOne, m.common.salesOther),
                         ...(row.late ? [t.lateSales] : []),
-                        ...(row.lastRefill ? [refilledText(row.lastRefill.at, t, f)] : []),
+                        // Filled on a round still open: the % above is from before it, until the round is completed.
+                        ...(row.onRound ? [m.refill.filledOnRound] : row.lastRefill ? [refilledText(row.lastRefill.at, t, f)] : []),
                       ].join(" · ")}
                     </span>
                     {/* Per machine only a real change speaks; normal swing stays quiet here (the total says it). */}

@@ -312,7 +312,8 @@ export async function recordStock(
     displayName((await (await createClient()).auth.getUser()).data.user) ||
     "";
 
-  const { error } = await createAdminClient().rpc("record_stock", {
+  // Outside a round: measured against the stock the person saw, which leaves out a round still under way (21-10-2026).
+  const { error } = await createAdminClient().rpc("record_stock_settled", {
     target_org: orgId,
     target_machine: machineId,
     event_type: type,

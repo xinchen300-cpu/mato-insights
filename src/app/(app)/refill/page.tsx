@@ -24,7 +24,7 @@ import { MachinePicker } from "./machine-picker";
 import { StartRound } from "./list/start-round";
 import { InstallApp } from "@/components/install-app";
 import { DeleteRounds, type DeletableRound } from "@/components/refill/delete-rounds";
-import { ownRound, startable } from "@/lib/refill-start";
+import { filledOnOpenRound, heldByOpenRound, ownRound, startable } from "@/lib/refill-start";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -61,7 +61,7 @@ export default async function RefillPage() {
       }
       pieces.set(slot.machine_id, entry);
     }
-    const busy = onOpenRound(rounds);
+    const busy = heldByOpenRound(rounds);
     const choices = fleet
       .filter((mc) => pieces.has(mc.id))
       .map((mc) => {
@@ -75,7 +75,7 @@ export default async function RefillPage() {
         };
       });
     // Every machine as a tile, in the owner's route order: its photo, how full it is, and online or not.
-    const grid = gridMachines(fleet, slots, settings.route);
+    const grid = gridMachines(fleet, slots, settings.route, { onRound: filledOnOpenRound(rounds) });
     const stats = fillerStats(mine, DISPLAY_TIME_ZONE);
     const name = displayName(me.data.user);
     // The round to do now, big at the top: one already under way first, else the newest.
@@ -146,7 +146,7 @@ export default async function RefillPage() {
   // A round of their own still open is carried on with, not started beside:
   // its machines count as busy, so the start button alone would vanish.
   const own = operator ? ownRound(openRounds) : null;
-  const ownerGrid = operator ? gridMachines(start.stocked, slotsFilledByVendly(slots, machines), route) : [];
+  const ownerGrid = operator ? gridMachines(start.stocked, slotsFilledByVendly(slots, machines), route, { onRound: filledOnOpenRound(openRounds) }) : [];
   const ownerChoices = orderByRoute(start.stocked.map((mc) => mc.id), route).map((id) => {
     const mine = slots.filter((slot) => slot.machine_id === id && slot.product_id);
     const counted = mine.filter((slot) => slot.stock !== null);
@@ -301,7 +301,3 @@ function deletable(
   }));
 }
 
-/** Machines that a round still open will fill: a second round for them would fill them twice. */
-function onOpenRound(rounds: OpenRound[]): Set<string> {
-  return new Set(rounds.flatMap((round) => round.machines.filter((machine) => !machine.done).map((machine) => machine.id)));
-}

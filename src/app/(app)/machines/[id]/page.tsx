@@ -21,6 +21,7 @@ import {
   getPaymentFeed,
   getPaymentHealth,
   getProducts,
+  getOpenRounds,
   getRefillHistory,
   getSlotShelfLife,
   getStatsReport,
@@ -29,6 +30,7 @@ import {
 import { toFrontRows } from "@/lib/layout";
 import { mediaUrl } from "@/lib/media";
 import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
+import { filledOnOpenRound } from "@/lib/refill-start";
 import { compareMoneySince } from "@/lib/stats";
 import { fillLevel, levelColor } from "@/lib/stock";
 import { camerasEnabled } from "@/lib/unifi";
@@ -63,7 +65,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   if (!machine) notFound();
 
   const since = new Date(Date.now() - PAYMENT_WINDOW_DAYS * 86_400_000);
-  const [slots, businesses, history, health, payments, month, products, shelfLife, editLayout, rents] = await Promise.all([
+  const [slots, businesses, history, health, payments, month, products, shelfLife, editLayout, rents, openRounds] = await Promise.all([
     getMachineStock(orgId, [id]),
     getBusinesses(orgId),
     getRefillHistory(orgId, id),
@@ -75,7 +77,11 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
     getSlotShelfLife(orgId, id),
     canEditLayout(machine),
     rentsToBusinesses(orgId),
+    // Rounds are the operator's: a shop has none to wait for.
+    isOperator().then((operator) => (operator ? getOpenRounds(orgId) : [])),
   ]);
+  // Filled on a round still open: the count below is from before it, until that round is completed (21-10-2026).
+  const filledOnRound = filledOnOpenRound(openRounds).has(id);
   // A shared machine shows this month per business, so the two add up to the figure above.
   const split = machine.shared_business_id ? await getMachineSalesSplit(orgId, id, new Date(month.cur_start)) : [];
 
@@ -273,6 +279,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
                 {m.machines.stockUnknown}
               </p>
             )}
+            {filledOnRound && <p className="mt-3 text-[14px] font-medium text-muted-foreground">{m.refill.filledOnRound}</p>}
 
             {(() => {
               // The slots with their products, and the legend under them.

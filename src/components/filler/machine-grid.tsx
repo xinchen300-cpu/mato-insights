@@ -20,6 +20,8 @@ export type GridMachine = {
   low: number;
   /** No layout yet, so nothing to count or fill in it. */
   noLayout?: boolean;
+  /** Filled on a round still open: how full it is counts once that round is completed (21-10-2026). */
+  onRound?: boolean;
 };
 
 /**
@@ -31,7 +33,7 @@ export function gridMachines(
   fleet: Machine[],
   slots: SlotStock[],
   route: string[],
-  { withoutLayout = false }: { withoutLayout?: boolean } = {},
+  { withoutLayout = false, onRound }: { withoutLayout?: boolean; onRound?: Set<string> } = {},
 ): GridMachine[] {
   const stocked = slots.filter((slot) => slot.product_id);
   const totals = machineTotals(stocked.map((slot) => ({ machine_id: slot.machine_id, stock: slot.stock, capacity: slot.capacity })));
@@ -51,6 +53,7 @@ export function gridMachines(
       fill: total ? machineFill(total.stock, total.capacity, total.counted) : null,
       low: low.get(id) ?? 0,
       noLayout: !total,
+      onRound: onRound?.has(id) ?? false,
     };
   });
 }
@@ -90,12 +93,18 @@ export function MachineGrid({ machines, m, from }: { machines: GridMachine[]; m:
               <span
                 className={cn(
                   "text-[13px] leading-snug",
-                  machine.status === "offline" ? "font-semibold text-negative" : machine.low > 0 ? "font-medium text-level-low-strong" : "text-muted-foreground",
+                  machine.status === "offline"
+                    ? "font-semibold text-negative"
+                    : machine.low > 0 && !machine.onRound
+                      ? "font-medium text-level-low-strong"
+                      : "text-muted-foreground",
                 )}
               >
                 {/* Offline first: a machine that cannot take payments sells nothing, however full. */}
                 {machine.status === "offline"
                   ? m.status.offline
+                  : machine.onRound
+                  ? m.refill.filledOnRoundShort
                   : machine.low > 0
                   ? plural(machine.low, m.overview.slotsLowOne, m.overview.slotsLow)
                   : machine.noLayout

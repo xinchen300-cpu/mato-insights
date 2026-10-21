@@ -32,6 +32,8 @@ export type RevenueMachine = {
   /** Its sales are typed in a day later (no payment terminal of ours yet): today stays empty. */
   late: boolean;
   lastRefill: { at: string; by: string | null; pieces: number } | null;
+  /** Filled on a round still open: how full it is counts once that round is completed (21-10-2026). */
+  onRound: boolean;
   figures: Record<PeriodKey, RevenueFigure>;
 };
 
@@ -72,6 +74,8 @@ export function revenueByMachine(input: {
   machines: Machine[];
   stock: SlotStock[];
   refills: Map<string, { at: string; by: string | null; pieces: number }>;
+  /** The machines filled on a round still open. */
+  onRound?: Set<string>;
   orgName: string | null;
   newSince: (firstSale: string | null) => string | undefined;
 }): { machines: RevenueMachine[]; totals: Record<PeriodKey, RevenueFigure> } {
@@ -95,6 +99,7 @@ export function revenueByMachine(input: {
         // Without a payment terminal of ours its sales are typed in a day later (Gits, Televend).
         late: !mc.payter_serial_number,
         lastRefill: input.refills.get(mc.id) ?? null,
+        onRound: input.onRound?.has(mc.id) ?? false,
         figures: perPeriod((key) => figure(reports[key], reports[key].by_machine.find((row) => row.machine_id === mc.id), newSince)),
       };
     }),

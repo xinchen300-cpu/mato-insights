@@ -6,6 +6,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { DISPLAY_TIME_ZONE, fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getMachines, getMachineStock, getOpenRounds, getRefillSheets, getStatsReport } from "@/lib/data";
+import { heldByOpenRound } from "@/lib/refill-start";
 import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
 import { cleanRoundSettings, orderByRoute } from "@/lib/round-settings";
 import { lastFullWeeks } from "@/lib/stats";
@@ -106,7 +107,7 @@ export default async function NewRoundPage() {
     { minutes: 0, runs: 0 },
   );
   const typicalMinutes = fleetMinutes.runs > 0 ? fleetMinutes.minutes / fleetMinutes.runs : null;
-  const busy = onOpenRound(openRounds);
+  const busy = heldByOpenRound(openRounds);
 
   const pickable = machines
     .filter((mc) => perMachine.has(mc.id))
@@ -182,7 +183,3 @@ export default async function NewRoundPage() {
   );
 }
 
-/** Machines already on a round that is not finished: not ticked again by themselves. */
-function onOpenRound(rounds: Awaited<ReturnType<typeof getOpenRounds>>): Set<string> {
-  return new Set(rounds.flatMap((round) => round.machines.filter((machine) => !machine.done).map((machine) => machine.id)));
-}

@@ -221,7 +221,8 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
       .select("id, name, photo_path, last_connected_at, last_disconnected_at, type, address")
       .eq("org_id", orgId)
       .in("id", order.length ? order : [NOTHING]),
-    getMachineStock(orgId, order.length ? order : [NOTHING]),
+    // With what this round already put in: what a finished stop changed, and Terugzetten, are measured on it.
+    getMachineStock(orgId, order.length ? order : [NOTHING], { withOpenRounds: true }),
     getLastSales(orgId),
     admin.from("organizations").select("refill_settings").eq("id", orgId).maybeSingle(),
     // Only an open round can still be put back.
@@ -316,7 +317,8 @@ export async function getRefillPlan(orgId: string, machineIds: string[]): Promis
   if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
   // No machines asked for is nothing to plan, never every machine.
   if (machineIds.length === 0) return [];
-  const { data, error } = await createAdminClient().rpc("refill_plan", { target_org: orgId, machine_filter: machineIds });
+  // As every screen counts it: a machine filled on a round still open is not filled yet (21-10-2026).
+  const { data, error } = await createAdminClient().rpc("refill_plan_settled", { target_org: orgId, machine_filter: machineIds });
   if (error) throw new Error(error.message);
   return (data ?? []) as RefillLine[];
 }
@@ -723,9 +725,19 @@ function toMachine(row: MachineRow): Machine {
   };
 }
 
-export async function getMachineStock(orgId: string, machineIds?: string[]): Promise<SlotStock[]> {
+/**
+ * What is in each slot now. A machine filled on a round that is still open counts as it was before
+ * that round (Xin, 21-10-2026: only when the whole route is done does a machine count as filled);
+ * when the round completes, its fills count from the moment each machine was filled, minus what sold
+ * since. Only the round itself asks `withOpenRounds`, to see what its own stops changed.
+ */
+export async function getMachineStock(
+  orgId: string,
+  machineIds?: string[],
+  options?: { withOpenRounds?: boolean },
+): Promise<SlotStock[]> {
   const { businessId, role } = await getScope();
-  const { data, error } = await createAdminClient().rpc("machine_stock", {
+  const { data, error } = await createAdminClient().rpc(options?.withOpenRounds ? "machine_stock" : "machine_stock_settled", {
     target_org: orgId,
     machine_filter: machineIds?.length ? machineIds : null,
   });
@@ -1133,7 +1145,8 @@ export type LastRefill = { at: string; by: string | null; pieces: number };
  */
 export async function getLastRefills(orgId: string): Promise<Map<string, LastRefill>> {
   if (!(await isOperator()) || (await getScope()).orgId !== orgId) return new Map();
-  const { data, error } = await createAdminClient().rpc("last_refills_all", { target_org: orgId });
+  // A round still open has not filled anything yet (21-10-2026).
+  const { data, error } = await createAdminClient().rpc("last_refills_settled", { target_org: orgId });
   if (error) throw new Error(error.message);
   return new Map(
     ((data ?? []) as { machine_id: string; filled_at: string; filled_by: string | null; pieces: number }[]).map((row) => [
@@ -1168,7 +1181,8 @@ export async function getRefillVisits(
   const own = new Set((await getMachines(orgId)).map((machine) => machine.id));
   const asked = machineIds === null ? null : machineIds.filter((id) => own.has(id));
   if (asked !== null && asked.length === 0) return [];
-  const { data, error } = await createAdminClient().rpc("refill_visits_all", {
+  // A round still open has not filled anything yet (21-10-2026).
+  const { data, error } = await createAdminClient().rpc("refill_visits_settled", {
     target_org: orgId,
     from_ts: range.from,
     to_ts: range.to,
@@ -1363,7 +1377,8 @@ export type SlotShelfLife = { nextExpiresAt: string | null; expired: number };
 export async function getSlotShelfLife(orgId: string, machineId: string): Promise<Map<string, SlotShelfLife>> {
   await requireMachineAccess(orgId, machineId);
   const { businessId } = await getScope();
-  const { data, error } = await createAdminClient().rpc("slot_freshness", {
+  // Beside the stock it is shown with: a round still open has not filled anything yet (21-10-2026).
+  const { data, error } = await createAdminClient().rpc("slot_freshness_settled", {
     target_org: orgId,
     machine_filter: [machineId],
   });
@@ -1488,17 +1503,23 @@ export async function getRefillHistory(orgId: string, machineId: string): Promis
   await requireMachineAccess(orgId, machineId);
   const { businessId } = await getScope();
   const admin = createAdminClient();
-  const { data } = await admin
-    .from("stock_events")
-    .select("occurred_at, type, delta, refill_sheet_id, filled_by, selection_number")
-    .eq("org_id", orgId)
-    .eq("machine_id", machineId)
-    .order("occurred_at", { ascending: false })
-    .limit(500);
+  const [{ data: written }, { data: open }] = await Promise.all([
+    admin
+      .from("stock_events")
+      .select("occurred_at, type, delta, refill_sheet_id, filled_by, selection_number")
+      .eq("org_id", orgId)
+      .eq("machine_id", machineId)
+      .order("occurred_at", { ascending: false })
+      .limit(500),
+    admin.from("refill_sheets").select("id").eq("org_id", orgId).is("completed_at", null),
+  ]);
+  // A round still open has not filled anything yet: its stops show once it is completed (21-10-2026).
+  const pending = new Set((open ?? []).map((row) => row.id as string));
+  const data = (written ?? []).filter((row) => !row.refill_sheet_id || !pending.has(row.refill_sheet_id as string));
 
   // A shop on a shared fridge counts its own slots only, and does not get the
   // e-mail address of whoever filled: that is the operator's staff, not theirs.
-  let rows = data ?? [];
+  let rows = data;
   if (businessId) {
     const { data: slots } = await admin.rpc("machine_stock", { target_org: orgId, machine_filter: [machineId] });
     const own = new Set(
@@ -1682,12 +1703,13 @@ async function productionFor(orgId: string, producerId: string, producerName: st
   const [dishes, machines, stock, sales, hours, trend, fridge] = await Promise.all([
     admin.from("products").select("id, name, photo_path, batch_min").eq("org_id", orgId).eq("producer_id", producerId).eq("archived", false),
     admin.from("machines").select("id, refill_manual").eq("org_id", orgId).eq("excluded", false),
-    admin.rpc("machine_stock", { target_org: orgId, machine_filter: null }),
+    // Machines and fridge as a round still open left them: neither has given or taken anything yet (21-10-2026).
+    admin.rpc("machine_stock_settled", { target_org: orgId, machine_filter: null }),
     admin.rpc("slot_weekday_sales", { target_org: orgId, days: RATE_DAYS }),
     // The hours of the last eight weeks; the trend over four full weeks against the four before.
     report(daysAgo(RATE_DAYS), daysAgo(1)),
     report(daysAgo(28), daysAgo(1)),
-    admin.rpc("producer_fridge", { target_org: orgId, target_producer: producerId }),
+    admin.rpc("producer_fridge_settled", { target_org: orgId, target_producer: producerId }),
   ]);
   for (const result of [dishes, machines, stock, sales, hours, trend, fridge]) {
     if (result.error) throw new Error(result.error.message);
