@@ -225,7 +225,9 @@ Xin: "een knop, toon mijn automaat nu, en dan zie je een snapshot". Geen video: 
   gelezen door `getMachineCamera` in data.ts.
 - `UNIFI_API_KEY` (Site Manager-sleutel van Xins UI-account; kan zijn hele console bedienen, dus alleen op de server)
   staat als geheim op vendly, vendly-test, chocabake, sferio en ledoux. Alleen organisaties in `UNIFI_ORGS` zien of kiezen
-  camera's: live Mato Vending + Chens Garden (de eigenaar daar is Xin zelf, xinchen300+chens), test alleen Mato Vending.
+  camera's: live Mato Vending + Chens Garden (de eigenaar daar is Xin zelf, xinchen300+chens) + MATO Sales Test Account (sinds
+  21-10-2026, de demo hieronder), test alleen Mato Vending. `UNIFI_ORGS` is op Vercel "sensitive": aanpassen = de hele lijst
+  opnieuw zetten (`vercel env rm` + `add --sensitive`) en opnieuw uitrollen.
   Een andere klant van MATO Info mag Xins camera's nooit zien: komt er een tweede uitbater met UniFi, dan per org een eigen sleutel.
 - **Live** (21-10-2026; eerst "Bijna live", Xin: "je mag het live noemen"): om de 3 seconden een nieuwe foto zolang de pagina open is; stopt na een minuut, bij Stop,
   als de pagina of app weggaat, of bij een mislukte foto (getest: 20 foto's per minuut). Geen echte video: daarvoor is
@@ -346,6 +348,22 @@ met de "huidige hoeveelheid" uit dat scherm). Meer dan 1000 verkopen: de site ha
 (`transactions_machine_sales_idx`). Hun logo (van Xin, 246 px; een grotere versie maakt het scherper) staat in
 `public/chocabake-logo.png` en is ook het beginschermicoon. Ook geen git-repo. Het project
 moest met de hand op framework `nextjs` gezet worden (aangemaakt via de CLI zonder; anders "No Output Directory").
+
+## Demo-account "MATO Sales Test Account" (21-10-2026)
+Xin: "an account I use to show people in person how the program works … fictional numbers and products, but use the
+Diksmuide camera". Login **xinchen300+sales@gmail.com** (komt in Xins Gmail; het wachtwoord heeft Xin, staat nergens in git),
+eigenaar van org `167a40d2-9094-4564-9ba5-82aac9103610`, `is_demo` = true (alle functies, geen pakket nodig; Instellingen
+zegt dat de verkopen verzonnen zijn). Vijf verzonnen automaten: Diksmuide Markt (lift, **met de echte camera van Diksmuide
+Chens Garden** in `machine_cameras`), Brugge Station (spiraal, pendelaars), Oostende Zeedijk (lift, zwakker na de zomer),
+Kortrijk Campus (spiraal, stil in de zomer en het weekend, sterk sinds 21-09), Roeselare Sportpark (lift, 's avonds en in het
+weekend); serienummers `DEMO-SALES-0x`, route met depot in Torhout. 24 verzonnen producten (12 gerechten van "Centrale keuken"
+voor de Keukenlijst, 12 dranken/snacks), Vegetarische wok, Rijstpap en Notenmix verkopen bijna niets (Minst verkocht). Verkopen
+vanaf 21-07-2026 (±12 000, € 57 000, `payter_transaction_id` `DEMO-SALES-…`, 1 % mislukt/geweigerd), per uur en weekdag
+getrokken; vulbeurten door "Sarah" elke ochtend (niet op zondag) de laatste 4 weken, twee keer "via aanpassen", koelkast van de
+keuken geteld de avond ervoor. **`demo_tick`** (pg_cron, elk uur om :05, alle `is_demo`-orgs) speelt de verkoop van een week
+eerder opnieuw af, zodat Net verkocht altijd leeft, en vult sinds 21-10 om 06:05 alleen een automaat onder 65 %, met wat er echt
+ontbrak (eerder: elke dag alles vol, delta = diepte). Opnieuw beginnen = de verkopen en stock_events van die org weghalen (een
+`delete` in een `do`-blok gaat wel via de MCP) en opnieuw genereren.
 
 ## Rondes uit de cijfers gehaald (19-10-2026)
 Xin liet Alus opnieuw beginnen op niveau 1: zijn 20 oefenrondes (17–19 okt) staan in
