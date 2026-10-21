@@ -2,6 +2,9 @@ import { getMachineCamera } from "@/lib/data";
 import { denyFiller, requireOrgId } from "@/lib/org";
 import { cameraSnapshot } from "@/lib/unifi";
 
+/** A sharp photo through UniFi's cloud, and the usual one after it if needed: room for both. */
+export const maxDuration = 40;
+
 /**
  * "Toon automaat nu": a photo of this moment from the camera aimed at the
  * machine. Under /api, not /machines, so the app's service worker never keeps
