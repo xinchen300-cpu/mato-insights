@@ -30,7 +30,7 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   `productie` het niet meer gebruikt.
 - Rol **nooit** uit vanuit de gedeelde werkmap. Op 16-10 belandde zo ongecommit werk live, en op
   18-10 stond er live code die nergens in git zat (teruggezet als `productie`, commit dcd1434).
-- **Live staat sinds 21-10-2026 `cloud/productie-release` @ 44d23d8** (de eigenaarsfixes, het oogje bij het
+- **Live staat sinds 21-10-2026 `cloud/productie-release` @ 9f75831** (de eigenaarsfixes, het oogje bij het
   wachtwoord en daarna alleen de camera: Live, elke betaling op camera (alleen op een computer) en volledig scherm, zie hieronder), uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
@@ -198,13 +198,15 @@ Xin: "een knop, toon mijn automaat nu, en dan zie je een snapshot". Geen video: 
   `unifi.ui.com/consoles/<console>/protect/timelapse/<camera>?start=<ms>` (`src/lib/camera-link.ts`, het adres uit Xins
   browser). In Net verkocht (uur nu vóór de automaatnaam), de laatste betalingen en Alle betalingen van een automaat; alleen
   de uitbater (`getMachineCameras`). Hoe ver terug hangt af van de opslag van zijn recorder.
-  **Niet op een gsm** (21-10-2026, Xin: "dan wil ik dit niet op de mobiele versie"): UniFi's website speelt daar geen
-  opnames af en Ubiquiti heeft geen link die de app op een moment opent (nagekeken: hun apple-app-site-association stuurt
-  geen Protect-pagina's naar de app). Op een aanraaktoestel zonder hover (`@media (hover:none) and (pointer:coarse)`, dus
-  ook een iPad) verbergt CSS het icoontje; Net verkocht, Laatste betalingen en Alle betalingen zeggen dan in één regel
-  `m.machines.cameraOnComputer` (`RecordingHint`), de klantsites in de inleiding van Laatste verkopen. Een venster met uur
-  en een knop naar de app (80785a6) is teruggedraaid. Later misschien de clip zelf in MATO Info via een kleine computer bij de
-  console (onofficiële API, lokale gebruiker): dan werkt het ook op een gsm.
+  **Op een gsm alleen een melding** (21-10-2026, Xin: "keep display the camera icon on phone, but just put a note that only
+  viewable on pc"): UniFi's website speelt daar geen opnames af en Ubiquiti heeft geen link die de app op een moment opent
+  (nagekeken: hun apple-app-site-association stuurt geen Protect-pagina's naar de app). Het icoontje staat er overal; op een
+  aanraaktoestel zonder hover (`(hover: none) and (pointer: coarse)`, dus ook een iPad) toont een tik 3 s
+  `m.machines.cameraOnlyComputer` ("Deze opname kan je alleen op een computer bekijken.") in plaats van de website te openen,
+  en boven de lijst staat `m.machines.cameraOnComputer` (`RecordingHint`; op de klantsites in de inleiding van Laatste
+  verkopen, `.recording-toast`). Eerder geprobeerd en weer weg: een venster met uur en een knop naar de app (80785a6), en het
+  icoontje verbergen (674ba9a). Later misschien de clip zelf in MATO Info via een kleine computer bij de console (onofficiële
+  API, lokale gebruiker): dan werkt het ook op een gsm.
 - `vercel env pull` geeft geheimen terug als "[sensitive]": de sleutel testen kan alleen via de site zelf (fout →
   Vercel-logs). UniFi laat 100 vragen per minuut per console toe.
 - **Meer camera's per automaat** (21-10-2026): tabel `machine_cameras` (machine_id, console_id, camera_id, name, position;
