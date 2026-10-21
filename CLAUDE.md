@@ -30,7 +30,7 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   `productie` het niet meer gebruikt.
 - Rol **nooit** uit vanuit de gedeelde werkmap. Op 16-10 belandde zo ongecommit werk live, en op
   18-10 stond er live code die nergens in git zat (teruggezet als `productie`, commit dcd1434).
-- **Live staat sinds 21-10-2026 `cloud/productie-release` @ f23d443** (de eigenaarsfixes, het oogje bij het
+- **Live staat sinds 21-10-2026 `cloud/productie-release` @ d2f04fe** (de eigenaarsfixes, het oogje bij het
   wachtwoord en daarna alleen de camera: Live en elke betaling op camera, zie hieronder), uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
@@ -147,7 +147,7 @@ op 19-10 het live overzicht (teruggerold naar de vorige versie); `check:guards` 
 Xin: "Nieuwe ronde vervangen door de feature van Alus". De uitbater krijgt dezelfde grote knop **Vul route
 beginnen** (Bijvullen en overzicht; `StartRound fill`, `startable` in `src/lib/refill-start.ts`): één ronde
 met elke automaat die iets mist en niet op een open ronde staat, en meteen erin (`createRefillSheet(…, {fill:
-true})` → `/vullen`). Ook de tegels en "Zelf automaten kiezen" van Alus. "Bijvullen" en "Aantallen corrigeren"
+true})` → `/vullen`). Ook de tegels en "Zelf automaten kiezen" van Alus. "Bijvullen" en "Voorraad aanpassen" (tot 21-10 "Voorraad corrigeren"; Xin: "het is gewoon voorraad aanpassen")
 op een automaat openen voor de uitbater Alus' pagina met de grote − en + (`/refill/machines/[id]?from=machine`);
 `/machines/[id]/refill` stuurt hem daarheen, een zaak houdt dat oude formulier. `/refill/new` bestaat nog maar
 wordt nergens meer gelinkt. **Statistieken**: per automaat staat nu onder het totaal, daarna **Bijvullingen**
@@ -185,6 +185,7 @@ Xin: "een knop, toon mijn automaat nu, en dan zie je een snapshot". Geen video: 
 - **Live** (21-10-2026; eerst "Bijna live", Xin: "je mag het live noemen"): om de 3 seconden een nieuwe foto zolang de pagina open is; stopt na een minuut, bij Stop,
   als de pagina of app weggaat, of bij een mislukte foto (getest: 20 foto's per minuut). Geen echte video: daarvoor is
   een tussenprogramma (go2rtc) bij de console nodig, Xin houdt het bij de UniFi-app.
+  Tijdens Live heet de knop **Stop met kijken** en na een foto staat er **Sluiten**: beide stoppen en sluiten het blok.
 - Eerst wordt een scherpe foto (`highQuality=true`) gevraagd. De camera bij **Diksmuide** antwoordt "Camera does not
   support full HD snapshot" (`featureFlags.supportFullHdSnapshot` = false): dan de gewone foto, lagere kwaliteit, hoger
   kan niet via de API. `NO_FULL_HD` in `unifi.ts` onthoudt zo'n camera, zodat elke foto één vraag aan UniFi kost. De officiële API (v7.3.70) kent geen oude beelden of
