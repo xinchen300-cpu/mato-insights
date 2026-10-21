@@ -6,7 +6,7 @@ import { EmptyState, PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { fmt, weekdayIndex } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { RecordingLink } from "@/components/recording-link";
+import { RecordingHint, RecordingLink } from "@/components/recording-link";
 import { getCamerasOf, getMachine, getPayments } from "@/lib/data";
 import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
 import { camerasEnabled } from "@/lib/unifi";
@@ -67,6 +67,7 @@ export default async function PaymentsPage({
         <EmptyState title={m.status.noPayments} />
       ) : (
         <div className="flex flex-col gap-8">
+          {cameras.length > 0 && <RecordingHint text={m.machines.cameraOnComputer} className="-mb-4" />}
           {days.map((group) => (
             <Section key={group.day} title={group.label}>
               <RowList>

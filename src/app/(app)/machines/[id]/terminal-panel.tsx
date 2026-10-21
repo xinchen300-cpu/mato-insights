@@ -10,7 +10,7 @@ import type { Messages } from "@/i18n/messages";
 import { shareIsReal } from "@/lib/stats";
 import { terminalStatus } from "@/lib/terminal-status";
 import { cn } from "@/lib/utils";
-import { RecordingLink } from "@/components/recording-link";
+import { RecordingHint, RecordingLink } from "@/components/recording-link";
 import type { LinkedCamera } from "@/lib/camera-link";
 import type { Machine, PaymentEntry, PaymentHealth } from "@/lib/types";
 
@@ -158,6 +158,7 @@ export function TerminalPanel({
       {/* The latest payments as a bank lists them: what, when, how much. */}
       {Boolean(health) && attempts > 0 && recent.length > 0 && (
         <Section title={m.status.recentPayments}>
+          {cameras.length > 0 && <RecordingHint text={m.machines.cameraOnComputer} className="mb-2" />}
           <RowList>
             {recent.map((payment, i) => {
               const paid = payment.disposition === "APPROVED";
