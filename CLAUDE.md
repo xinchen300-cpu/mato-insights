@@ -243,7 +243,12 @@ dag, meest verkocht en de laatste verkoop ("wat klanten betaalden, incl. btw"); 
 30 dagen / 12 maanden los van de periode bovenaan, aantikken toont dag, omzet en stuks, vandaag een open punt, niets vóór
 de eerste verkoop (staven en daarna een lijst vond Xin "niet zo duidelijk"); **Per product** op naam samengevoegd
 (`Report.products`, met vakken en prijzen in `parts`; Cookie in vak 35 en 37 is één product), sorteren op stuks/omzet en
-met de periodekeuze er nog eens bij; Ledoux daarna "Per automaat"; onderaan de laatste 5 verkopen en "Rapport downloaden".
+met de periodekeuze er nog eens bij; Ledoux daarna "Per automaat"; onderaan de laatste verkopen en "Rapport downloaden".
+**Lijsten (21-10-2026, Xin: "per product lijst gaat te ver door"):** Per product toont de top 10, Toon meer de rest, Toon minder
+weer 10. Laatste verkopen (nu een client-component) toont 10, per Toon meer 20 extra, en Toon minder; daarboven een zoekveld
+(`lib/sale-search.ts`, zonder imports): een dag ("12/10", "12 okt", "gisteren"), een maand ("okt"), een prijs ("3,75", ook
+"4" = € 4,00), "vak 35" of anders tekst in product/automaat, binnen de gekozen periode. Een dag of maand buiten die periode
+(maar niet vóór de eerste verkoop) krijgt een link naar precies die dagen (`?periode=custom&van=…&tot=…`).
 Bewust níet: vergelijking met vorige periode (Xin: geen trends op klantsites, en bij een paar honderd verkopen bijna
 altijd ruis), "Nu leeg" (Xin: overbodig), derving, houdbaarheid. Excel en PDF blijven per vak en prijs. Een vergeten
 wachtwoord: de loginpagina mailt naar info@matoautomaat.be. De gedeelde onderdelen (`components/`, `lib/period.ts`,
