@@ -30,7 +30,7 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   `productie` het niet meer gebruikt.
 - Rol **nooit** uit vanuit de gedeelde werkmap. Op 16-10 belandde zo ongecommit werk live, en op
   18-10 stond er live code die nergens in git zat (teruggezet als `productie`, commit dcd1434).
-- **Live staat sinds 21-10-2026 `cloud/productie-release` @ e414c06** (de eigenaarsfixes, het oogje bij het
+- **Live staat sinds 21-10-2026 `cloud/productie-release` @ dd7e101** (de eigenaarsfixes, het oogje bij het
   wachtwoord en daarna alleen de camera: Live en elke betaling op camera, zie hieronder), uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
@@ -196,9 +196,19 @@ Xin: "een knop, toon mijn automaat nu, en dan zie je een snapshot". Geen video: 
   de uitbater (`getMachineCameras`). Hoe ver terug hangt af van de opslag van zijn recorder.
 - `vercel env pull` geeft geheimen terug als "[sensitive]": de sleutel testen kan alleen via de site zelf (fout →
   Vercel-logs). UniFi laat 100 vragen per minuut per console toe.
-- De klantsites (ChocaBake, Sferio, Ledoux) lezen dezelfde kolommen voor hun eigen serienummers: blok **Camera** op
-  Voorraad met "Toon mijn automaat nu" (`lib/camera.ts`, `lib/camera-machines.ts`, route `/camera/[serial]`). Hun CSP laat
-  geen blob toe, dus de foto komt als `<img src="/camera/…">`. Op 20-10 gebouwd en gecommit, nog **niet live** op de klantsites.
+- **Meer camera's per automaat** (21-10-2026): tabel `machine_cameras` (machine_id, console_id, camera_id, name, position;
+  RLS aan, alleen de servicerol; toevoegend). De kolommen `machines.unifi_*` houden alleen nog de eerste camera bij. In MATO
+  Info vink je bij Instellingen één of meer camera's aan (`setMachineCameras`), kies je in het camerablok welke, en geeft het
+  icoontje bij een betaling een lijstje als er meer zijn (`RecordingLink`). `/api/camera/[machineId]?camera=` geeft alleen een
+  camera van die automaat.
+- **Klantsites (live sinds 21-10-2026):** elke site ziet alleen de camera's van haar eigen automaten (`CAMERA_MACHINES` →
+  `machine_cameras` via het serienummer; `lib/camera.ts`). Xin: Ledoux "Brood & drank" (broodautomaat) en 7 en 8 (Sferio),
+  Sferio 7 en 8, ChocaBake 5 en 6 — dat volgt vanzelf als Xin ze in MATO Info (Mato Vending) aan die automaten koppelt. Op
+  Voorraad het blok **Camera**: camera kiezen, Toon mijn automaat nu, Live (3 s, max. een minuut), Stop met kijken/Sluiten;
+  `/camera/[camera]` weigert elke camera die niet van hen is (getest: Diksmuide → 502) en deelt een foto 2,5 s tussen wie
+  tegelijk kijkt. In Laatste verkopen het camera-icoontje per verkoop (op automaatnaam), naar UniFi Protect met hun eigen
+  UniFi-login. CSP laat geen blob toe: de foto is `<img src="/camera/…">`. Tekst op donkere knoppen in `--card` (Ledoux kent
+  geen `--bg`).
 
 ## Ledoux (aparte site, zelfde databank)
 https://ledoux.matoautomaat.be (Vercel-project `ledoux`; ledoux-peach.vercel.app stuurt door) is het verkoopoverzicht van Delfien (Ledoux
