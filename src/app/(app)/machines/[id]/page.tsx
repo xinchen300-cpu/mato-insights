@@ -24,7 +24,7 @@ import {
   getRefillHistory,
   getSlotShelfLife,
   getStatsReport,
-  getMachineCamera,
+  getCamerasOf,
 } from "@/lib/data";
 import { toFrontRows } from "@/lib/layout";
 import { mediaUrl } from "@/lib/media";
@@ -116,7 +116,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   const refillHref = operator ? `/refill/machines/${id}?from=machine` : `/machines/${id}/refill`;
   // The UniFi camera aimed at it, where this organisation has one: the operator's alone (lib/unifi.ts).
   const cameraReady = operator && camerasEnabled(orgId);
-  const camera = cameraReady ? await getMachineCamera(orgId, id) : null;
+  const cameras = cameraReady ? await getCamerasOf(orgId, id) : [];
   // On a shared fridge a shop picks products for its own slots only.
   const ownSlots = shared ? await getOwnSelections(orgId, id) : null;
   const ownerIds = [machine.business_id, machine.shared_business_id].filter((id): id is string => Boolean(id));
@@ -219,7 +219,13 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
           )}
         </section>
 
-        {camera && <MachineCamera machineId={id} machineName={machine.name} />}
+        {cameras.length > 0 && (
+          <MachineCamera
+            machineId={id}
+            machineName={machine.name}
+            cameras={cameras.map((camera, i) => ({ id: camera.cameraId, name: camera.name ?? `${m.machines.cameraUnnamed} ${i + 1}` }))}
+          />
+        )}
 
         {!tracksStock ? (
           <p className="rounded-2xl bg-surface px-5 py-4 text-[14px] text-muted-foreground sm:px-6">
@@ -327,7 +333,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
           </section>
         )}
 
-        <TerminalPanel machine={machine} health={health.get(id)} payments={payments} camera={camera} m={m} f={f} />
+        <TerminalPanel machine={machine} health={health.get(id)} payments={payments} cameras={cameras} m={m} f={f} />
 
         {tracksStock && recentHistory.length > 0 && (
           <Section title={m.machines.history}>
@@ -373,7 +379,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
             </summary>
             <div className="flex flex-col gap-8 border-t border-border px-5 pb-6 pt-5 sm:px-6">
               <MachinePhotoForm machineId={machine.id} photoPath={machine.photo_path} />
-              {cameraReady && <MachineCameraForm machineId={machine.id} linked={camera} />}
+              {cameraReady && <MachineCameraForm machineId={machine.id} linked={cameras} />}
               <MachineDetailsForm machine={machine} businesses={operator ? businesses : []} operator={operator} rentsToBusinesses={rents} />
             </div>
           </details>

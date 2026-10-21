@@ -11,7 +11,7 @@ import { shareIsReal } from "@/lib/stats";
 import { terminalStatus } from "@/lib/terminal-status";
 import { cn } from "@/lib/utils";
 import { RecordingLink } from "@/components/recording-link";
-import { recordingUrl, type CameraRef } from "@/lib/camera-link";
+import type { LinkedCamera } from "@/lib/camera-link";
 import type { Machine, PaymentEntry, PaymentHealth } from "@/lib/types";
 
 // Above this share of payments breaking off, the machine or its connection
@@ -40,15 +40,15 @@ export function TerminalPanel({
   machine,
   health,
   payments,
-  camera = null,
+  cameras = [],
   m,
   f,
 }: {
   machine: Machine;
   health: PaymentHealth | undefined;
   payments: PaymentEntry[];
-  /** Its UniFi camera, for the operator: each payment opens its recording. */
-  camera?: CameraRef | null;
+  /** Its UniFi cameras, for the operator: each payment opens its recording. */
+  cameras?: LinkedCamera[];
   m: Messages;
   f: Formatters;
 }) {
@@ -184,12 +184,12 @@ export function TerminalPanel({
                       }
                     />
                   </div>
-                  {camera && (
-                    <RecordingLink
-                      href={recordingUrl(camera, payment.occurred_at)}
-                      label={fmt(m.machines.cameraWatchAt, { time: f.time(payment.occurred_at) })}
-                    />
-                  )}
+                  <RecordingLink
+                    cameras={cameras}
+                    at={payment.occurred_at}
+                    label={fmt(m.machines.cameraWatchAt, { time: f.time(payment.occurred_at) })}
+                    unnamed={m.machines.cameraUnnamed}
+                  />
                 </li>
               );
             })}
