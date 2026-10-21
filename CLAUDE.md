@@ -207,7 +207,7 @@ Xin: "een knop, toon mijn automaat nu, en dan zie je een snapshot". Geen video: 
   camera van die automaat.
 - **Klantsites (live sinds 21-10-2026):** elke site ziet alleen de camera's van haar eigen automaten (`CAMERA_MACHINES` →
   `machine_cameras` via het serienummer; `lib/camera.ts`). Xin: Ledoux "Brood & drank" (broodautomaat) en 7 en 8 (Sferio),
-  Sferio 7 en 8, ChocaBake 5 en 6 — dat volgt vanzelf als Xin ze in MATO Info (Mato Vending) aan die automaten koppelt. Op
+  Sferio 7 en 8, ChocaBake 5 en 6 — Xin koppelde ze op 21-10 in MATO Info (Mato Vending: Brood "Automaat brood & drank", SFERIO "Automaat 7 & 8", ChocaBake "Automaat 5&6"); echte foto's getest, 640×360. Op
   Voorraad het blok **Camera**: camera kiezen, Toon mijn automaat nu, Live (3 s, max. een minuut), Stop met kijken/Sluiten;
   `/camera/[camera]` weigert elke camera die niet van hen is (getest: Diksmuide → 502) en deelt een foto 2,5 s tussen wie
   tegelijk kijkt. In Laatste verkopen het camera-icoontje per verkoop (op automaatnaam), naar UniFi Protect met hun eigen
