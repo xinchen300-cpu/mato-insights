@@ -263,6 +263,8 @@ export const fr: Messages = {
     cameraLiveStop: "Arrêter de regarder",
     cameraLiveHint: "Une nouvelle photo toutes les 3 secondes. S'arrête d'elle-même après une minute.",
     cameraLiveAt: "En direct · {time}",
+    cameraFullscreen: "Plein écran",
+    cameraFullscreenClose: "Quitter le plein écran",
     cameraWatchAt: "Voir l'enregistrement de {time} dans UniFi Protect",
     businessSecond: "Deuxième commerce",
     sharedSlotsHint: "Dans l'agencement, choisissez les rangées ou cases du deuxième commerce. Le reste compte pour le premier.",

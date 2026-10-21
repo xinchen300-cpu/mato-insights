@@ -263,6 +263,8 @@ export const en = {
     cameraLiveStop: "Stop watching",
     cameraLiveHint: "A new photo every 3 seconds. Stops by itself after a minute.",
     cameraLiveAt: "Live · {time}",
+    cameraFullscreen: "Full screen",
+    cameraFullscreenClose: "Exit full screen",
     cameraWatchAt: "Watch the recording at {time} in UniFi Protect",
     businessSecond: "Second business",
     sharedSlotsHint: "In the layout, choose which rows or slots belong to the second business. Everything else counts for the first.",
