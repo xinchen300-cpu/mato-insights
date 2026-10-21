@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { ArrowRight, ChartNoAxesColumn, ChevronRight, Download, Link2, TriangleAlert } from "lucide-react";
+import { ArrowRight, ChartNoAxesColumn, ChevronRight, Link2, TriangleAlert } from "lucide-react";
 import { BarList } from "@/components/charts/bar-list";
 import { HourChart } from "@/components/charts/hour-chart";
 import { RevenueChart } from "@/components/charts/revenue-chart";
@@ -8,7 +8,6 @@ import { KpiHero, MiniStat } from "@/components/kpi";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { EmptyState, PageHeader, Panel, Section } from "@/components/page-header";
 import { StatsGuide } from "@/components/stats-guide";
-import { buttonVariants } from "@/components/ui/button";
 import { fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import Link from "next/link";
@@ -29,6 +28,7 @@ import {
 } from "@/lib/stats";
 import { compareLabelKey, parseStatsParams, type StatsSearchParams } from "@/lib/stats-params";
 import type { StatsReport } from "@/lib/types";
+import { ExportMenu } from "./export-menu";
 import { FillerSales } from "./filler-sales";
 import { LeastPerMachine } from "./least-per-machine";
 import { MonthlyOverview, MonthlySkeleton } from "./monthly";
@@ -128,6 +128,28 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
     Object.entries({ period, from, to, business, machine, product }).filter(([, v]) => v) as [string, string][],
   );
 
+  // Statistics → Exporteren: the period shown, by name, and the other filters kept as they are.
+  const today = reportDay(new Date(), report.timezone);
+  const wholeMonth =
+    filters.period === "custom" && from && to && from.endsWith("-01") && to.slice(0, 7) === from.slice(0, 7) && reportDay(new Date(`${to}T12:00:00Z`).getTime() + 86_400_000, "UTC").endsWith("-01");
+  const shownLabel =
+    filters.period !== "custom"
+      ? m.periods[filters.period]
+      : wholeMonth
+        ? f.monthLongYear(from.slice(0, 7))
+        : `${f.dayMonth(`${from}T12:00:00Z`)} – ${f.dayMonth(`${to}T12:00:00Z`)}`;
+  const keepParams = new URLSearchParams(
+    Object.entries({ business, machine, product }).filter(([, v]) => v) as [string, string][],
+  );
+  const keepLabel =
+    [
+      business ? businesses.find((b) => b.id === business)?.name : null,
+      machine ? machineNames.get(machine) : null,
+      product ? products.find((p) => p.id === product)?.name : null,
+    ]
+      .filter(Boolean)
+      .join(" · ") || null;
+
   const monthly = (
     <Suspense fallback={<MonthlySkeleton />}>
       <MonthlyOverview
@@ -145,10 +167,14 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
       <PageHeader
         title={m.stats.title}
         actions={
-          <a href={`/statistics/csv?${exportParams}`} className={buttonVariants({ variant: "outline" })}>
-            <Download />
-            {m.stats.export}
-          </a>
+          <ExportMenu
+            shown={{ period: filters.period, from: filters.period === "custom" ? from : null, to: filters.period === "custom" ? to : null }}
+            shownLabel={shownLabel}
+            keep={keepParams.toString()}
+            keepLabel={keepLabel}
+            firstDay={report.first_sale ? reportDay(report.first_sale, report.timezone) : today}
+            today={today}
+          />
         }
       />
 

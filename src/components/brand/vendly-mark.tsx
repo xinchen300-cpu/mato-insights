@@ -26,21 +26,28 @@ export function VendlyMark({ className }: { className?: string }) {
   );
 }
 
-/** [mato info]: the logo. The words take the text colour; the brackets stay gold. */
-export function VendlyWordmark({ className }: { className?: string }) {
+/**
+ * [mato info]: the logo. The words take the text colour; the brackets stay gold. An organisation with a name of
+ * its own for the app gets that name between the brackets (the demo account: [mato]), the closing bracket moved up.
+ */
+export function VendlyWordmark({ className, name = "MATO Info" }: { className?: string; name?: string }) {
+  const label = name.toLowerCase();
+  // "mato info" is 179 wide: about 19.9 per letter, so the brackets sit as close to a shorter name.
+  const width = label === "mato info" ? 179 : Math.round(label.length * 19.9);
+  const right = 46 + width;
   return (
-    <svg viewBox="4 16 239 58" role="img" aria-label="MATO Info" className={className ?? "h-[30px] w-auto text-brand-ink"}>
+    <svg viewBox={`4 16 ${right + 10} 58`} role="img" aria-label={name} className={className ?? "h-[30px] w-auto text-brand-ink"}>
       <path d="M22,20 L8,20 L8,70 L22,70" fill="none" stroke={GOLD} strokeWidth="4.6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M225,20 L239,20 L239,70 L225,70" fill="none" stroke={GOLD} strokeWidth="4.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={`M${right},20 L${right + 14},20 L${right + 14},70 L${right},70`} fill="none" stroke={GOLD} strokeWidth="4.6" strokeLinecap="round" strokeLinejoin="round" />
       <text
         x="34"
         y="61"
-        textLength="179"
+        textLength={width}
         lengthAdjust="spacing"
         fill="currentColor"
         style={{ fontFamily: "var(--font-inter), Inter, sans-serif", fontWeight: 600, fontSize: 42, letterSpacing: -1.26 }}
       >
-        mato info
+        {label}
       </text>
     </svg>
   );

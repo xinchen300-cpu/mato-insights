@@ -39,7 +39,7 @@ export default async function PrintRefillSheetPage({ params }: { params: Promise
       <style>{`@page { size: A4; margin: 14mm; } @media print { body { background: white; } }`}</style>
       <div className="mb-6 flex items-start justify-between gap-4 border-b pb-4">
         <div>
-          <VendlyWordmark />
+          <VendlyWordmark name={m.brand.name} />
           <h1 className="mt-5 text-[28px] font-semibold tracking-[-0.03em]">{m.refill.sheetTitle}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {fmt(m.refill.createdAt, { date: f.dateTime(sheet.created_at) })} · {fmt(m.refill.items, { count: total })}

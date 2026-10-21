@@ -68,6 +68,17 @@ export async function getSessionUser(): Promise<User | null> {
 }
 
 /**
+ * One's own account only (Profiel): anyone signed in, a filler too, sees and
+ * changes their own name and avatar there and nothing of anyone else's. Without
+ * a session, to the login.
+ */
+export async function requireSignedIn(): Promise<User> {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+  return user;
+}
+
+/**
  * Resolves what to show. Prefers the logged-in user's own membership; falls
  * back to the first organization when no one is logged in, so the app works
  * without accounts during early/solo use. A membership tied to a business
@@ -109,6 +120,22 @@ async function resolveScope(): Promise<Scope> {
 
   return { orgId: (org?.id as string) ?? null, businessId: null, role: "owner" };
 }
+
+/**
+ * The name the app goes by for this organisation, where it has one of its own (Xin, 21-10-2026: the demo
+ * account says "MATO"); null is MATO Info. Never fails a page: no session or no answer is the default.
+ */
+export const getOrgBrand = cache(async (): Promise<string | null> => {
+  try {
+    const orgId = (await getScope()).orgId;
+    if (!orgId) return null;
+    const { data } = await createAdminClient().from("organizations").select("brand_name").eq("id", orgId).maybeSingle();
+    const name = typeof data?.brand_name === "string" ? data.brand_name.trim() : "";
+    return name || null;
+  } catch {
+    return null;
+  }
+});
 
 export async function getCurrentOrgId(): Promise<string | null> {
   return (await getScope()).orgId;

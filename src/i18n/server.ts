@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { cookies, headers } from "next/headers";
-import { getSessionUser, isFiller } from "@/lib/org";
+import { getOrgBrand, getSessionUser, isFiller } from "@/lib/org";
+import { branded } from "./brand";
 import { defaultLocale, fillerLocales, isLocale, LOCALE_COOKIE, type Locale } from "./config";
 import { makeFormatters } from "./format";
 import { messages } from "./messages";
@@ -39,6 +40,6 @@ export const getLocale = cache(async (): Promise<Locale> => {
 });
 
 export const getI18n = cache(async () => {
-  const locale = await getLocale();
-  return { locale, m: messages[locale], f: makeFormatters(locale) };
+  const [locale, brand] = await Promise.all([getLocale(), getOrgBrand()]);
+  return { locale, m: branded(messages[locale], locale, brand), f: makeFormatters(locale) };
 });

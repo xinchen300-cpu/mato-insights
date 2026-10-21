@@ -647,3 +647,119 @@
     transition: none;
   }
 }
+
+/* The machines on a map (Bijvullen, 21-10-2026). Leaflet's own layers count
+   inside the map only, never above the top bar or a dialog. */
+.machine-map {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+  background: var(--muted);
+  font-family: inherit;
+}
+.machine-map .leaflet-control-attribution {
+  font-size: 10px;
+}
+.dark .machine-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88);
+}
+.dark .machine-map .leaflet-control-zoom a,
+.dark .machine-map .leaflet-control-attribution,
+.dark .machine-map .leaflet-popup-content-wrapper,
+.dark .machine-map .leaflet-popup-tip {
+  background: var(--card);
+  color: var(--foreground);
+}
+.map-pin-wrap {
+  background: none;
+  border: 0;
+}
+/* A rounded label standing on its point, in the colour of how full it is. */
+.map-pin {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, calc(-100% - 7px));
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.1;
+  white-space: nowrap;
+  color: white;
+  --pin: var(--muted-foreground);
+  background: var(--pin);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+  font-variant-numeric: tabular-nums;
+}
+.map-pin small {
+  font-size: 10.5px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+.map-pin::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-bottom: 0;
+  border-top-color: var(--pin);
+}
+.map-pin-green {
+  --pin: var(--level-full-strong);
+}
+.map-pin-orange {
+  --pin: var(--level-half-strong);
+}
+.map-pin-red {
+  --pin: var(--level-low-strong);
+}
+.map-depot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--background);
+  background: var(--foreground);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+}
+.map-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 180px;
+  font-size: 13px;
+}
+.map-popup p {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+.map-popup-row {
+  display: flex;
+  flex-direction: column;
+  color: inherit !important;
+  text-decoration: none;
+}
+.map-popup-row strong {
+  font-size: 14px;
+}
+.map-popup-row span,
+.map-popup-nav {
+  font-weight: 600;
+  color: var(--gold-ink, inherit);
+}
+.map-popup-nav {
+  text-decoration: none;
+}

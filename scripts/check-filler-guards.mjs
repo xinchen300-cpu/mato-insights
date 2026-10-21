@@ -4,7 +4,8 @@
 // this check fails the run instead of trusting memory. Run: npm run check:guards
 //
 // 1. Pages and routes: denyFiller() or requireRefillAccess() as the first thing
-//    awaited (awaiting params, searchParams, isFiller() or translations first is fine).
+//    awaited (awaiting params, searchParams, isFiller() or translations first is fine),
+//    or requireSignedIn() for a page about one's own account only (Profiel).
 // 2. generateMetadata that loads anything besides translations: the same.
 // 3. Server actions: every exported function calls an access check, directly or
 //    through a helper in the same file. Public actions are listed below.
@@ -30,7 +31,9 @@ const GUARDS = [
   "requireProductAccess",
   "requireSelectionAccess",
   "requireLayoutAccess",
+  "requireSignedIn",
 ];
+const PAGE_GUARDS = ["denyFiller", "requireRefillAccess", "requireSignedIn"];
 const ALLOWED_BEFORE_GUARD = /^await (params|searchParams|isFiller\(\)|getI18n\(\))/;
 
 function walk(dir) {
@@ -79,14 +82,14 @@ for (const path of files) {
   if (PUBLIC_PAGES.some((rule) => rule.test(rel))) continue;
   const source = readFileSync(path, "utf8");
   const main = source.search(/export (default async function|async function (GET|POST))/);
-  if (main < 0 || !guardsFirst(bodyAt(source, main), ["denyFiller", "requireRefillAccess"])) {
+  if (main < 0 || !guardsFirst(bodyAt(source, main), PAGE_GUARDS)) {
     problems.push(`src/app/${relative(APP, path)}: no denyFiller() / requireRefillAccess() before loading data`);
   }
   const meta = source.indexOf("export async function generateMetadata");
   if (meta >= 0) {
     const body = bodyAt(source, meta);
     const loads = [...body.matchAll(/await (\w+)\(/g)].some(([, name]) => name !== "getI18n");
-    if (loads && !guardsFirst(body, ["denyFiller", "requireRefillAccess"])) {
+    if (loads && !guardsFirst(body, PAGE_GUARDS)) {
       problems.push(`src/app/${relative(APP, path)}: generateMetadata loads data before denyFiller()`);
     }
   }

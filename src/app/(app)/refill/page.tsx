@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, ClipboardList } from "lucide-react";
+import { ChevronRight, ClipboardList, ListChecks } from "lucide-react";
 import { FiguresCard, HowItWorks } from "@/components/filler/figures";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
@@ -25,6 +25,12 @@ import { StartRound } from "./list/start-round";
 import { InstallApp } from "@/components/install-app";
 import { DeleteRounds, type DeletableRound } from "@/components/refill/delete-rounds";
 import { filledOnOpenRound, heldByOpenRound, ownRound, startable } from "@/lib/refill-start";
+import { machineMap, type MapMachine } from "@/lib/machine-map";
+import { MachineMap } from "@/components/refill/machine-map";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import type { Machine } from "@/lib/types";
+import type { GridMachine } from "@/components/filler/machine-grid";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -78,6 +84,7 @@ export default async function RefillPage() {
     const grid = gridMachines(fleet, slots, settings.route, { onRound: filledOnOpenRound(rounds) });
     const stats = fillerStats(mine, DISPLAY_TIME_ZONE);
     const name = displayName(me.data.user);
+    const map = await machineMap(mapMachines(fleet, grid), settings.depotAddress);
     // The round to do now, big at the top: one already under way first, else the newest.
     const next = rounds.find((round) => round.readyAt) ?? rounds[0] ?? null;
     return (
@@ -95,6 +102,7 @@ export default async function RefillPage() {
               machineIds={orderByRoute(choices.filter((c) => !c.note).map((c) => c.id), settings.route)}
             />
           ) : null}
+          <FillListButton m={m} />
           {/* Every open round can go, from here, always (Xin, 19-10-2026). */}
           <DeleteRounds rounds={deletable(rounds, m, f)} />
           {/* Vendly on the home screen, one tap to open (Xin, 18-10-2026). Only on a phone, until it is there or closed. */}
@@ -102,6 +110,11 @@ export default async function RefillPage() {
           {grid.length > 0 && (
             <Section title={m.refill.machinesTitle}>
               <MachineGrid machines={grid} m={m} />
+            </Section>
+          )}
+          {map.places.length > 0 && (
+            <Section title={m.machineMap.title} hint={m.machineMap.hint}>
+              <MachineMap data={map} />
             </Section>
           )}
           <LiveSold initial={sold} />
@@ -171,6 +184,8 @@ export default async function RefillPage() {
   }
   const shortList = [...shortByProduct.values()].sort((a, b) => b.units - a.units);
   const machineName = new Map(machines.map((mc) => [mc.id, mc.name]));
+  // Every machine of the owner's on the map, with how full it is where it is counted.
+  const map = operator ? await machineMap(mapMachines(machines, ownerGrid), ownerSettings?.depotAddress ?? null) : null;
 
   // Bijvullen is about the rounds: a new one, the ones out now, and what each came to.
   return (
@@ -183,6 +198,7 @@ export default async function RefillPage() {
         ) : (
           operator && start.ids.length > 0 && <StartRound big fill label={m.refill.beginFilling} machineIds={start.ids} />
         )}
+        {operator && <FillListButton m={m} />}
         <LiveRounds rounds={openRounds.filter((round) => round.id !== own?.id)} />
         <DeleteRounds rounds={deletable(openRounds, m, f)} />
         {ownerGrid.length > 0 && (
@@ -201,6 +217,11 @@ export default async function RefillPage() {
               <MachinePicker machines={ownerChoices} canOrder fill />
             </div>
           </details>
+        )}
+        {map && map.places.length > 0 && (
+          <Section title={m.machineMap.title} hint={m.machineMap.hint}>
+            <MachineMap data={map} />
+          </Section>
         )}
         {!operator && <p className="max-w-[60ch] px-1 text-[15px] text-muted-foreground">{m.refill.operatorOnly}</p>}
 
@@ -244,6 +265,29 @@ export default async function RefillPage() {
       </div>
     </>
   );
+}
+
+/** Everything to take for the machines that need something, together and per machine (Xin, 21-10-2026). */
+function FillListButton({ m }: { m: Awaited<ReturnType<typeof getI18n>>["m"] }) {
+  return (
+    <Link href="/refill/list" className={cn(buttonVariants({ size: "lg", variant: "outline" }), "h-14 w-full justify-start gap-3 px-4 text-[16px]")}>
+      <ListChecks className="size-5" />
+      {m.fillList.open}
+      <ChevronRight className="ml-auto size-5 text-muted-foreground" aria-hidden="true" />
+    </Link>
+  );
+}
+
+/** The machines as the map shows them: name, address, and the fill their tile shows. */
+function mapMachines(machines: Machine[], grid: GridMachine[]): (MapMachine & { address: string | null })[] {
+  const tiles = new Map(grid.map((tile) => [tile.id, tile]));
+  return machines.map((mc) => ({
+    id: mc.id,
+    name: mc.name,
+    address: mc.address,
+    fill: tiles.get(mc.id)?.fill ?? null,
+    onRound: tiles.get(mc.id)?.onRound ?? false,
+  }));
 }
 
 /** Rounds started but not finished: tap to carry on filling. */
