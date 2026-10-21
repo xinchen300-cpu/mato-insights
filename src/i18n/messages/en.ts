@@ -265,6 +265,7 @@ export const en = {
     cameraFullscreenClose: "Exit full screen",
     cameraWatchAt: "Watch the recording at {time} in UniFi Protect",
     cameraOnComputer: "To watch a payment back on camera, use a computer.",
+    cameraOnlyComputer: "This recording can only be watched on a computer.",
     businessSecond: "Second business",
     sharedSlotsHint: "In the layout, choose which rows or slots belong to the second business. Everything else counts for the first.",
     secondBusinessHint: "Only when two businesses share this machine's slots.",

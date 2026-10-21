@@ -265,6 +265,7 @@ export const fr: Messages = {
     cameraFullscreenClose: "Quitter le plein écran",
     cameraWatchAt: "Voir l'enregistrement de {time} dans UniFi Protect",
     cameraOnComputer: "Revoir un paiement sur caméra se fait sur un ordinateur.",
+    cameraOnlyComputer: "Cet enregistrement ne se regarde que sur un ordinateur.",
     businessSecond: "Deuxième commerce",
     sharedSlotsHint: "Dans l'agencement, choisissez les rangées ou cases du deuxième commerce. Le reste compte pour le premier.",
     secondBusinessHint: "Seulement si deux commerces partagent les cases de ce distributeur.",
