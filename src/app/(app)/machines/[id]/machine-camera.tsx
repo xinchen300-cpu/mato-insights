@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, Radio, RefreshCw, Square, X } from "lucide-react";
+import { Camera, Maximize2, Minimize2, Radio, RefreshCw, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { useI18n } from "@/i18n/client";
@@ -34,6 +34,9 @@ export function MachineCamera({
   const [shot, setShot] = useState<{ url: string; at: Date } | null>(null);
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
   const [live, setLive] = useState(false);
+  // Full screen (Xin, 21-10-2026): the photo as big as the screen, Live going on in it.
+  const [full, setFull] = useState(false);
+  const overlay = useRef<HTMLDivElement>(null);
   const url = useRef<string | null>(null);
   const liveRun = useRef(0);
   const timer = useRef<number | null>(null);
@@ -45,8 +48,14 @@ export function MachineCamera({
     setLive(false);
   }
 
+  function leaveFull() {
+    setFull(false);
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+  }
+
   /** Done looking (Xin, 21-10-2026): no more photos, and the camera block back to its button. */
   function close() {
+    leaveFull();
     stopLive();
     if (url.current) URL.revokeObjectURL(url.current);
     url.current = null;
@@ -60,6 +69,25 @@ export function MachineCamera({
     chosen.current = id;
     setSelected(id);
   }
+
+  // Where the browser allows it, really full screen; an iPhone only does that for video, so there the black
+  // layer fills the window. Leaving the browser's full screen (a swipe, Esc) leaves ours too.
+  useEffect(() => {
+    if (!full) return;
+    const element = overlay.current;
+    if (element?.requestFullscreen && !document.fullscreenElement) void element.requestFullscreen().catch(() => undefined);
+    const onChange = () => !document.fullscreenElement && setFull(false);
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setFull(false);
+    const scroll = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.addEventListener("fullscreenchange", onChange);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = scroll;
+      document.removeEventListener("fullscreenchange", onChange);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [full]);
 
   // Leaving the page or the app stops the photos; the blob goes with the page.
   useEffect(() => {
@@ -106,6 +134,9 @@ export function MachineCamera({
   }
 
   const loading = state === "loading";
+  const alt = fmt(m.machines.cameraAlt, {
+    name: cameras.length > 1 ? `${machineName}, ${cameras.find((c) => c.id === selected)?.name ?? ""}` : machineName,
+  });
   const status = live
     ? shot
       ? fmt(m.machines.cameraLiveAt, { time: f.timeSeconds(shot.at) })
@@ -172,14 +203,55 @@ export function MachineCamera({
           {m.machines.cameraError}
         </p>
       )}
-      {shot && (
-        // A blob from this page, not a file Next could optimise.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={shot.url}
-          alt={fmt(m.machines.cameraAlt, { name: cameras.length > 1 ? `${machineName}, ${cameras.find((c) => c.id === selected)?.name ?? ""}` : machineName })}
-          className={`mt-4 w-full rounded-xl bg-surface object-contain transition-opacity ${loading && !live ? "opacity-60" : ""}`}
-        />
+      {shot && !full && (
+        <div className="relative mt-4">
+          {/* A blob from this page, not a file Next could optimise. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={shot.url}
+            alt={alt}
+            onClick={() => setFull(true)}
+            className={`w-full cursor-zoom-in rounded-xl bg-surface object-contain transition-opacity ${loading && !live ? "opacity-60" : ""}`}
+          />
+          <button
+            type="button"
+            onClick={() => setFull(true)}
+            aria-label={m.machines.cameraFullscreen}
+            title={m.machines.cameraFullscreen}
+            className="absolute right-2 top-2 grid size-10 place-items-center rounded-full bg-black/55 text-white backdrop-blur-sm hover:bg-black/70"
+          >
+            <Maximize2 className="size-[18px]" />
+          </button>
+        </div>
+      )}
+      {shot && full && (
+        <div ref={overlay} role="dialog" aria-modal="true" aria-label={alt} className="fixed inset-0 z-[100] flex flex-col bg-black text-white">
+          <div className="flex items-center gap-3 px-4 pb-2 pt-[max(12px,env(safe-area-inset-top))]">
+            <p className="flex min-w-0 flex-1 items-center gap-2 text-[14px] font-semibold">
+              {live && <span className="size-2 shrink-0 animate-pulse rounded-full bg-negative" aria-hidden="true" />}
+              <span className="truncate">{status}</span>
+            </p>
+            {live && (
+              <button type="button" onClick={close} className="h-10 rounded-full bg-white/15 px-4 text-[14px] font-semibold hover:bg-white/25">
+                {m.machines.cameraLiveStop}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={leaveFull}
+              aria-label={m.machines.cameraFullscreenClose}
+              title={m.machines.cameraFullscreenClose}
+              className="grid size-10 place-items-center rounded-full bg-white/15 hover:bg-white/25"
+            >
+              <Minimize2 className="size-[18px]" />
+            </button>
+          </div>
+          {/* Tapping the photo closes full screen as well. */}
+          <div className="flex min-h-0 flex-1 items-center justify-center pb-[env(safe-area-inset-bottom)]" onClick={leaveFull}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={shot.url} alt={alt} className="max-h-full max-w-full object-contain" />
+          </div>
+        </div>
       )}
     </section>
   );
