@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Camera, Maximize2, Minimize2, Radio, RefreshCw, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
@@ -270,35 +271,40 @@ export function MachineCamera({
           </button>
         </div>
       )}
-      {shot && full && (
-        <div ref={overlay} role="dialog" aria-modal="true" aria-label={alt} className="fixed inset-0 z-[100] flex flex-col bg-black text-white">
-          <div className="flex items-center gap-3 px-4 pb-2 pt-[max(12px,env(safe-area-inset-top))]">
-            <p className="flex min-w-0 flex-1 items-center gap-2 text-[14px] font-semibold">
-              {live && <span className="size-2 shrink-0 animate-pulse rounded-full bg-negative" aria-hidden="true" />}
-              <span className="truncate">{status}</span>
-            </p>
-            {live && (
-              <button type="button" onClick={close} className="h-10 rounded-full bg-white/15 px-4 text-[14px] font-semibold hover:bg-white/25">
-                {m.machines.cameraLiveStop}
+      {/* In the body, not in the page: the page's arrival animation (template.tsx) holds anything fixed inside it to
+          the page's own size, under the top bar and the tab bar (Xin, 22-10-2026: "not covering the screen"). */}
+      {shot &&
+        full &&
+        createPortal(
+          <div ref={overlay} role="dialog" aria-modal="true" aria-label={alt} className="fixed inset-0 z-[100] flex flex-col bg-black text-white">
+            <div className="flex items-center gap-3 px-4 pb-2 pt-[max(12px,env(safe-area-inset-top))]">
+              <p className="flex min-w-0 flex-1 items-center gap-2 text-[14px] font-semibold">
+                {live && <span className="size-2 shrink-0 animate-pulse rounded-full bg-negative" aria-hidden="true" />}
+                <span className="truncate">{status}</span>
+              </p>
+              {live && (
+                <button type="button" onClick={close} className="h-10 rounded-full bg-white/15 px-4 text-[14px] font-semibold hover:bg-white/25">
+                  {m.machines.cameraLiveStop}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={leaveFull}
+                aria-label={m.machines.cameraFullscreenClose}
+                title={m.machines.cameraFullscreenClose}
+                className="grid size-10 place-items-center rounded-full bg-white/15 hover:bg-white/25"
+              >
+                <Minimize2 className="size-[18px]" />
               </button>
-            )}
-            <button
-              type="button"
-              onClick={leaveFull}
-              aria-label={m.machines.cameraFullscreenClose}
-              title={m.machines.cameraFullscreenClose}
-              className="grid size-10 place-items-center rounded-full bg-white/15 hover:bg-white/25"
-            >
-              <Minimize2 className="size-[18px]" />
-            </button>
-          </div>
-          {/* Tapping the photo closes full screen as well. */}
-          <div className="flex min-h-0 flex-1 items-center justify-center pb-[env(safe-area-inset-bottom)]" onClick={leaveFull}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={shot.url} alt={alt} className="max-h-full max-w-full object-contain" />
-          </div>
-        </div>
-      )}
+            </div>
+            {/* Tapping the photo closes full screen as well. */}
+            <div className="flex min-h-0 flex-1 items-center justify-center pb-[env(safe-area-inset-bottom)]" onClick={leaveFull}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={shot.url} alt={alt} className="max-h-full max-w-full object-contain" />
+            </div>
+          </div>,
+          document.body,
+        )}
     </section>
   );
 }
