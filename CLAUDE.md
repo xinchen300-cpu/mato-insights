@@ -296,8 +296,13 @@ pushmeldingen (per adres) en de browseropslag van een lopende ronde meenemen.
 
 **Alle drie de klantsites (Ledoux, Sferio, ChocaBake)** hebben op Voorraad naast "Aantallen aanpassen" ook
 **Vullijst maken** (20-10-2026): één lijst per product met hoeveel erbij moet en in welke vakken (`src/lib/fill-list.ts`,
-in alle drie gelijk), niet-getelde vakken eronder, af te vinken (ook "Alles aanduiden"), te delen of kopiëren als tekst; bovenaan Voorraad "x vakken
-leeg · y stuks om alles vol te zetten". Na **Opslaan** een groen vinkje (20-10-2026, Xin: "dat ze een check mark groen
+in alle drie gelijk), niet-getelde vakken eronder, bovenaan Voorraad "x vakken leeg · y stuks om alles vol te zetten".
+**Sinds 22-10-2026 zoals in MATO Info** (Xin: "deze feature op al de sites … met delen, die mag je vervangen"): aanvinken
+wat ze meeneemt (ook "Alles aanvinken"; de vinkjes 12 u in localStorage `vullijst-vinkjes`), **✓ Automaat hervuld** zet elk
+aangevinkt vak op wat erin past als één nieuwe telling (`refill` in `stock-counter.tsx` → dezelfde `saveCounts`; Ledoux met
+`serial`, want twee automaten), met het grote groene vinkje "Hervuld · N vakken vol", en **← Terug** klapt de lijst dicht.
+Delen/Kopiëren is weg. `FillPlace.key` wijst het vak aan. Getest met verzonnen vakken in de previews (opslaan droog);
+live alleen geopend, niets hervuld. Na **Opslaan** een groen vinkje (20-10-2026, Xin: "dat ze een check mark groen
 zien"), sinds 21-10-2026 groot in het midden van het scherm zoals in MATO Info (Xin: "put this feature on the 3 client
 side too"): een kaart met een grote groene cirkel (`--full` van de site) en wit vinkje, "Opgeslagen" en "N vakken
 bijgewerkt", 2 s, een tik sluit het (`.saved-overlay`/`.saved-card` in `voorraad/stock-counter.tsx` en `globals.css`; de
