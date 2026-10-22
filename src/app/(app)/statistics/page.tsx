@@ -1,5 +1,6 @@
 import { Suspense } from "react";
-import { ArrowRight, ChartNoAxesColumn, ChevronRight, Link2, TriangleAlert } from "lucide-react";
+import { ArrowRight, ChartNoAxesColumn, ChevronRight, Link2, TriangleAlert, UsersRound } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
 import { BarList } from "@/components/charts/bar-list";
 import { HourChart, RevenueChart } from "@/components/charts/lazy";
 import { Delta } from "@/components/delta";
@@ -14,7 +15,8 @@ import { getBusinesses, getMachines, getOrgName, getPriceMismatches, getProducts
 import { withoutOrgName } from "@/lib/overview";
 import { RefillLog } from "@/components/stats/refill-log";
 import { mediaUrl } from "@/lib/media";
-import { isFiller, requireOrgId, requireRefillAccess } from "@/lib/org";
+import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
+import { camerasEnabled } from "@/lib/unifi";
 import {
   busiestWeekday,
   compareMoneySince,
@@ -79,6 +81,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
     ),
   ];
 
+  const showVisitors = camerasEnabled(orgId) && (await isOperator());
   const compare = m.periods[compareLabelKey(report.period)];
   const { totals } = report;
 
@@ -165,7 +168,15 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
       <PageHeader
         title={m.stats.title}
         actions={
-          <ExportMenu
+          <>
+            {/* Who came to the machines, from the UniFi cameras (22-10-2026): the operator's, where cameras are set up. */}
+            {showVisitors && (
+              <Link href="/statistics/visitors" className={buttonVariants({ variant: "outline" })}>
+                <UsersRound />
+                {m.visitors.link}
+              </Link>
+            )}
+            <ExportMenu
             shown={{ period: filters.period, from: filters.period === "custom" ? from : null, to: filters.period === "custom" ? to : null }}
             shownLabel={shownLabel}
             keep={keepParams.toString()}
@@ -173,6 +184,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
             firstDay={report.first_sale ? reportDay(report.first_sale, report.timezone) : today}
             today={today}
           />
+          </>
         }
       />
 

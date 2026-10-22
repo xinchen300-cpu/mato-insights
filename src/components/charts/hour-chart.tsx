@@ -2,10 +2,10 @@
 
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { useI18n } from "@/i18n/client";
-import { plural } from "@/i18n/format";
+import { fmt, plural } from "@/i18n/format";
 
-/** Money for the operator, pieces for whoever fills: a filler's hours come without revenue. */
-export type HourPoint = { hour: number; revenue?: number; units?: number };
+/** Money for the operator, pieces for whoever fills: a filler's hours come without revenue. People: visitors a day (22-10-2026). */
+export type HourPoint = { hour: number; revenue?: number; units?: number; people?: number };
 
 /**
  * Hours run left to right, the way a day reads. In money for the operator, in
@@ -18,7 +18,7 @@ export function HourChart({
 }: {
   data: HourPoint[];
   height?: number;
-  measure?: "revenue" | "units";
+  measure?: "revenue" | "units" | "people";
 }) {
   const { m, f } = useI18n();
   const full = Array.from({ length: 24 }, (_, hour) => ({
@@ -41,7 +41,11 @@ export function HourChart({
         <Tooltip
           cursor={{ fill: "var(--surface)", radius: 6 }}
           formatter={(value) => [
-            measure === "units" ? plural(Number(value), m.common.unitsOne, m.common.unitsOther) : f.euro(Number(value)),
+            measure === "units"
+              ? plural(Number(value), m.common.unitsOne, m.common.unitsOther)
+              : measure === "people"
+                ? fmt(m.visitors.perDayValue, { n: f.number(Math.round(Number(value) * 10) / 10) })
+                : f.euro(Number(value)),
             "",
           ]}
           labelFormatter={(label) => `${String(label)}:00`}

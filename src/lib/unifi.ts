@@ -62,8 +62,11 @@ type CameraJson = {
   name: string | null;
   state: string;
   type?: string | null;
-  featureFlags?: { supportFullHdSnapshot?: boolean } | null;
+  featureFlags?: { supportFullHdSnapshot?: boolean; smartDetectTypes?: string[] } | null;
+  smartDetectSettings?: { objectTypes?: string[] } | null;
 };
+
+const modelOf = (camera: CameraJson) => camera.type?.replace(/^UVC\s+/i, "").trim() || null;
 
 type Host = { id: string; reportedState?: { name?: string | null; hostname?: string | null } | null };
 
@@ -93,7 +96,7 @@ export async function listCameras(): Promise<UnifiCamera[]> {
           id: camera.id,
           name: camera.name || camera.id,
           online: camera.state === "CONNECTED",
-          model: camera.type?.replace(/^UVC\s+/i, "").trim() || null,
+          model: modelOf(camera),
           fullHd: typeof camera.featureFlags?.supportFullHdSnapshot === "boolean" ? camera.featureFlags.supportFullHdSnapshot : null,
         }));
       } catch {
@@ -151,6 +154,15 @@ async function takeCall(consoleId: string): Promise<number> {
   return used;
 }
 
+/** UniFi said "too many requests" (429): the whole console waits as long as it asks. */
+function throwIfAskedToWait(consoleId: string, res: Response) {
+  if (res.status !== 429) return;
+  const wait = retryAfterMs(res.headers.get("retry-after"));
+  WAIT_UNTIL.set(consoleId, Date.now() + wait);
+  console.error("UniFi asked to wait", { wait });
+  throw new CameraBusyError(wait);
+}
+
 export type CameraShot = {
   image: ArrayBuffer;
   type: string;
@@ -180,12 +192,7 @@ export async function cameraSnapshot(consoleId: string, cameraId: string, fullHd
     const path = protect(consoleId, `/cameras/${encodeURIComponent(cameraId)}/snapshot${sharp ? "?highQuality=true" : ""}`);
     try {
       const res = await call(path, "*/*", sharp ? 12_000 : TIMEOUT_MS);
-      if (res.status === 429) {
-        const wait = retryAfterMs(res.headers.get("retry-after"));
-        WAIT_UNTIL.set(consoleId, Date.now() + wait);
-        console.error("UniFi asked to wait", { wait });
-        throw new CameraBusyError(wait);
-      }
+      throwIfAskedToWait(consoleId, res);
       const image = await res.arrayBuffer();
       const type = res.headers.get("content-type") ?? "";
       if (res.ok && (type.startsWith("image/") || isJpeg(image))) {
@@ -219,3 +226,63 @@ export const sharedSnapshot = sharing(
   (camera: { consoleId: string; cameraId: string; fullHd: boolean | null }) => `${camera.consoleId}/${camera.cameraId}`,
   (camera) => cameraSnapshot(camera.consoleId, camera.cameraId, camera.fullHd),
 );
+
+export type ProtectCamera = {
+  id: string;
+  name: string;
+  model: string | null;
+  online: boolean;
+  /** What the camera is switched on to detect now (smartDetectSettings.objectTypes). */
+  detects: string[];
+  /** What it could detect (featureFlags.smartDetectTypes). */
+  canDetect: string[];
+};
+
+/** The cameras on one console with what each detects, for the visitors (22-10-2026). One call against its minute. */
+export async function consoleCameras(consoleId: string): Promise<ProtectCamera[]> {
+  await takeCall(consoleId);
+  const res = await call(protect(consoleId, "/cameras"));
+  throwIfAskedToWait(consoleId, res);
+  if (!res.ok) throw new Error(`UniFi cameras: ${res.status}`);
+  const cameras = (await res.json()) as CameraJson[];
+  const strings = (list: unknown) => (Array.isArray(list) ? list.filter((item): item is string => typeof item === "string") : []);
+  return cameras.map((camera) => ({
+    id: camera.id,
+    name: camera.name || camera.id,
+    model: modelOf(camera),
+    online: camera.state === "CONNECTED",
+    detects: strings(camera.smartDetectSettings?.objectTypes),
+    canDetect: strings(camera.featureFlags?.smartDetectTypes),
+  }));
+}
+
+/**
+ * The way to Protect's private API that worked on each console. The connector
+ * forwards it as /proxy/protect/api (tested by others on a live console) and
+ * possibly as /protect/api, the form the official API answers to here; the
+ * first that is not a 404 is kept for as long as this server runs.
+ */
+const PRIVATE_BASE = new Map<string, string>();
+
+/**
+ * A GET on Protect's private API, for the event history the official API does
+ * not have (22-10-2026). Through the connector with the same key, and against
+ * the console's minute like every other call. It is undocumented and a Protect
+ * update can move it, so a failure carries what UniFi answered.
+ */
+export async function protectPrivate(consoleId: string, path: string): Promise<unknown> {
+  const known = PRIVATE_BASE.get(consoleId);
+  let said = "";
+  for (const base of known ? [known] : ["/proxy/protect/api", "/protect/api"]) {
+    await takeCall(consoleId);
+    const res = await call(`/v1/connector/consoles/${encodeURIComponent(consoleId)}${base}${path}`);
+    throwIfAskedToWait(consoleId, res);
+    if (res.ok) {
+      PRIVATE_BASE.set(consoleId, base);
+      return res.json();
+    }
+    said = `${res.status} ${(await res.text()).slice(0, 200)}`;
+    if (res.status !== 404) break;
+  }
+  throw new Error(`UniFi private API: ${said}`);
+}

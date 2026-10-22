@@ -520,3 +520,67 @@ import { stopChanges } from "../src/lib/refill-flow.ts";
   const [a, b] = await Promise.all([shared("cam3"), shared("cam3")]);
   ok("share: two asking at the same moment cost one photo", a.value === b.value && fetched === 6);
 }
+
+// Visitors (22-10-2026): Protect's person detections read safely, and only honest figures said about them.
+{
+  const { eventsQuery, parseProtectEvents, EVENTS_PAGE } = await import("../src/lib/protect-events.ts");
+  const { buying, cameraCheck, hourProfile, visitDays, visitsVerdict, SEEN_FLOOR } = await import("../src/lib/visitors.ts");
+  const { standoutHours, shareInterval } = await import("../src/lib/stats.ts");
+
+  const now = Date.UTC(2026, 9, 22, 12, 0, 0);
+  // Shaped like uiprotect's sample events (Protect's private /events list).
+  const sample = [
+    { id: "a1", type: "smartDetectZone", start: now - 120_000, end: now - 60_000, score: 95, smartDetectTypes: ["person"], camera: "cam1", thumbnail: "e-a1", heatmap: "e-a1", metadata: {} },
+    { id: "a2", type: "smartDetectLine", start: now - 50_000, end: null, score: 70.4, smartDetectTypes: ["person"], camera: { id: "cam1" } },
+    { id: "a3", type: "motion", start: now - 40_000, end: now - 30_000, camera: "cam1" },
+    { id: "a4", type: "smartDetectZone", start: Math.floor((now - 20_000) / 1000), end: null, smartDetectTypes: ["person"], camera: "cam1" },
+    { id: "a5", type: "smartDetectLoiterZone", start: now - 10_000, end: now - 20_000, smartDetectTypes: ["person"], camera: "cam2" },
+    { id: "a6", type: "smartDetectZone", start: now - 5_000, end: now, smartDetectTypes: ["person"] },
+  ];
+  const parsed = parseProtectEvents(sample, now);
+  ok("protect: zone, line and loiter kept; motion, seconds and no camera dropped", parsed.events.map((e) => `${e.eventId}:${e.kind}`).join() === "a1:zone,a2:line,a5:loiter");
+  ok("protect: every item counted, to know a page was full", parsed.received === 6);
+  ok("protect: times as ISO, an end before its start is no end", parsed.events[0].startedAt === new Date(now - 120_000).toISOString() && parsed.events[2].endedAt === null);
+  ok("protect: a camera given as an object, a score rounded", parsed.events[1].cameraId === "cam1" && parsed.events[1].score === 70);
+  ok("protect: nothing of a picture is kept", !JSON.stringify(parsed.events).includes("thumbnail") && !JSON.stringify(parsed.events).includes("e-a1"));
+  ok("protect: newest start read, to carry on from", parsed.lastStart === now - 5_000);
+  ok("protect: a wrapped list and nonsense", parseProtectEvents({ data: sample.slice(0, 1) }, now).events.length === 1 && parseProtectEvents("nope", now).received === 0);
+  const query = new URLSearchParams(eventsQuery(now - 3_600_000, now, 500));
+  ok("protect: query in milliseconds, oldest first, every type named, people only",
+    query.get("start") === String(now - 3_600_000) && query.get("orderDirection") === "ASC" &&
+    query.getAll("types").join() === "smartDetectZone,smartDetectLine,smartDetectLoiterZone" &&
+    query.get("smartDetectTypes") === "person" && query.get("offset") === "500" && query.get("limit") === String(EVENTS_PAGE));
+
+  const flat = Array.from({ length: 24 }, () => 10);
+  ok("hours: an even day has no busiest or quietest hour", standoutHours(flat, 28).busiest === null && standoutHours(flat, 28).quietest === null);
+  // Three months at a busy camera: 100 visits in most hours, 400 at six in the evening, nobody at three at night.
+  const evening = Array.from({ length: 24 }, (_, hour) => (hour === 18 ? 400 : hour === 3 ? 0 : 100));
+  ok("hours: a real evening peak and an empty night are named", standoutHours(evening, 91).busiest === 18 && standoutHours(evening, 91).quietest === 3);
+  ok("hours: under a week nothing is named", standoutHours(evening, 6).busiest === null);
+  // Four weeks at a quiet camera (about 20 a day): the evening peak is real, an empty night hour is not proof yet.
+  const quiet = Array.from({ length: 24 }, (_, hour) => (hour === 18 ? 120 : hour === 3 ? 2 : 20));
+  ok("hours: at a quiet camera the night is not named yet, four times wider than chance", standoutHours(quiet, 28).busiest === 18 && standoutHours(quiet, 28).quietest === null);
+  const range = shareInterval(20, 40);
+  ok("share: 20 of 40 is a wide range, four times wider than chance", range.low < 0.25 && range.high > 0.75);
+
+  const report = { cur_start: "2026-10-15T22:00:00Z", cur_end: "2026-10-22T12:00:00Z", prev_start: "2026-10-09T08:00:00Z", timezone: "Europe/Brussels", demo: false };
+  const camera = {
+    camera_id: "cam1", visits: 100, prev_visits: 60, refilling: 3, first_event: "2026-09-01T10:00:00Z", last_event: "2026-10-22T11:00:00Z", events_24h: 14,
+    lines: 0, prev_lines: 0, loiters: 0,
+    by_day: [{ day: "2026-10-16", visits: 40 }, { day: "2026-10-22", visits: 60 }],
+    by_hour: [{ hour: 18, visits: 70 }, { hour: 12, visits: 30 }],
+    by_weekday: [{ weekday: 5, visits: 40 }, { weekday: 4, visits: 60 }],
+    duration: { n: 90, p25: 20, p50: 45, p75: 80 },
+    sales: { total: 50, seen: 48, bought: 40, attributed: 52 },
+  };
+  const days = visitDays(camera, { ...report, cameras: [camera] });
+  ok("visitors: every day of the 7, a quiet one as 0", days.length === 7 && days[0].day === "2026-10-16" && days[1].visits === 0 && days[6].visits === 60);
+  const profile = hourProfile(camera, { ...report, cameras: [camera] });
+  ok("visitors: an hour is an average per day", Math.abs(profile.perDay[18].visits - 10) < 1e-9);
+  ok("visitors: compared like sales", visitsVerdict({ ...camera, visits: 200, prev_visits: 100 }, report) === "up" && visitsVerdict(camera, report) === "noise" && visitsVerdict({ ...camera, first_event: "2026-10-12T00:00:00Z" }, report) === "new");
+  const bought = buying(camera);
+  ok("buying: 40 of 100 bought, 60 looked and left, 1.3 items each", bought.state === "ok" && bought.share === 0.4 && bought.lookedOnly === 60 && Math.abs(bought.perBuyer - 1.3) < 1e-9);
+  ok("buying: a camera that missed sales says so", buying({ ...camera, sales: { total: 50, seen: Math.floor(50 * SEEN_FLOOR) - 1, bought: 40, attributed: 40 } }).state === "missed");
+  ok("buying: too few, and no sales (a demo)", buying({ ...camera, visits: 20 }).state === "tooFew" && buying({ ...camera, sales: null }).state === "none");
+  ok("check: detection off, nobody today, fine", cameraCheck(["vehicle"], camera) === "detectionOff" && cameraCheck(["person"], { events_24h: 0 }) === "nothingToday" && cameraCheck(null, camera) === "fine");
+}

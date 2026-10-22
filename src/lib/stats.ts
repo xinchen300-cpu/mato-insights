@@ -107,7 +107,7 @@ export function reportDay(instant: string | number | Date, timeZone: string): st
 }
 
 /** Every calendar day the report covers, in its own time zone ("2026-09-21"). */
-export function periodDays(report: StatsReport): string[] {
+export function periodDays(report: Pick<StatsReport, "cur_start" | "cur_end" | "timezone">): string[] {
   const first = localDay(report.cur_start, report.timezone);
   const last = localDay(new Date(report.cur_end).getTime() - 1, report.timezone);
   const days: string[] = [];
@@ -131,7 +131,7 @@ export type WeekdayStat = { weekday: number; days: number; units: number; revenu
  * Sales per weekday as an average per such day. Totals would be unfair: a month
  * can hold five Mondays and four Sundays.
  */
-export function weekdayStats(report: StatsReport): WeekdayStat[] {
+export function weekdayStats(report: Pick<StatsReport, "cur_start" | "cur_end" | "timezone" | "by_weekday">): WeekdayStat[] {
   const days = periodDays(report);
   return [1, 2, 3, 4, 5, 6, 7].map((weekday) => {
     const count = days.filter((d) => isoWeekday(d) === weekday).length;
@@ -146,7 +146,9 @@ export function weekdayStats(report: StatsReport): WeekdayStat[] {
  * weekday seen at least MIN_WEEKS times, and its sales clearly above what an
  * ordinary day would give in the same number of days.
  */
-export function busiestWeekday(report: StatsReport): { weekday: number; pct: number } | null {
+export function busiestWeekday(
+  report: Pick<StatsReport, "cur_start" | "cur_end" | "timezone" | "by_weekday">,
+): { weekday: number; pct: number } | null {
   const stats = weekdayStats(report);
   if (stats.some((s) => s.days < MIN_WEEKS)) return null;
 
@@ -163,6 +165,41 @@ export function busiestWeekday(report: StatsReport): { weekday: number; pct: num
 
   const avgDayRevenue = stats.reduce((sum, s) => sum + s.revenue, 0) / totalDays;
   return avgDayRevenue > 0 ? { weekday: best.weekday, pct: Math.round((best.avgRevenue / avgDayRevenue - 1) * 100) } : null;
+}
+
+/** One-sided 5%/24: the busiest or quietest of 24 hours has to clear a higher bar still. */
+const Z_BEST_OF_24 = 2.86;
+
+/**
+ * The hour of the day that really draws more people than an ordinary hour, and
+ * the one that really draws fewer, if there are such hours: at least a week of
+ * days, and each judged against what an even spread over the 24 hours would
+ * give, with the bar raised for picking the most extreme of 24 (Bonferroni,
+ * like busiestWeekday). Counts per hour of the day, summed over the period.
+ */
+export function standoutHours(byHour: number[], days: number): { busiest: number | null; quietest: number | null } {
+  const total = byHour.reduce((sum, n) => sum + n, 0);
+  if (days < 7 || total < MIN_SALES * 2 || byHour.length !== 24) return { busiest: null, quietest: null };
+  const expected = total / 24;
+  const spread = Math.sqrt(DISPERSION * expected);
+  const busiest = byHour.indexOf(Math.max(...byHour));
+  const quietest = byHour.indexOf(Math.min(...byHour));
+  return {
+    busiest: (byHour[busiest] - expected) / spread >= Z_BEST_OF_24 ? busiest : null,
+    quietest: (byHour[quietest] - expected) / spread <= -Z_BEST_OF_24 ? quietest : null,
+  };
+}
+
+/**
+ * Where a share out of n most likely really lies: the same 95% interval as
+ * shareIsReal, four times wider than chance alone. A share of visitors who
+ * bought, out of 40 visits, is a wide range, and saying so is the point.
+ */
+export function shareInterval(part: number, total: number): { low: number; high: number } {
+  if (total <= 0) return { low: 0, high: 1 };
+  const share = part / total;
+  const margin = Z95 * Math.sqrt((DISPERSION * share * (1 - share)) / total);
+  return { low: Math.max(0, share - margin), high: Math.min(1, share + margin) };
 }
 
 /** The last n full weeks (Monday to Sunday) before the current one, as dates for a custom report. */

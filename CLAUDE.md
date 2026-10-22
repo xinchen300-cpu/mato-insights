@@ -273,7 +273,7 @@ Xin: "een knop, toon mijn automaat nu, en dan zie je een snapshot". Geen video: 
   enkele ziet de straat. Alle vier hangen aan **één console** (IJzerlaan 13, Diksmuide): Diksmuide (Chens), Brood,
   ChocaBake ("5&6") en SFERIO ("7 & 8"); twee camera's zien elk twee automaten. MATO Info en de drie klantsites delen dus
   één budget van 100 per minuut.
-- **Sneller en zuiniger** (22-10-2026, Xin: "faster photos, fewer failures, rate limits"; tak `cloud/camera-photo-speed`,
+- **Sneller en zuiniger** (22-10-2026, Xin: "faster photos, fewer failures, rate limits"; PR #4, op de testtak,
   nog niet live): wie binnen 2,5 s dezelfde camera vraagt, krijgt dezelfde foto (`sharedSnapshot`, per server, zoals de
   klantsites). Elke vraag aan UniFi telt in de databank: `unifi_call_take(console, 80)` op tabel `unifi_calls` (per console
   per minuut; RLS aan, alleen de servicerol; toevoegend), zodat live- en testsite samen onder de 100 blijven. De klantsites
@@ -284,14 +284,36 @@ Xin: "een knop, toon mijn automaat nu, en dan zie je een snapshot". Geen video: 
   is. `machine_cameras.full_hd` (toevoegend) onthoudt "geen full HD": bij het koppelen uit `featureFlags.supportFullHdSnapshot`,
   en zodra een camera er een weigert (`rememberNoFullHd`). Het lijstje bij Instellingen toont het model (`type`, zonder
   "UVC "). `Server-Timing: unifi;dur=…` toont hoe lang UniFi deed. Getest in `test:flow` (delen, tempo, Retry-After).
-- **Klantanalyse met de camera: studie van 22-10-2026, nog niets gebouwd.** Protect zelf geeft geen tellingen: zijn
-  persoonsdetectie komt alleen als live gebeurtenis (begin, einde, "person") op het winkelnetwerk, zonder zone, richting of
-  telling, en zonder geschiedenis in de officiële API (7.3.70). Wél sinds 7.2: `POST /v1/pos/cameras/{id}/transactions` zet
-  een verkoop (bedrag, producten) op de tijdlijn van de camera; via de connector nog niet getest. Tellen, tijd aan de automaat en
-  kijkers tegen kopers vragen een kastje bij de console (N100 + go2rtc + een Apache/MIT-detector, nooit Ultralytics/YOLOv6/v9
-  om de licentie); alleen uurtotalen verlaten de winkel. Geen leeftijdsschatting (te onnauwkeurig van boven, en AI Act
-  art. 50(3) sinds 2-8-2026). Het demo-account kan analyse niet testen (echte camera, verzonnen verkoop): test op Brood en
-  ChocaBake. Cijfers alleen als de camera ≥ 95 % van de Payter-verkopen zag, per dagdeel; conversie per 4 weken.
+- **Klantanalyse met de camera: studie van 22-10-2026.** De officiële Protect-API (7.3.70) geeft geen tellingen en geen
+  geschiedenis: persoonsdetectie alleen als live gebeurtenis op het winkelnetwerk. Wél sinds 7.2: `POST
+  /v1/pos/cameras/{id}/transactions` zet een verkoop (bedrag, producten) op de tijdlijn van de camera; via de connector nog
+  niet getest. Een kastje bij de console (N100 + go2rtc + een Apache/MIT-detector, nooit Ultralytics/YOLOv6/v9 om de licentie)
+  blijft nodig voor echte live-video, clips op de gsm en een eigen telling per persoon. Leeftijd: Xin koos "ruwe groepen + bord",
+  maar Protect kent geen leeftijd en zonder kastje zouden beelden van klanten de winkel moeten verlaten; dus nog niet gebouwd
+  (en AI Act art. 50(3) sinds 2-8-2026: iedereen inlichten). Het demo-account kan analyse niet testen (echte camera, verzonnen
+  verkoop): test op Brood en ChocaBake.
+- **Bezoekers uit Protects eigen AI** (22-10-2026, Xin: "track amount of people … how long they stay … how many purchases …
+  busiest, calmest … use the unifi ai detection … all my cameras"; tak `cloud/protect-visitors`, nog niet live). Geen kastje:
+  Protects privé-API (`/events`, de geschiedenis van detecties) gaat door dezelfde connector met dezelfde Site Manager-sleutel
+  (`protectPrivate` in `unifi.ts`: eerst `/proxy/protect/api`, bij een 404 `/protect/api`; ongedocumenteerd, een Protect-update
+  kan hem verschuiven). `src/lib/protect.ts` leest per console de camera's (naam, model, wat ze detecteren → `protect_cameras`)
+  en de persoonsdetecties sinds de vorige keer (`smartDetectZone` = bezoek, `smartDetectLine` = over een lijn,
+  `smartDetectLoiterZone` = bleef hangen; de eerste keer 30 dagen terug, 8 pagina's van 500 per keer, 30 min overlap) →
+  `protect_events`, alleen camera, soort en tijd (`parseProtectEvents` in `src/lib/protect-events.ts` laat beelden, heatmaps en
+  beschrijvingen vallen; 400 dagen bewaard, pg_cron `protect-events-retention`); hoe ver → `protect_sync`. Alle drie RLS aan,
+  alleen de servicerol, toevoegend. Lezen gebeurt na het openen van de pagina (`after()`, hooguit om de 5 minuten per console)
+  of met **Ophalen bij UniFi**; nog geen nachtelijke sync (de sleutel staat alleen op Vercel). **Statistieken → Bezoekers**
+  (`/statistics/visitors`, knop naast Exporteren, alleen de uitbater met camera's): per camera die naar een eigen automaat kijkt
+  (`getVisitorCameras`) bezoekers met vergelijking (`compareSince`), per dag, tijd aan de automaat (mediaan en middelste helft,
+  vanaf 30), **Kochten iets** (een Payter-verkoop op die automaat tijdens het bezoek, −20 s tot +60 s; alleen als de camera
+  ≥ 90 % van de verkopen zag, `SEEN_FLOOR`, met het 95 %-bereik `shareInterval`), stuks per koper, per uur (gemiddeld per dag;
+  drukste/rustigste uur alleen via `standoutHours`, Bonferroni voor 24) en per weekdag, en een **cameracontrole** (persoonsdetectie
+  uit, of niemand in 24 u: Protect zet hem op twee plaatsen, camera én zone, en zegt nooit welke uit staat). Bezoeken van 5 min vóór
+  tot 30 min na een refill of correctie aan die automaten tellen niet: een vuller is geen klant. Een demo-organisatie krijgt geen
+  verkoop erbij. Tellen en koppelen in `protect_visitors_report` (SQL, index `stock_events_machine_time`); wat er gezegd mag
+  worden in `src/lib/visitors.ts`; getest in `test:flow`; voorbeeld met verzonnen cijfers: `/dev/visitors`. Een bezoek is één
+  detectie van Protect: twee mensen samen kunnen één tellen, weggaan en terugkomen telt twee keer. Bewust niet: unieke personen
+  over dagen heen (herkenning is biometrie), waar mensen naar kijken (alleen welke camera, dus welke automaat).
 - **Meer camera's per automaat** (21-10-2026): tabel `machine_cameras` (machine_id, console_id, camera_id, name, position;
   RLS aan, alleen de servicerol; toevoegend). De kolommen `machines.unifi_*` houden alleen nog de eerste camera bij. In MATO
   Info vink je bij Instellingen één of meer camera's aan (`setMachineCameras`), kies je in het camerablok welke, en geeft het

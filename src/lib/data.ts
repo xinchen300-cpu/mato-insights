@@ -11,6 +11,8 @@ import { reportDay } from "@/lib/stats";
 import { productionPlan, RATE_DAYS, type ProductionLine } from "@/lib/production";
 import { camerasEnabled } from "@/lib/unifi";
 import type { LinkedCamera } from "@/lib/camera-link";
+import { readSyncStates, staleConsoles, syncProtectConsole, type SyncState } from "@/lib/protect";
+import type { VisitorsReport } from "@/lib/visitors";
 import type {
   Producer,
   RunSummaryRow,
@@ -2022,6 +2024,98 @@ export async function getMachineCameras(orgId: string): Promise<Record<string, L
   const byMachine: Record<string, LinkedCamera[]> = {};
   for (const row of (data ?? []) as unknown as CameraRow[]) (byMachine[row.machine_id] ??= []).push(toLinked(row));
   return byMachine;
+}
+
+export type VisitorCamera = {
+  consoleId: string;
+  cameraId: string;
+  name: string;
+  model: string | null;
+  /** What Protect has the camera detect now; null until the first read of its console. */
+  detects: string[] | null;
+  online: boolean | null;
+  /** This organisation's machines the camera looks at. */
+  machines: { id: string; name: string }[];
+};
+
+/**
+ * The cameras an organisation counts visitors with (22-10-2026): those aimed at
+ * its own machines, the same cameras it may look through, named as Protect
+ * names them. The operator's alone, and only where UniFi is set up for this
+ * organisation; once per request.
+ */
+export const getVisitorCameras = cache(async (orgId: string): Promise<VisitorCamera[]> => {
+  await requireOperator();
+  if (!camerasEnabled(orgId)) return [];
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("machine_cameras")
+    .select("console_id, camera_id, name, machine_id, machines!inner(name, org_id, excluded)")
+    .eq("machines.org_id", orgId)
+    .eq("machines.excluded", false)
+    .order("position")
+    .order("created_at");
+  if (error) throw new Error(error.message);
+  const rows = (data ?? []) as unknown as (CameraRow & { machines: { name: string } })[];
+  const ids = [...new Set(rows.map((row) => row.camera_id))];
+  if (!ids.length) return [];
+  const known = await admin.from("protect_cameras").select("camera_id, name, model, detects, online").in("camera_id", ids);
+  if (known.error) throw new Error(known.error.message);
+  const protect = new Map(
+    ((known.data ?? []) as { camera_id: string; name: string | null; model: string | null; detects: string[]; online: boolean | null }[]).map(
+      (row) => [row.camera_id, row],
+    ),
+  );
+  const cameras = new Map<string, VisitorCamera>();
+  for (const row of rows) {
+    const seen = protect.get(row.camera_id);
+    const camera = cameras.get(row.camera_id) ?? {
+      consoleId: row.console_id,
+      cameraId: row.camera_id,
+      name: seen?.name ?? row.name ?? row.camera_id,
+      model: seen?.model ?? null,
+      detects: seen ? seen.detects : null,
+      online: seen?.online ?? null,
+      machines: [],
+    };
+    camera.machines.push({ id: row.machine_id, name: row.machines.name });
+    cameras.set(row.camera_id, camera);
+  }
+  return [...cameras.values()];
+});
+
+/** The visitors of the organisation's cameras over the last `days` days (today included) and the same length before. */
+export async function getVisitorsReport(orgId: string, days: number): Promise<VisitorsReport | null> {
+  const cameras = await getVisitorCameras(orgId);
+  if (!cameras.length) return null;
+  const { data, error } = await createAdminClient().rpc("protect_visitors_report", {
+    target_org: orgId,
+    camera_ids: cameras.map((camera) => camera.cameraId),
+    period_days: days,
+    tz: DISPLAY_TIME_ZONE,
+  });
+  if (error) throw new Error(error.message);
+  return data as VisitorsReport;
+}
+
+/** How far the consoles of the organisation's cameras have been read from UniFi. */
+export async function getVisitorSync(orgId: string): Promise<SyncState[]> {
+  const cameras = await getVisitorCameras(orgId);
+  return readSyncStates([...new Set(cameras.map((camera) => camera.consoleId))]);
+}
+
+/**
+ * The read of the organisation's consoles that is due (or all of them, when
+ * asked), as work to run later, or null when nothing is due. Who may ask is
+ * decided here, before: the work itself needs no login, so a page can hand it
+ * to after(), where the login cannot be read.
+ */
+export async function visitorsRefresher(orgId: string, { force = false }: { force?: boolean } = {}): Promise<(() => Promise<void>) | null> {
+  const due = staleConsoles(await getVisitorSync(orgId), force);
+  if (!due.length) return null;
+  return async () => {
+    for (const consoleId of due) await syncProtectConsole(consoleId);
+  };
 }
 
 /**
