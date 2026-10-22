@@ -40,7 +40,7 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   overzicht zonder meldingen, de camera onder Net verkocht, de statistieken per maand en automaat, en een ronde die
   pas telt als hij af is, het groene vinkje na Voorraad aanpassen en het donkere thema, zie hieronder); sinds de avond van 21-10
   @ 2da6284 ook de export voor de boekhouding, Alles samen op de vullijst, Profiel, de kaart en de eigen merknaam (zie
-  "Export, vullijst, profiel en kaart"); sinds 22-10 @ a448514 de vullijst per automaat met Automaat hervuld en Terug; sinds de middag van 22-10 @ d0008cf het snellere laden op de gsm (zie "Snelheid op de gsm"); sinds 22-10 @ 0394c8a het volledig scherm van de camera dat het hele scherm vult (zonder de cameratak `cloud/camera-photo-speed`, die nog niet live is); sinds 22-10 @ 607fe6d de app-cache v4 (zie "De app-cache"). Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
+  "Export, vullijst, profiel en kaart"); sinds 22-10 @ a448514 de vullijst per automaat met Automaat hervuld en Terug; sinds de middag van 22-10 @ d0008cf het snellere laden op de gsm (zie "Snelheid op de gsm"); sinds 22-10 @ 0394c8a het volledig scherm van de camera dat het hele scherm vult (zonder de cameratak `cloud/camera-photo-speed`, die nog niet live is); sinds 22-10 @ 607fe6d de app-cache v4 (zie "De app-cache"); sinds 22-10 @ 0fb11a6 meer Payter-accounts per organisatie (zie "Payter"). Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
 
@@ -97,6 +97,21 @@ Payters `itemRef` is het selectienummer; rijen tellen per tiental (1–9, 11–1
 vakken stappen met 2. Online-status komt uit `Last Connect Date` vs `Last Disconnect Date`,
 niet uit `lastConnected` (dat is geen heartbeat). Een geweigerde betaling zit in
 `requestedAmount`, niet in `committedAmount` (dat is dan 0).
+
+**Logins per organisatie (22-10-2026).** Mato Vending en Chens Garden synchroniseren allebei met **dezelfde** login
+(domein `XIN_SEN`), elk met een eigen kopie en eigen `excluded`-keuze; Diksmuide (`APO20252200880`) en NATHALIE_SNOEP
+(`P6X20224200656`) staan in beide aan. De eigen login staat in `payter_credentials` (één per organisatie, onaangeroerd).
+**Meer Payter-accounts per organisatie** (Xin: "a second account with 2 automaten that also belongs to mato vending"):
+tabel `payter_extra_logins` (toevoegend; RLS aan, alleen de servicerol; geheim in Vault via `set_/get_/remove_payter_extra_login`,
+eigen `last_watermark`, token en `serials`). De sync (`payter-sync` v8) doet eerst de eigen logins precies zoals vroeger, dan
+elke extra login op dezelfde manier (`Login` met tabel en sleutel); een fout van een extra login draagt zijn domein ("DOMEIN: …")
+en staat in Instellingen op die rij. De terminallijst voor de kiezer voegt alle accounts samen. Instellingen → Payter → **Nog een
+Payter-account koppelen**: eerst door Payter gecontroleerd, het eigen account geweigerd, de serienummers meteen gevraagd
+(`payterTerminalSerials`), daarna naar de kiezer. Een geparkeerde terminal aanzetten spoelt alleen het account terug dat hem
+draagt (`fetchSkippedSales`), nooit de eigen login voor een terminal van een ander account (anders leest `XIN_SEN` alles opnieuw).
+Getest met een kopie van `XIN_SEN` als extra login in een wegwerp-organisatie (alles werkte; login en geheim weer weg). Over:
+organisatie "TEST tweede Payter-login (tijdelijk, wordt verwijderd)" (`807fca14-…`, geen leden, 7 gekopieerde verkopen, 2
+geparkeerde automaten): de MCP weigert gewone `delete`-opdrachten, weghalen via de SQL-editor van Supabase.
 
 ## Gits: Televend-verkoop met de hand, tot Payter er is
 Gits Chens Garden (`9e523217-1488-4e3a-a02e-9f7ad642489e`, Nieuwplaats 11 Hooglede) betaalt nog via
