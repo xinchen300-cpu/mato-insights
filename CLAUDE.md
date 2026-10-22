@@ -112,6 +112,14 @@ draagt (`fetchSkippedSales`), nooit de eigen login voor een terminal van een and
 Getest met een kopie van `XIN_SEN` als extra login in een wegwerp-organisatie (alles werkte; login en geheim weer weg). Over:
 organisatie "TEST tweede Payter-login (tijdelijk, wordt verwijderd)" (`807fca14-…`, geen leden, 7 gekopieerde verkopen, 2
 geparkeerde automaten): de MCP weigert gewone `delete`-opdrachten, weghalen via de SQL-editor van Supabase.
+**Het tweede account zelf kan (nog) niet** (22-10-2026): domein `MATO_AUTOMAAT`, login `info@matoautomaat.be`, terminals
+`APO20262000997` ("Istanbul Comines 1") en `APO20260100649` ("Mato Diksmuide Faes 6000"); geen van beide zit in wat `XIN_SEN`
+ziet. Die gebruiker meldt zich alleen aan via Payters nieuwe Keycloak-login (`auth.payter.com`, realm `payter`, client
+`mypayter-frontend`, Authorization Code + PKCE; toegangstoken 5 min, verversing 30 min). De oude `/API/Auth` (gebruikersnaam,
+wachtwoord, domein; wat de sync en het formulier gebruiken) weigert hem met "failed to authenticate", ook met het juiste domein.
+De website roept daarna dezelfde `api.mypayter.com/API/...` aan met `Authorization: Bearer <Keycloak-token>`. Bewust niet
+gebouwd: inloggen via Payters frontend-client of een headless browser vanaf de server. Weg vooruit, via Payter: `MATO_AUTOMAAT`
+zichtbaar maken voor `XIN_SEN` (dan gewoon aanzetten in de kiezer) of een API-gebruiker die met `/API/Auth` werkt.
 
 ## Gits: Televend-verkoop met de hand, tot Payter er is
 Gits Chens Garden (`9e523217-1488-4e3a-a02e-9f7ad642489e`, Nieuwplaats 11 Hooglede) betaalt nog via
