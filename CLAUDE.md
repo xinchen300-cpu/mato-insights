@@ -40,7 +40,7 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   overzicht zonder meldingen, de camera onder Net verkocht, de statistieken per maand en automaat, en een ronde die
   pas telt als hij af is, het groene vinkje na Voorraad aanpassen en het donkere thema, zie hieronder); sinds de avond van 21-10
   @ 2da6284 ook de export voor de boekhouding, Alles samen op de vullijst, Profiel, de kaart en de eigen merknaam (zie
-  "Export, vullijst, profiel en kaart"); sinds 22-10 @ f1406e6 de vullijst per automaat met Automaat hervuld. Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
+  "Export, vullijst, profiel en kaart"); sinds 22-10 @ a448514 de vullijst per automaat met Automaat hervuld en Terug. Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
 
@@ -408,7 +408,9 @@ localStorage), zodat inpakken en vullen twee bezoeken mogen zijn. **Automaat her
 van de gsm; een vol vak of een vak zonder product blijft): telt dus mee in Bijvullingen (niet "via aanpassen"), in de koelkast
 van de keuken en als nieuwe houdbaarheidsbatch. Daarna het grote groene vinkje "Hervuld · N vakken vol" (`SavedCheck`,
 `src/components/saved-check.tsx`, nu ook voor Voorraad aanpassen). Staat de automaat op een open ronde, dan blijft "Naar de
-ronde". Getest op Brugge Station van het demo-account: 87 % → 90 %, 4 vakken, 10 stuks.
+ronde". **Terug** (Xin: "er moet ook een knop zijn met terug") naast Automaat hervuld klapt de lijst dicht en houdt de
+vinkjes (ook na herladen; onder de knop dan "x van y stuks aangevinkt"). Getest op Brugge Station van het demo-account:
+87 % → 90 %, 4 vakken, 10 stuks.
 
 ## Rondes uit de cijfers gehaald (19-10-2026)
 Xin liet Alus opnieuw beginnen op niveau 1: zijn 20 oefenrondes (17–19 okt) staan in
