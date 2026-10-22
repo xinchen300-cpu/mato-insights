@@ -40,7 +40,7 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   overzicht zonder meldingen, de camera onder Net verkocht, de statistieken per maand en automaat, en een ronde die
   pas telt als hij af is, het groene vinkje na Voorraad aanpassen en het donkere thema, zie hieronder); sinds de avond van 21-10
   @ 2da6284 ook de export voor de boekhouding, Alles samen op de vullijst, Profiel, de kaart en de eigen merknaam (zie
-  "Export, vullijst, profiel en kaart"); sinds 22-10 @ a448514 de vullijst per automaat met Automaat hervuld en Terug; sinds de middag van 22-10 @ d0008cf het snellere laden op de gsm (zie "Snelheid op de gsm"); sinds 22-10 @ 0394c8a het volledig scherm van de camera dat het hele scherm vult (zonder de cameratak `cloud/camera-photo-speed`, die nog niet live is). Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
+  "Export, vullijst, profiel en kaart"); sinds 22-10 @ a448514 de vullijst per automaat met Automaat hervuld en Terug; sinds de middag van 22-10 @ d0008cf het snellere laden op de gsm (zie "Snelheid op de gsm"); sinds 22-10 @ 0394c8a het volledig scherm van de camera dat het hele scherm vult (zonder de cameratak `cloud/camera-photo-speed`, die nog niet live is); sinds 22-10 @ 607fe6d de app-cache v4 (zie "De app-cache"). Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
 
@@ -468,6 +468,16 @@ elkaar gemeten op dezelfde databank 0,96 → 0,76 s); bezet houden Statistieken 
 tik op Statistieken staan de cijfers er na 0,9–1,2 s (eerder alles samen na 1,85 s, het jaaroverzicht onderaan nog altijd
 ±2 s). Elke pagina kost ±230 ms aanmelden en layout op de server, plus de weg naar Dublin. Wat nog sneller kan maar geld
 kost: de databank van Micro naar Small (Xins keuze). De meetscripts staan niet in git.
+
+## De app-cache (`public/sw.js`, v4 sinds 22-10-2026)
+De service worker houdt alleen bestanden die nooit veranderen (`/_next/static/`, cache-first) en de eigen plaatjes
+(`isOwnPicture`: `/pwa-icon/`, `/brand/`, `/icon.svg` en precies `/machines/default.webp`); pagina's komen altijd van het
+netwerk, en data voor een pagina (`?_rsc=` of de header `RSC: 1`, wat Next vraagt bij een tik) laat hij helemaal met rust
+(`isPageData`). **Tot v4 ving de regel `startsWith("/machines/")` ook de data van elke automaatpagina**: in de app kwam een
+automaat met de voorraad, de cijfers en de code van het vorige bezoek terug (Xin, 22-10-2026: het volledig scherm van de
+camera bleef zwart na de fix). Een regel in `isOwnPicture` hoort een bestand aan te wijzen, nooit een map die ook een route
+is. Verandert hoe er bewaard wordt, verhoog dan `VERSION`: bij het activeren gaan alle oude `vendly-*`-caches weg. Getest met
+een profiel dat de oude cache had: na één bezoek alleen nog v4 en geen enkele automaatpagina bewaard.
 
 ## Rondes uit de cijfers gehaald (19-10-2026)
 Xin liet Alus opnieuw beginnen op niveau 1: zijn 20 oefenrondes (17–19 okt) staan in
