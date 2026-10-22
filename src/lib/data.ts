@@ -1962,7 +1962,7 @@ export async function requireMachineAccess(orgId: string, machineId: string): Pr
   if (!(await getMachine(orgId, machineId))) throw new Error("Not found");
 }
 
-type CameraRow = { machine_id: string; console_id: string; camera_id: string; name: string | null };
+type CameraRow = { machine_id: string; console_id: string; camera_id: string; name: string | null; full_hd?: boolean | null };
 const toLinked = (row: CameraRow): LinkedCamera => ({ consoleId: row.console_id, cameraId: row.camera_id, name: row.name });
 
 /**
@@ -1977,12 +1977,27 @@ export async function getCamerasOf(orgId: string, machineId: string): Promise<Li
   if (!camerasEnabled(orgId)) return [];
   const { data, error } = await createAdminClient()
     .from("machine_cameras")
-    .select("machine_id, console_id, camera_id, name")
+    .select("machine_id, console_id, camera_id, name, full_hd")
     .eq("machine_id", machineId)
     .order("position")
     .order("created_at");
   if (error) throw new Error(error.message);
-  return ((data ?? []) as CameraRow[]).map(toLinked);
+  return ((data ?? []) as CameraRow[]).map((row) => ({ ...toLinked(row), fullHd: row.full_hd ?? null }));
+}
+
+/**
+ * A linked camera that answered it cannot make a full HD photo (Diksmuide's,
+ * 21-10-2026), remembered with this machine's link (22-10-2026), so its next
+ * photo asks for the usual one straight away, also after a server restart.
+ */
+export async function rememberNoFullHd(orgId: string, machineId: string, cameraId: string): Promise<void> {
+  await requireMachineAccess(orgId, machineId);
+  const { error } = await createAdminClient()
+    .from("machine_cameras")
+    .update({ full_hd: false })
+    .eq("machine_id", machineId)
+    .eq("camera_id", cameraId);
+  if (error) throw new Error(error.message);
 }
 
 /**

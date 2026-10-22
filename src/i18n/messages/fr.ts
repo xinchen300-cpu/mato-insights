@@ -252,6 +252,7 @@ export const fr: Messages = {
     cameraTakenAt: "Photo de {time}",
     cameraAlt: "{name}, tel que la caméra le voit maintenant",
     cameraError: "La caméra n'a pas envoyé d'image. Est-elle allumée et en ligne ?",
+    cameraBusy: "UniFi reçoit trop de demandes en ce moment. Nouvelle photo dans {seconds} s.",
     cameraSetting: "Caméra de cet automate",
     cameraSettingHint: "Cochez les caméras UniFi dirigées vers cet automate. Rien n'est conservé : une photo n'est prise que lorsque vous touchez Voir l'automate maintenant ou En direct. Les clients qui ont leur propre site voient les caméras de leur automate.",
     cameraLinkedList: "Liées : {names}",

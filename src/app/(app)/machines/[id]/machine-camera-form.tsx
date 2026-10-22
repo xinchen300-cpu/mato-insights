@@ -33,12 +33,14 @@ export function MachineCameraForm({ machineId, linked }: { machineId: string; li
     startLoading(async () => {
       try {
         const cameras: UnifiCamera[] = await listMachineCameras();
-        // Several consoles: say which one each camera hangs on.
+        // Several consoles: say which one each camera hangs on. The model (22-10-2026) tells which camera does what.
         const consoles = new Set(cameras.map((c) => c.consoleId));
         const listed: Option[] = cameras.map((c) => ({
           consoleId: c.consoleId,
           cameraId: c.id,
-          label: [c.name, consoles.size > 1 ? c.consoleName : null, c.online ? null : m.machines.cameraOffline].filter(Boolean).join(" · "),
+          label: [c.name, c.model, consoles.size > 1 ? c.consoleName : null, c.online ? null : m.machines.cameraOffline]
+            .filter(Boolean)
+            .join(" · "),
         }));
         // A linked camera UniFi no longer lists stays visible, so it is not lost without a word.
         const missing: Option[] = linked

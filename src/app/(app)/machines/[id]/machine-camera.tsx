@@ -5,20 +5,25 @@ import { Camera, Maximize2, Minimize2, Radio, RefreshCw, Square, X } from "lucid
 import { Button } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { useI18n } from "@/i18n/client";
+import { LIVE_EVERY_MS, NEXT_HEADER } from "@/lib/camera-pace";
 
 /** "Live" (Xin, 21-10-2026; first called "Bijna live"): a new photo every few seconds, never longer than a minute. */
-const LIVE_EVERY_MS = 3_000;
 const LIVE_FOR_MS = 60_000;
+
+/** What one request for a photo gave: a photo and the wait before the next, a wait, or nothing. */
+type Taken = { kind: "photo"; every: number } | { kind: "busy"; wait: number } | { kind: "error" };
 
 /**
  * "Toon automaat nu" (Xin, 20-10-2026): a photo of this moment from the UniFi
  * camera aimed at the machine. Only on a tap, never by itself, so the camera
  * is asked only when someone looks; the photo lives in this page and is gone
  * when it closes. "Live" repeats it every few seconds for a minute, and
- * stops sooner when the page is left or a photo fails. A machine with several
- * cameras (21-10-2026) shows one at a time, picked above the buttons. On the
- * overview (21-10-2026) it carries the machine in its title, and a choice of
- * machine when more than one has a camera.
+ * stops sooner when the page is left or two photos in a row fail. Since
+ * 22-10-2026 it waits as long as the server says: longer when several people
+ * watch, and when UniFi's minute is full it says so and carries on after.
+ * A machine with several cameras (21-10-2026) shows one at a time, picked above
+ * the buttons. On the overview (21-10-2026) it carries the machine in its
+ * title, and a choice of machine when more than one has a camera.
  */
 export function MachineCamera({
   machineId,
@@ -40,7 +45,9 @@ export function MachineCamera({
   // The live loop reads the camera from here, so switching never mixes two cameras.
   const chosen = useRef(selected);
   const [shot, setShot] = useState<{ url: string; at: Date } | null>(null);
-  const [state, setState] = useState<"idle" | "loading" | "error">("idle");
+  const [state, setState] = useState<"idle" | "loading" | "error" | "busy">("idle");
+  // Seconds UniFi asked to wait (22-10-2026): the console's minute is full.
+  const [busyFor, setBusyFor] = useState(0);
   const [live, setLive] = useState(false);
   // Full screen (Xin, 21-10-2026): the photo as big as the screen, Live going on in it.
   const [full, setFull] = useState(false);
@@ -108,35 +115,60 @@ export function MachineCamera({
     };
   }, []);
 
-  async function take(): Promise<boolean> {
+  async function take(): Promise<Taken> {
     setState("loading");
     try {
       const res = await fetch(`/api/camera/${machineId}?camera=${encodeURIComponent(chosen.current)}`, { cache: "no-store" });
+      if (res.status === 429) {
+        const seconds = Math.max(1, Number(res.headers.get("Retry-After")) || 10);
+        setBusyFor(seconds);
+        setState("busy");
+        return { kind: "busy", wait: seconds * 1000 };
+      }
       if (!res.ok) throw new Error(String(res.status));
       const next = URL.createObjectURL(await res.blob());
+      // Decoded before it is shown, so Live never flashes an empty frame between two photos.
+      const image = new Image();
+      image.src = next;
+      await image.decode().catch(() => undefined);
       if (url.current) URL.revokeObjectURL(url.current);
       url.current = next;
       setShot({ url: next, at: new Date() });
       setState("idle");
-      return true;
+      return { kind: "photo", every: Math.max(LIVE_EVERY_MS, Number(res.headers.get(NEXT_HEADER)) || 0) };
     } catch {
-      setState("error");
-      return false;
+      return { kind: "error" };
     }
+  }
+
+  async function takeOne() {
+    if ((await take()).kind === "error") setState("error");
   }
 
   function startLive() {
     const run = ++liveRun.current;
     const until = Date.now() + LIVE_FOR_MS;
     setLive(true);
+    let missed = false;
     const tick = async () => {
       if (liveRun.current !== run) return;
       if (Date.now() > until || document.hidden) return stopLive();
       const started = Date.now();
-      // A camera that does not answer is not asked again and again.
-      if (!(await take())) return stopLive();
+      const taken = await take();
       if (liveRun.current !== run) return;
-      timer.current = window.setTimeout(tick, Math.max(500, LIVE_EVERY_MS - (Date.now() - started)));
+      if (taken.kind === "error") {
+        // One failed photo is tried once more; a camera that keeps failing is not asked again and again.
+        if (missed) {
+          setState("error");
+          return stopLive();
+        }
+        missed = true;
+      } else {
+        missed = false;
+      }
+      // The server's pace (slower when several people watch), UniFi's wait, or a second after a miss.
+      const wait = taken.kind === "photo" ? taken.every - (Date.now() - started) : taken.kind === "busy" ? taken.wait : 1_000;
+      timer.current = window.setTimeout(tick, Math.max(500, wait));
     };
     void tick();
   }
@@ -189,7 +221,7 @@ export function MachineCamera({
             </Button>
           ) : (
             <>
-              <Button variant={shot ? "secondary" : "default"} onClick={() => void take()} disabled={loading} className="flex-1 sm:flex-none">
+              <Button variant={shot ? "secondary" : "default"} onClick={() => void takeOne()} disabled={loading} className="flex-1 sm:flex-none">
                 {shot ? <RefreshCw className={loading ? "animate-spin" : undefined} /> : <Camera />}
                 {loading ? m.machines.cameraLoading : shot ? m.machines.cameraAgain : m.machines.cameraShow}
               </Button>
@@ -197,7 +229,7 @@ export function MachineCamera({
                 <Radio />
                 {m.machines.cameraLive}
               </Button>
-              {(shot || state === "error") && (
+              {(shot || state === "error" || state === "busy") && (
                 <Button variant="ghost" onClick={close} className="flex-1 sm:flex-none">
                   <X />
                   {m.common.close}
@@ -210,6 +242,11 @@ export function MachineCamera({
       {state === "error" && (
         <p role="alert" className="mt-3 text-sm font-medium text-negative">
           {m.machines.cameraError}
+        </p>
+      )}
+      {state === "busy" && (
+        <p role="status" className="mt-3 text-sm text-muted-foreground">
+          {fmt(m.machines.cameraBusy, { seconds: busyFor })}
         </p>
       )}
       {shot && !full && (

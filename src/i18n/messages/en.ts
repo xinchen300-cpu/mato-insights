@@ -252,6 +252,7 @@ export const en = {
     cameraTakenAt: "Photo from {time}",
     cameraAlt: "{name}, as the camera sees it now",
     cameraError: "The camera sent no picture. Is it on and online?",
+    cameraBusy: "UniFi is getting too many requests right now. New photo in {seconds} s.",
     cameraSetting: "Camera at this machine",
     cameraSettingHint: "Tick the UniFi cameras aimed at this machine. Nothing is stored: a photo is only taken when you tap Show machine now or Live. Customers with their own site see the cameras of their machine.",
     cameraLinkedList: "Linked: {names}",

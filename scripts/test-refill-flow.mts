@@ -472,3 +472,51 @@ import { stopChanges } from "../src/lib/refill-flow.ts";
   ok("revert: only what came after the last reopening", changed["m:12"] === 2);
   ok("revert: a slot put back is nothing to put back again", (changed["m:13"] ?? 0) === 0);
 }
+
+// Camera photos (22-10-2026): one photo shared per camera, Live slower as the console's minute fills,
+// and UniFi's "wait" read the way it is written.
+{
+  const { CONSOLE_BUDGET, LIVE_EVERY_MS, SHARE_MS, liveInterval, msToNextMinute, retryAfterMs, sharing } = await import("../src/lib/camera-pace.ts");
+  ok("live: a quiet minute keeps every 3 s", liveInterval(0) === LIVE_EVERY_MS && liveInterval(CONSOLE_BUDGET / 2 - 1) === LIVE_EVERY_MS);
+  ok("live: slower as the minute fills, never faster", liveInterval(CONSOLE_BUDGET / 2) > LIVE_EVERY_MS && liveInterval(CONSOLE_BUDGET) >= liveInterval(CONSOLE_BUDGET / 2));
+  ok("live: below UniFi's 100, with room for the client sites", CONSOLE_BUDGET < 100);
+  ok("next minute: from the middle of a minute", msToNextMinute(Date.UTC(2026, 9, 22, 12, 0, 45)) === 15_000);
+  ok("next minute: on the minute is a whole one", msToNextMinute(Date.UTC(2026, 9, 22, 12, 1, 0)) === 60_000);
+  const now = Date.UTC(2026, 9, 22, 12, 0, 0);
+  ok("retry-after: seconds", retryAfterMs("7", now) === 7_000);
+  ok("retry-after: an HTTP date", retryAfterMs(new Date(now + 20_000).toUTCString(), now) === 20_000);
+  ok("retry-after: nothing or nonsense waits 10 s", retryAfterMs(null, now) === 10_000 && retryAfterMs("soon", now) === 10_000 && retryAfterMs("0", now) === 10_000);
+  ok("retry-after: never more than a minute", retryAfterMs("3600", now) === 60_000);
+
+  let clock = 0;
+  let fetched = 0;
+  let failNext = false;
+  const shared = sharing(
+    (camera: string) => camera,
+    async (camera: string) => {
+      fetched += 1;
+      if (failNext) {
+        failNext = false;
+        throw new Error("no photo");
+      }
+      return `${camera}#${fetched}`;
+    },
+    () => clock,
+  );
+  const first = await shared("cam1");
+  clock = SHARE_MS - 1;
+  const second = await shared("cam1");
+  ok("share: a second viewer within 2.5 s gets the same photo", second.value === first.value && second.shared && !first.shared && fetched === 1);
+  const other = await shared("cam2");
+  ok("share: another camera is its own photo", other.value === "cam2#2" && !other.shared);
+  clock = SHARE_MS;
+  const later = await shared("cam1");
+  ok("share: Live every 3 s always gets a new photo", later.value === "cam1#3" && !later.shared);
+  clock = 10 * SHARE_MS;
+  failNext = true;
+  const failed = await shared("cam1").then(() => "photo", () => "failed");
+  const retried = await shared("cam1");
+  ok("share: a failure is never handed on", failed === "failed" && !retried.shared && retried.value === "cam1#5");
+  const [a, b] = await Promise.all([shared("cam3"), shared("cam3")]);
+  ok("share: two asking at the same moment cost one photo", a.value === b.value && fetched === 6);
+}
