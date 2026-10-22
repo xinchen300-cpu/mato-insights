@@ -1,6 +1,6 @@
 import { CalendarClock, CalendarX, Package, PackageCheck } from "lucide-react";
 import { VendlyWordmark } from "@/components/brand/vendly-mark";
-import { RevenueChart } from "@/components/charts/revenue-chart";
+import { RevenueChart } from "@/components/charts/lazy";
 import { KpiHero, MiniStat } from "@/components/kpi";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";

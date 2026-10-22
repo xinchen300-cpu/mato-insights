@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ChartColumn,
@@ -110,24 +110,31 @@ export function MobileNav({ filler = false }: { filler?: boolean }) {
               aria-current={active ? "page" : undefined}
               className={cn(
                 // Four tabs for a filler still leave room for a label that reads outdoors.
-                "flex flex-col items-center gap-1 py-2 transition-colors",
+                "flex flex-col items-center gap-1 py-2 transition-[color,transform] active:scale-95",
                 filler ? "text-[12px]" : "text-[10.5px]",
                 active ? "font-semibold text-foreground" : "font-medium text-muted-foreground",
               )}
             >
-              <span
-                className={cn(
-                  "grid h-7 w-12 place-items-center rounded-full transition-colors duration-150",
-                  active && "bg-surface",
-                )}
-              >
-                <Icon className="size-5" strokeWidth={active ? 2.25 : 1.9} aria-hidden="true" />
-              </span>
+              <TabIcon icon={Icon} active={active} />
               {m.nav[label]}
             </Link>
           );
         })}
       </div>
     </nav>
+  );
+}
+
+/**
+ * The tab lights up on the tap itself, not when the next page is in (22-10-2026, Xin: "slow and not responsive"): on
+ * a phone with a weak signal that can take a second, and a tab that did nothing looked like a missed tap.
+ */
+function TabIcon({ icon: Icon, active }: { icon: NavItem["icon"]; active: boolean }) {
+  const { pending } = useLinkStatus();
+  const lit = active || pending;
+  return (
+    <span className={cn("grid h-7 w-12 place-items-center rounded-full transition-colors duration-150", lit && "bg-surface")}>
+      <Icon className="size-5" strokeWidth={lit ? 2.25 : 1.9} aria-hidden="true" />
+    </span>
   );
 }

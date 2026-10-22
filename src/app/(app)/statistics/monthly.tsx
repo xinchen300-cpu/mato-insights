@@ -1,4 +1,4 @@
-import { MonthChart } from "@/components/charts/month-chart";
+import { MonthChart } from "@/components/charts/lazy";
 import { Delta } from "@/components/delta";
 import { Avatar, ListRow, RowList } from "@/components/list-row";
 import { Section } from "@/components/page-header";

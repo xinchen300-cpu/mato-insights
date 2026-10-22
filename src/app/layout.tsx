@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono, Montserrat } from "next/font/google";
 import { I18nProvider } from "@/i18n/client";
 import { getI18n, getLocale } from "@/i18n/server";
-import { getOrgBrand } from "@/lib/org";
 import "./globals.css";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
@@ -62,7 +61,7 @@ const APP_SCRIPT = [
 ].join("");
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const [locale, { m }, brand] = await Promise.all([getLocale(), getI18n(), getOrgBrand()]);
+  const [locale, { m }] = await Promise.all([getLocale(), getI18n()]);
 
   return (
     <html
@@ -80,7 +79,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           }}
         />
         <script dangerouslySetInnerHTML={{ __html: APP_SCRIPT }} />
-        <I18nProvider locale={locale} brand={brand}>
+        <I18nProvider locale={locale} messages={m}>
           {children}
         </I18nProvider>
         {TEST && (
