@@ -257,6 +257,40 @@ export async function correctStock(machineId: string, entries: { selection: stri
 }
 
 /**
+ * "Automaat hervuld" under a machine's own vullijst (Xin, 22-10-2026): every slot
+ * ticked as taken along is now full. Saved as a refill, not a correction, so it
+ * counts as a fill (Bijvullingen, the kitchen's fridge, a new expiry batch).
+ * What "full" is comes from the machine, never from the phone; a slot already
+ * full, or without a product, is left alone. Returns how many slots it filled.
+ */
+export async function refillFromList(machineId: string, selections: string[]): Promise<number> {
+  const orgId = await requireRefillAccess();
+  if (!/^[0-9a-f-]{36}$/i.test(machineId) || !Array.isArray(selections)) throw new Error("Not found");
+  // Empty for a machine of another organisation, or one without a layout.
+  const slots = new Map(
+    (await getMachineStock(orgId, [machineId])).filter((slot) => slot.product_id).map((slot) => [slot.selection_number, slot]),
+  );
+  if (slots.size === 0) throw new Error("Not found");
+  const entries = [...new Set(selections.map(String))].flatMap((selection) => {
+    const slot = slots.get(selection);
+    return slot && (slot.stock ?? 0) < slot.capacity ? [{ selection, level_after: slot.capacity, expires_on: null }] : [];
+  });
+  if (entries.length === 0) return 0;
+  // Measured against the stock the person saw, as Voorraad aanpassen is.
+  const { error } = await createAdminClient().rpc("record_stock_settled", {
+    target_org: orgId,
+    target_machine: machineId,
+    event_type: "refill",
+    entries,
+    filler_name: (displayName(await getSessionUser()) ?? "").slice(0, 80),
+    check_state: {},
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/", "layout");
+  return entries.length;
+}
+
+/**
  * A machine's layout as whoever fills it changes it from its refill page (Xin,
  * 17-10-2026): how many slots each row has, their numbers and the product in
  * each. Sizes and capacities stay the machine's own: a slot takes those of the

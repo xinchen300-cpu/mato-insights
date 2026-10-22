@@ -7,13 +7,14 @@ import { PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getDishes, getLastSales, getMachines, getMachineStock, getOpenRounds } from "@/lib/data";
+import { getDishes, getLastSales, getMachines, getMachineStock, getOpenRounds, getRefillPlan } from "@/lib/data";
 import { requireRefillAccess } from "@/lib/org";
+import { lineTake } from "@/lib/refill-flow";
 import { filledOnOpenRound, heldByOpenRound } from "@/lib/refill-start";
 import { bandBg, fillLevel, machineFill, machineTotals, needsAttention } from "@/lib/stock";
 import { terminalStatus } from "@/lib/terminal-status";
 import { cn } from "@/lib/utils";
-import { FillButton } from "./fill-button";
+import { FillList, type FillItem } from "./fill-list";
 import { LayoutEditor } from "./layout-editor";
 
 export async function generateMetadata() {
@@ -23,7 +24,7 @@ export async function generateMetadata() {
 
 /**
  * One machine for whoever fills it: how full it is, every slot with its stock,
- * and the button to fill it. Products and pieces only: no prices, no sales
+ * and its own vullijst to fill it from. Products and pieces only: no prices, no sales
  * figures, no money (the stock comes without prices for a filler).
  */
 export default async function FillMachinePage({
@@ -41,13 +42,15 @@ export default async function FillMachinePage({
   const fromMachine = from === "machine";
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const { m, f } = await getI18n();
-  const [machines, slots, lastSales, open, dishes] = await Promise.all([
+  const [machines, slots, lastSales, open, dishes, plan] = await Promise.all([
     getMachines(orgId),
     getMachineStock(orgId, [id]),
     getLastSales(orgId),
     getOpenRounds(orgId),
     // Null for a shared machine: its layout stays the operator's.
     getDishes(orgId, id).catch(() => null),
+    // What it misses, as the vullijst and a round count it.
+    getRefillPlan(orgId, [id]),
   ]);
   const machine = machines.find((candidate) => candidate.id === id);
   if (!machine) notFound();
@@ -62,6 +65,16 @@ export default async function FillMachinePage({
   // filled on it: it counts as filled only when that round is completed (21-10-2026), and a second round would fill it twice.
   const round = open.find((candidate) => heldByOpenRound([candidate]).has(id)) ?? null;
   const filledOnRound = filledOnOpenRound(open).has(id);
+  // One line per product, in the order its first slot comes in the machine, as in the vullijst.
+  const items = new Map<string, FillItem>();
+  for (const line of plan
+    .filter((l) => l.machine_id === id && lineTake(l) > 0)
+    .sort((a, b) => a.row_position - b.row_position || a.slot_position - b.slot_position)) {
+    const item = items.get(line.product_id) ?? { productId: line.product_id, name: line.product_name, photoPath: line.photo_path, take: 0, slots: [] };
+    item.take += lineTake(line);
+    item.slots.push({ selection: line.selection_number, take: lineTake(line) });
+    items.set(line.product_id, item);
+  }
 
   return (
     <>
@@ -103,8 +116,8 @@ export default async function FillMachinePage({
                 {m.refill.toRound}
               </Link>
             ) : (
-              // A machine without a layout has nothing to fill yet.
-              stocked.length > 0 && <FillButton machineId={id} />
+              // A machine without a layout has nothing to fill yet (Xin, 22-10-2026: a list instead of a round).
+              stocked.length > 0 && <FillList machineId={id} items={[...items.values()]} />
             )}
           </div>
         </div>
