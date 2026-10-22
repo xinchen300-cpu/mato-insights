@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Check, CircleCheck, Minus, PackagePlus, Plus, SlidersHorizontal } from "lucide-react";
+import { CircleCheck, Minus, PackagePlus, Plus, SlidersHorizontal } from "lucide-react";
 import { FrontView, StockLegend, type FrontSlot } from "@/components/machine/front-view";
+import { SavedCheck } from "@/components/saved-check";
 import { Section } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/client";
@@ -170,25 +170,9 @@ export function StockAdjust({
       {m.stock.correctionSaved}
     </p>
   );
-  const savedToast =
-    toast !== null &&
-    createPortal(
-      <div
-        aria-hidden="true"
-        onClick={() => setToast(null)}
-        className="fixed inset-0 z-50 grid place-items-center bg-black/15 p-6 duration-200 animate-in fade-in-0"
-      >
-        <div className="flex w-full max-w-xs flex-col items-center gap-5 rounded-3xl bg-card px-6 py-8 shadow-[var(--shadow-pop)] duration-300 animate-in zoom-in-75">
-          <span className="grid size-28 place-items-center rounded-full bg-positive text-white">
-            <Check className="size-16" strokeWidth={3.25} />
-          </span>
-          <p className="text-center text-[19px] font-semibold leading-snug tracking-[-0.01em]">
-            {plural(toast, m.stock.savedSlotsOne, m.stock.savedSlots)}
-          </p>
-        </div>
-      </div>,
-      document.body,
-    );
+  const savedToast = toast !== null && (
+    <SavedCheck text={plural(toast, m.stock.savedSlotsOne, m.stock.savedSlots)} onClose={() => setToast(null)} />
+  );
   const bar = editing && (
     // Clears the tab bar on phones, the iPhone's home bar included.
     <div className="surface-card sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 mt-2 flex flex-col gap-2 bg-card/95 p-3 backdrop-blur-xl lg:bottom-4">
