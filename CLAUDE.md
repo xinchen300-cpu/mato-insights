@@ -124,6 +124,11 @@ Payter (22-10-2026): `XIN_SEN` aan `MATO_AUTOMAAT` koppelen kan niet. Xin maakte
 alleen de rol **Data Api**, e-mail sales@matoautomaat.be) om via "Nog een Payter-account koppelen" te proberen. De inlogpagina
 van mypayter.com vraagt geen domein meer, `/API/Auth` (Payters Data API Manual, juni 2024) nog wel: het formulier houdt het
 vak. De hulpteksten (`domainHint`, `payterFailed`, `payterWhere`, `payterHow`) zeggen nu waar het domein staat en noemen Data Api.
+**Zo werkt het nu** (22-10-2026, 18:50): Xin maakte een subdomein **`MATO-INFO`** (gebruiker `MATO-INFO`) en zette de twee
+terminals erin; hun betaalcontract (MNP-ELA, merchant van `MATO_AUTOMAAT`) bleef. Dat is de extra login van Mato Vending
+(`321cb752-…`); de automaten heten "Istanbul Comines" (`APO20262000997`) en "Diksmuide Faes" (`APO20260100649`), met de hand
+toegevoegd (`excluded` = false). **Hun verkopen van vóór de verhuizing zitten niet in `MATO-INFO`** (Transactions telde er 0):
+die blijven in `MATO_AUTOMAAT`, dat de API niet bereikt. Inhalen kan alleen uit een export van mypayter.com.
 
 ## Gits: Televend-verkoop met de hand, tot Payter er is
 Gits Chens Garden (`9e523217-1488-4e3a-a02e-9f7ad642489e`, Nieuwplaats 11 Hooglede) betaalt nog via
