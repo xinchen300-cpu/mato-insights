@@ -180,7 +180,7 @@ export function FillList({ machineId, items }: { machineId: string; items: FillI
             })}
           </ul>
           {/* Clears the tab bar on phones, the iPhone's home bar included. */}
-          <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 -mx-1 flex flex-col gap-2 rounded-2xl bg-card/95 p-1 backdrop-blur-xl lg:bottom-4">
+          <div className="surface-card sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 flex flex-col gap-2 bg-card p-3 lg:bottom-4">
             <p className="tabular px-1 text-[14px] font-medium text-muted-foreground">
               {fmt(t.listTicked, { n: takenPieces, total })}
             </p>
