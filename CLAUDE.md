@@ -40,7 +40,7 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   overzicht zonder meldingen, de camera onder Net verkocht, de statistieken per maand en automaat, en een ronde die
   pas telt als hij af is, het groene vinkje na Voorraad aanpassen en het donkere thema, zie hieronder); sinds de avond van 21-10
   @ 2da6284 ook de export voor de boekhouding, Alles samen op de vullijst, Profiel, de kaart en de eigen merknaam (zie
-  "Export, vullijst, profiel en kaart"); sinds 22-10 @ a448514 de vullijst per automaat met Automaat hervuld en Terug; sinds de middag van 22-10 @ d0008cf het snellere laden op de gsm (zie "Snelheid op de gsm"). Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
+  "Export, vullijst, profiel en kaart"); sinds 22-10 @ a448514 de vullijst per automaat met Automaat hervuld en Terug; sinds de middag van 22-10 @ d0008cf het snellere laden op de gsm (zie "Snelheid op de gsm"); sinds 22-10 @ 0394c8a het volledig scherm van de camera dat het hele scherm vult (zonder de cameratak `cloud/camera-photo-speed`, die nog niet live is). Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
 
@@ -244,6 +244,10 @@ Xin: "een knop, toon mijn automaat nu, en dan zie je een snapshot". Geen video: 
   Waar de browser het toelaat de echte fullscreen-API, op een iPhone (kan dat alleen voor video) een zwarte laag over het venster.
   Live loopt erin door; het kruisje, Esc, op de foto tikken of Stop met kijken sluiten het. Er staat altijd maar één `<img>`,
   zodat elke foto één keer gevraagd wordt. Op de klantsites hetzelfde (`.camera-full` in `globals.css`).
+  De zwarte laag staat via `createPortal` in `<body>` (22-10-2026, Xin: "the full screen … is not covering the screen"): de
+  binnenkomst-animatie van elke pagina (`.page-enter` in `(app)/template.tsx`, animeert `transform`) houdt alles wat `fixed`
+  is erbinnen vast op de maat van de pagina, onder de bovenbalk en de tabbalk. **Elke laag over het hele scherm in een pagina
+  van `(app)` hoort in een portal naar `document.body`** (zoals `SavedCheck`, `RecordingLink`, `slot-products`).
 - Eerst wordt een scherpe foto (`highQuality=true`) gevraagd. De camera bij **Diksmuide** antwoordt "Camera does not
   support full HD snapshot" (`featureFlags.supportFullHdSnapshot` = false): dan de gewone foto, lagere kwaliteit, hoger
   kan niet via de API. `NO_FULL_HD` in `unifi.ts` onthoudt zo'n camera, zodat elke foto één vraag aan UniFi kost. De officiële API (v7.3.70) kent geen oude beelden of
