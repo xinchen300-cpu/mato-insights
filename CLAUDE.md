@@ -314,6 +314,8 @@ Xin: "een knop, toon mijn automaat nu, en dan zie je een snapshot". Geen video: 
   worden in `src/lib/visitors.ts`; getest in `test:flow`; voorbeeld met verzonnen cijfers: `/dev/visitors`. Een bezoek is één
   detectie van Protect: twee mensen samen kunnen één tellen, weggaan en terugkomen telt twee keer. Bewust niet: unieke personen
   over dagen heen (herkenning is biometrie), waar mensen naar kijken (alleen welke camera, dus welke automaat).
+  Vergelijking (22-10-2026): dezelfde uren `period_days` eerder (`prev_start` tot `prev_end`): vandaag tot nu tegenover gisteren
+  tot hetzelfde uur, niet tegenover de laatste uren van gisteren (eerst zo gebouwd; alleen de SQL-functie veranderde).
 - **Meer camera's per automaat** (21-10-2026): tabel `machine_cameras` (machine_id, console_id, camera_id, name, position;
   RLS aan, alleen de servicerol; toevoegend). De kolommen `machines.unifi_*` houden alleen nog de eerste camera bij. In MATO
   Info vink je bij Instellingen één of meer camera's aan (`setMachineCameras`), kies je in het camerablok welke, en geeft het
@@ -327,6 +329,20 @@ Xin: "een knop, toon mijn automaat nu, en dan zie je een snapshot". Geen video: 
   tegelijk kijkt. In Laatste verkopen het camera-icoontje per verkoop (op automaatnaam), naar UniFi Protect met hun eigen
   UniFi-login. CSP laat geen blob toe: de foto is `<img src="/camera/…">`. Tekst op donkere knoppen in `--card` (Ledoux kent
   geen `--bg`).
+
+## Camera Insights (apart programma, sinds 22-10-2026)
+Xin: "a separate program that's not connected to mato vending … view all the cameras on my cloudkey", met een eigen
+Payter-koppeling. Eigen repo (`xinchen300-cpu/camera-insights`, nog aan te maken door Xin), eigen Vercel-project, één eigen
+wachtwoord (`APP_PASSWORD`), Engels en Nederlands. Elke camera op elke console, foto/Live/volledig scherm en "Alle camera's nu",
+bezoekers uit Protects persoonsdetectie, eigen Payter-sync van alleen de gevolgde terminals. Deelt met MATO Info alleen de
+databank (gratis) en de UniFi-telling **`unifi_call_take`**: het stopt op 60 per minuut per console, MATO Info op 80.
+- Tabellen `ci_*` (consoles, cameras, events, sync, terminals, sales, camera_terminals, login_failures, settings) en de
+  functies `ci_visitors_report` / `ci_sales_report`: RLS aan, alleen de servicerol, toevoegend. **MATO Info leest of schrijft ze
+  nooit.** Een verblijf van 10 min of langer telt daar als "lang in beeld" (bijvullen, poetsen), niet als bezoeker.
+- pg_cron **`ci-sync`** roept elke 10 minuten `<app_url>/api/cron` aan met een geheim dat de databank zelf maakte
+  (`ci_settings.cron_secret`); zolang `ci_settings.app_url` leeg is (de app schrijft het bij het eerste bezoek op productie)
+  gebeurt er niets. Opkuis (detecties 400 dagen) doet de app zelf.
+- Een `delete` in SQL via de Supabase-MCP blijft hangen (ook in `cron.schedule`): zet zo'n opkuis in de app.
 
 ## Ledoux (aparte site, zelfde databank)
 https://ledoux.matoautomaat.be (Vercel-project `ledoux`; ledoux-peach.vercel.app stuurt door) is het verkoopoverzicht van Delfien (Ledoux
