@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { featureAllowed } from "@/lib/billing";
-import { checkPayterLogin } from "@/lib/payter-login";
+import { checkPayterLogin, payterTerminalSerials } from "@/lib/payter-login";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { denyFillerAccess, getCurrentBusinessId, getCurrentOrgId, requireOperator } from "@/lib/org";
 
@@ -51,6 +51,57 @@ export async function connectPayter(formData: FormData): Promise<PayterConnectRe
 
   revalidatePath("/settings");
   return { ok: true };
+}
+
+export type PayterAddResult = { ok: true } | { ok: false; reason: "missing" | "rejected" | "unreachable" | "same" };
+
+/**
+ * A further MyPayter account for this business (22-10-2026, Xin: a second account with two machines of Mato
+ * Vending). Checked with Payter first, as the own login is. The account the business already syncs is refused: a
+ * second copy would read every sale twice. Adding the same account code again replaces its password. Its terminals
+ * then appear in the picker, where the operator says which are theirs.
+ */
+export async function addPayterAccount(formData: FormData): Promise<PayterAddResult> {
+  const orgId = await requireOrgOwner();
+
+  const username = String(formData.get("username") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+  const domain = String(formData.get("domain") ?? "").trim();
+  if (!username || !password || !domain) return { ok: false, reason: "missing" };
+
+  const admin = createAdminClient();
+  // Only next to the business's own login, and never that same account again. Read here, on the server only.
+  const { data: own } = await admin.rpc("get_payter_credentials", { target_org: orgId });
+  if (!own) return { ok: false, reason: "missing" };
+  if (String((own as { domain?: unknown }).domain ?? "").toLowerCase() === domain.toLowerCase()) return { ok: false, reason: "same" };
+
+  const check = await checkPayterLogin(username, password, domain);
+  if (check !== "ok") return { ok: false, reason: check };
+
+  const { data: loginId, error } = await admin.rpc("set_payter_extra_login", {
+    target_org: orgId,
+    p_username: username,
+    p_password: password,
+    p_domain: domain,
+  });
+  if (error || typeof loginId !== "string") return { ok: false, reason: "unreachable" };
+
+  // Which terminals this account carries, now: claiming one in the picker then winds back this account, not the own.
+  const serials = await payterTerminalSerials(username, password, domain);
+  if (serials) await admin.from("payter_extra_logins").update({ serials }).eq("id", loginId).eq("org_id", orgId);
+
+  revalidatePath("/settings");
+  revalidatePath("/terminals");
+  return { ok: true };
+}
+
+/** No more syncing from a further Payter account; its machines and the sales already in stay. */
+export async function removePayterAccount(loginId: string): Promise<void> {
+  const orgId = await requireOrgOwner();
+  if (!/^[0-9a-f-]{36}$/i.test(loginId)) return;
+  await createAdminClient().rpc("remove_payter_extra_login", { target_org: orgId, login_id: loginId });
+  revalidatePath("/settings");
+  revalidatePath("/terminals");
 }
 
 export async function deleteTemplate(templateId: string) {
