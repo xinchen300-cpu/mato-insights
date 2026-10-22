@@ -6,7 +6,7 @@
 
 **Eigen merknaam per organisatie** (21-10-2026, Xin: "change mato info on this account to MATO"): `organizations.brand_name`
 (toevoegend; alleen het demo-account: "MATO"). `getOrgBrand` in `src/lib/org.ts`, en `branded()` in `src/i18n/brand.ts`
-vervangt "MATO Info" in alle `m`-teksten (server en client, via `I18nProvider brand`), de paginatitels en het logo
+vervangt "MATO Info" in alle `m`-teksten (op de server in `getI18n`; de client krijgt die teksten via `I18nProvider messages`), de paginatitels en het logo
 (`VendlyWordmark name`, `[mato]`; de sluitende haak volgt de gemeten letterbreedtes in `ADVANCE`). Leeg = MATO Info.
 
 **Drie dingen moeten `vendly` blijven heten, hernoemen breekt ze** (ook `vendly:hide-numbers` in localStorage hoort daarbij):
@@ -40,7 +40,7 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   overzicht zonder meldingen, de camera onder Net verkocht, de statistieken per maand en automaat, en een ronde die
   pas telt als hij af is, het groene vinkje na Voorraad aanpassen en het donkere thema, zie hieronder); sinds de avond van 21-10
   @ 2da6284 ook de export voor de boekhouding, Alles samen op de vullijst, Profiel, de kaart en de eigen merknaam (zie
-  "Export, vullijst, profiel en kaart"); sinds 22-10 @ a448514 de vullijst per automaat met Automaat hervuld en Terug. Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
+  "Export, vullijst, profiel en kaart"); sinds 22-10 @ a448514 de vullijst per automaat met Automaat hervuld en Terug; sinds de middag van 22-10 @ d0008cf het snellere laden op de gsm (zie "Snelheid op de gsm"). Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
 
@@ -416,6 +416,31 @@ van de keuken en als nieuwe houdbaarheidsbatch. Daarna het grote groene vinkje "
 ronde". **Terug** (Xin: "er moet ook een knop zijn met terug") naast Automaat hervuld klapt de lijst dicht en houdt de
 vinkjes (ook na herladen; onder de knop dan "x van y stuks aangevinkt"). Getest op Brugge Station van het demo-account:
 87 % → 90 %, 4 vakken, 10 stuks.
+
+## Snelheid op de gsm (22-10-2026)
+Xin: "the mobile version is slow and not responsive". Gemeten op live (demo-account, gsm 4× trager, 4G): elke pagina laadde
+±760 KB JavaScript, waarvan 204 KB de teksten van alle drie de talen; Statistieken hield de gsm 0,85 s bezig met recharts; het
+overzicht stuurde 24 vragen tegelijk naar de databank, die als **Micro** (de kleinste Supabase-rekenkracht) ze dan na elkaar
+afwerkt (tot 2,6–3,8 s). Wat veranderde:
+- `I18nProvider` krijgt de teksten van één taal van de server (`layout.tsx` → `getI18n`, al met `branded()`), en importeert
+  `messages/*` niet meer. **Nooit `messages` als waarde in een client-bestand importeren** (alleen `import type`): dat zet
+  alle drie de talen weer in elke pagina. Een client-component leest teksten met `useI18n()`.
+- `getOrgBrand` onthoudt de merknaam 5 minuten per organisatie (per serverinstantie): een nieuwe `brand_name` staat er dus
+  pas binnen 5 minuten overal. `getMachines` is per verzoek ontdubbeld met `cache()`.
+- Overzicht: het rapport van 8 weken en `getSetupState` lopen alleen nog als deze maand niets verkocht is (ze voeden enkel
+  het lege overzicht).
+- Statistieken: Bijvullingen staat in een eigen `Suspense` (de cijfers wachten er niet meer op); Minst verkocht per automaat
+  vraagt 3 rapporten tegelijk (`fewAtATime`), niet alle automaten tegelijk; de grafieken komen uit
+  `src/components/charts/lazy.tsx` (`next/dynamic`, `ssr: false`, een vlak van dezelfde hoogte tot ze er zijn). **Een nieuwe
+  grafiek: importeer hem via `lazy.tsx`**, nooit recharts rechtstreeks in een pagina.
+- Bijvullen: de kaart staat in een eigen `Suspense`.
+- Tabbalk: de getikte tab licht meteen op (`useLinkStatus` in `TabIcon`, `nav.tsx`) en geeft mee onder de duim.
+
+Resultaat op live, vóór → na: 200 KB minder JavaScript op elke pagina; het overzicht op de server 2,6 → 0,74 s (naast
+elkaar gemeten op dezelfde databank 0,96 → 0,76 s); bezet houden Statistieken 843 → 593 ms en Bijvullen 272 → 99 ms; na een
+tik op Statistieken staan de cijfers er na 0,9–1,2 s (eerder alles samen na 1,85 s, het jaaroverzicht onderaan nog altijd
+±2 s). Elke pagina kost ±230 ms aanmelden en layout op de server, plus de weg naar Dublin. Wat nog sneller kan maar geld
+kost: de databank van Micro naar Small (Xins keuze). De meetscripts staan niet in git.
 
 ## Rondes uit de cijfers gehaald (19-10-2026)
 Xin liet Alus opnieuw beginnen op niveau 1: zijn 20 oefenrondes (17–19 okt) staan in
