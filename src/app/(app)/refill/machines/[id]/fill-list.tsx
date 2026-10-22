@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, CircleCheck, ClipboardList, ListChecks } from "lucide-react";
+import { ArrowLeft, Check, CircleCheck, ClipboardList, ListChecks } from "lucide-react";
 import { SavedCheck } from "@/components/saved-check";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/client";
@@ -19,10 +19,10 @@ export type FillItem = { productId: string; name: string; photoPath: string | nu
 const KEEP_MS = 12 * 60 * 60 * 1000;
 const storageKey = (machineId: string) => `mato:fill-list:${machineId}`;
 
-/** What is ticked, on this phone, for the morning; nothing ticked forgets the list. */
-function remember(machineId: string, ticked: Set<string>) {
+/** What is ticked and whether the list is open, on this phone, for the morning; nothing ticked forgets the list. */
+function remember(machineId: string, ticked: Set<string>, open: boolean) {
   try {
-    if (ticked.size) localStorage.setItem(storageKey(machineId), JSON.stringify({ at: Date.now(), ticked: [...ticked] }));
+    if (ticked.size) localStorage.setItem(storageKey(machineId), JSON.stringify({ at: Date.now(), ticked: [...ticked], open }));
     else localStorage.removeItem(storageKey(machineId));
   } catch {
     // Not kept, still ticked.
@@ -34,6 +34,7 @@ function remember(machineId: string, ticked: Set<string>) {
  * machine misses, one line per product, ticked off as it goes into the box, then "Automaat hervuld" at the machine
  * puts every ticked slot at full and the stock with it. No round: one machine, one list. The ticks survive a reload on
  * this phone for the morning, so packing at the depot and filling at the machine can be two visits to the page.
+ * "Terug" (Xin, 22-10-2026) folds the list away and keeps what is ticked.
  */
 export function FillList({ machineId, items }: { machineId: string; items: FillItem[] }) {
   const { m } = useI18n();
@@ -46,16 +47,16 @@ export function FillList({ machineId, items }: { machineId: string; items: FillI
   const [toast, setToast] = useState<number | null>(null);
   const [busy, startTransition] = useTransition();
 
-  // A list started earlier this morning on this phone opens as it was left.
+  // A list started earlier this morning on this phone comes back as it was left: ticked, and open unless folded away.
   // Read after the first paint: the server cannot know what this phone kept.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(storageKey(machineId)) ?? "null") as { at: number; ticked: string[] } | null;
+      const saved = JSON.parse(localStorage.getItem(storageKey(machineId)) ?? "null") as { at: number; ticked: string[]; open?: boolean } | null;
       if (saved && Date.now() - saved.at < KEEP_MS) {
         const known = new Set(items.map((item) => item.productId));
         setTicked(new Set(saved.ticked.filter((id) => known.has(id))));
-        setOpen(true);
+        setOpen(saved.open !== false);
       }
     } catch {
       // No storage (a private window): the list just starts empty.
@@ -75,15 +76,27 @@ export function FillList({ machineId, items }: { machineId: string; items: FillI
     const next = new Set(ticked);
     if (next.has(productId)) next.delete(productId);
     else next.add(productId);
-    remember(machineId, next);
+    remember(machineId, next, true);
     setTicked(next);
   }
 
   function all(on: boolean) {
     haptic();
     const next = new Set(on ? items.map((item) => item.productId) : []);
-    remember(machineId, next);
+    remember(machineId, next, true);
     setTicked(next);
+  }
+
+  /** Back to the machine, the ticks kept for when the list is opened again. */
+  function back() {
+    setFailed(false);
+    remember(machineId, ticked, false);
+    setOpen(false);
+  }
+
+  function show() {
+    remember(machineId, ticked, true);
+    setOpen(true);
   }
 
   function refilled() {
@@ -93,7 +106,7 @@ export function FillList({ machineId, items }: { machineId: string; items: FillI
       try {
         const filled = await refillFromList(machineId, selections);
         haptic("success");
-        remember(machineId, new Set());
+        remember(machineId, new Set(), false);
         setTicked(new Set());
         setOpen(false);
         setDone(filled);
@@ -121,10 +134,15 @@ export function FillList({ machineId, items }: { machineId: string; items: FillI
       {items.length === 0 ? (
         !done && <p className="text-[15px] text-muted-foreground">{t.machineOk}</p>
       ) : !open ? (
-        <Button size="lg" onClick={() => setOpen(true)}>
-          <ClipboardList />
-          {t.makeList}
-        </Button>
+        <div className="flex flex-col gap-1.5">
+          <Button size="lg" onClick={show}>
+            <ClipboardList />
+            {t.makeList}
+          </Button>
+          {ticked.size > 0 && (
+            <p className="tabular text-[13.5px] text-muted-foreground">{fmt(t.listTicked, { n: takenPieces, total })}</p>
+          )}
+        </div>
       ) : (
         <section className="surface-card flex flex-col gap-3 p-4" aria-label={t.listTitle}>
           <div className="flex items-start justify-between gap-3">
@@ -184,10 +202,17 @@ export function FillList({ machineId, items }: { machineId: string; items: FillI
             <p className="tabular px-1 text-[14px] font-medium text-muted-foreground">
               {fmt(t.listTicked, { n: takenPieces, total })}
             </p>
-            <Button size="lg" onClick={refilled} disabled={busy || ticked.size === 0} className="h-14 w-full text-[17px]">
-              <Check />
-              {busy ? m.common.saving : t.refilledButton}
-            </Button>
+            {/* Side by side where they fit, under each other on a narrow phone, never over the edge. */}
+            <div className="flex flex-wrap gap-2">
+              <Button size="lg" variant="outline" onClick={back} disabled={busy} className="h-14 shrink-0 px-4 text-[16px]">
+                <ArrowLeft />
+                {m.common.back}
+              </Button>
+              <Button size="lg" onClick={refilled} disabled={busy || ticked.size === 0} className="h-14 min-w-[11rem] flex-1 text-[16px]">
+                <Check />
+                {busy ? m.common.saving : t.refilledButton}
+              </Button>
+            </div>
             {failed && (
               <p role="alert" className="px-1 text-[14px] text-destructive">
                 {m.common.error}
