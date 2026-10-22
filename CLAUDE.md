@@ -40,7 +40,7 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   overzicht zonder meldingen, de camera onder Net verkocht, de statistieken per maand en automaat, en een ronde die
   pas telt als hij af is, het groene vinkje na Voorraad aanpassen en het donkere thema, zie hieronder); sinds de avond van 21-10
   @ 2da6284 ook de export voor de boekhouding, Alles samen op de vullijst, Profiel, de kaart en de eigen merknaam (zie
-  "Export, vullijst, profiel en kaart"). Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
+  "Export, vullijst, profiel en kaart"); sinds 22-10 @ f1406e6 de vullijst per automaat met Automaat hervuld. Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
 
@@ -396,6 +396,19 @@ Xin vroeg ze voor het demo-account; ze staan voor elke uitbater (ook Chens) en v
   servicerol), opgezocht met Nominatim (max. 4 per bezoek, één per seconde, met naam in de User-Agent) **na** de pagina (`after()`),
   dus een nieuw adres staat er vanaf het volgende bezoek (`src/lib/geo.ts`, `src/lib/machine-map.ts`). In het donker worden de tegels
   omgekeerd; Leaflet blijft onder de bovenbalk (`isolation: isolate` op `.machine-map`).
+
+## Vullijst per automaat met "Automaat hervuld" (22-10-2026)
+Xin: "bij automaten vul deze automaat verandert naar vullijst maken … aanduiden wat hij meeneemt … automaat hervuld … past
+het ook automatisch de voorraad aan". Op `/refill/machines/[id]` (Alus via Automaten, de uitbater via Bijvullen op een
+automaat) staat **Vullijst maken** in plaats van "Vul deze automaat" (geen ronde meer voor één automaat; `fill-button.tsx` is
+weg). De lijst (`fill-list.tsx`) is wat de automaat mist volgens dezelfde `getRefillPlan` als de vullijst: één regel per
+product met de vakken, aan te vinken (ook Alles aanvinken); de vinkjes blijven 12 u op die gsm (`mato:fill-list:<id>` in
+localStorage), zodat inpakken en vullen twee bezoeken mogen zijn. **Automaat hervuld** (`refillFromList` in
+`refill/actions.ts`) zet elk aangevinkt vak op vol, als `refill` via `record_stock_settled` (capaciteit van de automaat, nooit
+van de gsm; een vol vak of een vak zonder product blijft): telt dus mee in Bijvullingen (niet "via aanpassen"), in de koelkast
+van de keuken en als nieuwe houdbaarheidsbatch. Daarna het grote groene vinkje "Hervuld · N vakken vol" (`SavedCheck`,
+`src/components/saved-check.tsx`, nu ook voor Voorraad aanpassen). Staat de automaat op een open ronde, dan blijft "Naar de
+ronde". Getest op Brugge Station van het demo-account: 87 % → 90 %, 4 vakken, 10 stuks.
 
 ## Rondes uit de cijfers gehaald (19-10-2026)
 Xin liet Alus opnieuw beginnen op niveau 1: zijn 20 oefenrondes (17–19 okt) staan in
