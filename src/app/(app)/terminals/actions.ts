@@ -63,32 +63,46 @@ export async function saveTerminalChoices(choices: TerminalChoice[]): Promise<{ 
  * them: it only reads on from where it was. When such a terminal is claimed,
  * wind the sync back to that terminal's last imported sale (or to the start, if
  * it has none), so what it sold while parked comes in on the next runs. Sales
- * are upserted on their Payter id, so nothing arrives twice.
+ * are upserted on their Payter id, so nothing arrives twice. A terminal on a
+ * further Payter account (22-10-2026) winds back that account only: winding the
+ * business's own login to the start would read its whole history again for nothing.
  */
 async function fetchSkippedSales(orgId: string, machineIds: string[]) {
   const admin = createAdminClient();
-  const { data: credentials } = await admin
-    .from("payter_credentials")
-    .select("last_watermark")
-    .eq("org_id", orgId)
-    .maybeSingle();
-  if (!credentials) return;
+  const [{ data: credentials }, { data: extras }, { data: claimed }] = await Promise.all([
+    admin.from("payter_credentials").select("last_watermark").eq("org_id", orgId).maybeSingle(),
+    admin.from("payter_extra_logins").select("id, serials, last_watermark").eq("org_id", orgId),
+    admin.from("machines").select("id, payter_serial_number").eq("org_id", orgId).in("id", machineIds),
+  ]);
 
-  let from = Number(credentials.last_watermark ?? 0);
-  for (const machineId of machineIds) {
+  // How far back each login has to go: "own" for the business's own, a further login by its id.
+  const back = new Map<string, number>();
+  for (const machine of claimed ?? []) {
     const { data: last } = await admin
       .from("transactions")
       .select("occurred_at")
       .eq("org_id", orgId)
-      .eq("machine_id", machineId)
+      .eq("machine_id", machine.id)
       .order("occurred_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     // A sale is taken in after it happened, so anything after this moment is read again.
-    from = Math.min(from, last ? new Date(last.occurred_at as string).getTime() : 0);
+    const from = last ? new Date(last.occurred_at as string).getTime() : 0;
+    const carriers = (extras ?? []).filter((login) => ((login.serials as string[] | null) ?? []).includes(machine.payter_serial_number as string));
+    for (const key of carriers.length ? carriers.map((login) => login.id as string) : ["own"]) {
+      back.set(key, Math.min(back.get(key) ?? Infinity, from));
+    }
   }
-  if (from < Number(credentials.last_watermark ?? 0)) {
-    await admin.from("payter_credentials").update({ last_watermark: from }).eq("org_id", orgId);
+
+  const own = back.get("own");
+  if (credentials && own !== undefined && own < Number(credentials.last_watermark ?? 0)) {
+    await admin.from("payter_credentials").update({ last_watermark: own }).eq("org_id", orgId);
+  }
+  for (const login of extras ?? []) {
+    const from = back.get(login.id as string);
+    if (from !== undefined && from < Number(login.last_watermark ?? 0)) {
+      await admin.from("payter_extra_logins").update({ last_watermark: from }).eq("id", login.id).eq("org_id", orgId);
+    }
   }
 }
 

@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { CalendarClock, ChevronDown, CircleAlert, Clock, KeyRound, LayoutTemplate, Nfc, PlugZap, Store, Trash2, Users } from "lucide-react";
+import { CalendarClock, ChevronDown, CircleAlert, Clock, KeyRound, LayoutTemplate, Nfc, PlugZap, Plus, Store, Trash2, Users } from "lucide-react";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { PageHeader, Section } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { billingAllows, getBilling, paymentsEnabled } from "@/lib/billing";
 import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { PayterForm } from "./payter-form";
+import { PayterForm, RemovePayterAccount } from "./payter-form";
 import { deleteTemplate } from "./actions";
 import { CostForm } from "./cost-form";
 import { NotifyToggle } from "./notify-toggle";
@@ -38,7 +38,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   // and who is in the team (the operator's to see and change). The vendor has
   // no subscription; it is read alongside and simply not shown. Of the syncs
   // only the last failure matters: Payter is asked every 15 seconds anyway.
-  const [{ data: org }, { data: credentials }, { data: lastError }, templates, businesses, machines, presets, ownBilling, team] =
+  const [{ data: org }, { data: credentials }, { data: errors }, templates, businesses, machines, presets, ownBilling, team, { data: extraLogins }] =
     orgId
       ? await Promise.all([
           admin
@@ -47,22 +47,24 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             .eq("id", orgId)
             .maybeSingle(),
           admin.from("payter_credentials").select("last_synced_at").eq("org_id", orgId).maybeSingle(),
+          // The last few: a further Payter account's failures carry its account code and belong on its own row.
           admin
             .from("sync_logs")
             .select("started_at, error")
             .eq("org_id", orgId)
             .eq("status", "error")
             .order("started_at", { ascending: false })
-            .limit(1)
-            .maybeSingle(),
+            .limit(20),
           getLayoutTemplates(orgId),
           getBusinesses(orgId),
           getMachines(orgId),
           getShelfLifePresets(orgId),
           operator ? getBilling(orgId) : Promise.resolve(null),
           operator ? getTeam(orgId) : Promise.resolve(null),
+          // Further Payter accounts of this business (22-10-2026), each synced on its own.
+          admin.from("payter_extra_logins").select("id, domain, serials, last_synced_at").eq("org_id", orgId).order("created_at"),
         ])
-      : [{ data: null }, { data: null }, { data: null }, [], [], [], [], null, null];
+      : [{ data: null }, { data: null }, { data: null }, [], [], [], [], null, null, { data: null }];
   const vendor = org;
 
   const ownTemplates = templates.filter((t) => t.org_id);
@@ -81,9 +83,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const canRent = Boolean(ownBilling && billingAllows(ownBilling, Boolean(org?.is_demo), "shareWithShops"));
 
   const payterConnected = Boolean(credentials || vendor?.is_demo);
+  const extras = extraLogins ?? [];
+  const ofAccount = (domain: string) => (errors ?? []).find((e) => e.error?.startsWith(`${domain}: `)) ?? null;
+  const lastError = (errors ?? []).find((e) => !extras.some((login) => e.error?.startsWith(`${login.domain}: `))) ?? null;
   // Red only while the last failure is newer than the last sync that worked.
-  const syncFailing =
-    Boolean(lastError) && (!credentials?.last_synced_at || lastError!.started_at > credentials.last_synced_at);
+  const failingSince = (error: { started_at: string } | null, syncedAt: string | null | undefined) =>
+    Boolean(error) && (!syncedAt || error!.started_at > syncedAt);
+  const syncFailing = failingSince(lastError, credentials?.last_synced_at);
   const {
     data: { user },
   } = await (await createClient()).auth.getUser();
@@ -173,6 +179,46 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                   <Fold icon={<KeyRound />} title={m.settings.reconnect}>
                     <div className="px-3 pb-3 sm:pl-[66px]">
                       <PayterForm submitLabel={m.common.save} />
+                    </div>
+                  </Fold>
+
+                  {/* Further Payter accounts (22-10-2026, Xin: a second account with two machines of Mato Vending). */}
+                  {extras.map((login) => {
+                    const error = ofAccount(login.domain);
+                    const failing = failingSince(error, login.last_synced_at);
+                    return (
+                      <div key={login.id} className="flex min-h-16 items-center gap-3.5 rounded-xl px-3 py-3">
+                        <Avatar tone={failing ? "negative" : "positive"}>
+                          {failing ? <CircleAlert /> : <PlugZap />}
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[15px] font-semibold tracking-[-0.01em]">
+                            {fmt(m.settings.extraAccount, { domain: login.domain })}
+                          </p>
+                          <p className="mt-0.5 text-[13px] text-muted-foreground">
+                            {[
+                              fmt(m.settings.lastUpdate, {
+                                time: login.last_synced_at ? f.relative(login.last_synced_at) : m.settings.never,
+                              }),
+                              login.serials?.length ? plural(login.serials.length, m.settings.accountTerminalsOne, m.settings.accountTerminals) : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </p>
+                          {failing && (
+                            <p className="mt-1 text-[13.5px] font-medium text-negative">
+                              {/login|401|403/i.test(error?.error ?? "") ? m.settings.payterFailed : m.settings.payterUnreachable}
+                            </p>
+                          )}
+                        </div>
+                        <RemovePayterAccount loginId={login.id} domain={login.domain} />
+                      </div>
+                    );
+                  })}
+                  <Fold icon={<Plus />} title={m.settings.addAccount}>
+                    <div className="px-3 pb-3 sm:pl-[66px]">
+                      <p className="mb-4 max-w-[60ch] text-[13.5px] leading-relaxed text-muted-foreground">{m.settings.addAccountHint}</p>
+                      <PayterForm submitLabel={m.settings.connect} extra />
                     </div>
                   </Fold>
                 </>
