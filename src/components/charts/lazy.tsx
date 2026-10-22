@@ -28,3 +28,8 @@ export const MonthChart = dynamic(() => import("./month-chart").then((mod) => mo
   ssr: false,
   loading: placeholder(200),
 });
+
+export const VisitsChart = dynamic(() => import("./visits-chart").then((mod) => mod.VisitsChart), {
+  ssr: false,
+  loading: placeholder(200),
+});
