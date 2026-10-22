@@ -40,7 +40,7 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   overzicht zonder meldingen, de camera onder Net verkocht, de statistieken per maand en automaat, en een ronde die
   pas telt als hij af is, het groene vinkje na Voorraad aanpassen en het donkere thema, zie hieronder); sinds de avond van 21-10
   @ 2da6284 ook de export voor de boekhouding, Alles samen op de vullijst, Profiel, de kaart en de eigen merknaam (zie
-  "Export, vullijst, profiel en kaart"); sinds 22-10 @ a448514 de vullijst per automaat met Automaat hervuld en Terug; sinds de middag van 22-10 @ d0008cf het snellere laden op de gsm (zie "Snelheid op de gsm"); sinds 22-10 @ 0394c8a het volledig scherm van de camera dat het hele scherm vult (zonder de cameratak `cloud/camera-photo-speed`, die nog niet live is); sinds 22-10 @ 607fe6d de app-cache v4 (zie "De app-cache"); sinds 22-10 @ 0fb11a6 meer Payter-accounts per organisatie (zie "Payter"). Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
+  "Export, vullijst, profiel en kaart"); sinds 22-10 @ a448514 de vullijst per automaat met Automaat hervuld en Terug; sinds de middag van 22-10 @ d0008cf het snellere laden op de gsm (zie "Snelheid op de gsm"); sinds 22-10 @ 0394c8a het volledig scherm van de camera dat het hele scherm vult (zonder de cameratak `cloud/camera-photo-speed`, die nog niet live is); sinds 22-10 @ 607fe6d de app-cache v4 (zie "De app-cache"); sinds 22-10 @ 0fb11a6 meer Payter-accounts per organisatie (zie "Payter"); sinds 22-10 @ 25ffe19 de Payter-hulpteksten zonder "vak met het huisje". Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
 
@@ -120,6 +120,10 @@ wachtwoord, domein; wat de sync en het formulier gebruiken) weigert hem met "fai
 De website roept daarna dezelfde `api.mypayter.com/API/...` aan met `Authorization: Bearer <Keycloak-token>`. Bewust niet
 gebouwd: inloggen via Payters frontend-client of een headless browser vanaf de server. Weg vooruit, via Payter: `MATO_AUTOMAAT`
 zichtbaar maken voor `XIN_SEN` (dan gewoon aanzetten in de kiezer) of een API-gebruiker die met `/API/Auth` werkt.
+Payter (22-10-2026): `XIN_SEN` aan `MATO_AUTOMAAT` koppelen kan niet. Xin maakte gebruiker `Mato-Info` (domein `MATO_AUTOMAAT`,
+alleen de rol **Data Api**, e-mail sales@matoautomaat.be) om via "Nog een Payter-account koppelen" te proberen. De inlogpagina
+van mypayter.com vraagt geen domein meer, `/API/Auth` (Payters Data API Manual, juni 2024) nog wel: het formulier houdt het
+vak. De hulpteksten (`domainHint`, `payterFailed`, `payterWhere`, `payterHow`) zeggen nu waar het domein staat en noemen Data Api.
 
 ## Gits: Televend-verkoop met de hand, tot Payter er is
 Gits Chens Garden (`9e523217-1488-4e3a-a02e-9f7ad642489e`, Nieuwplaats 11 Hooglede) betaalt nog via
