@@ -264,7 +264,30 @@ Xin: "een knop, toon mijn automaat nu, en dan zie je een snapshot". Geen video: 
   icoontje verbergen (674ba9a). Later misschien de clip zelf in MATO Info via een kleine computer bij de console (onofficiële
   API, lokale gebruiker): dan werkt het ook op een gsm.
 - `vercel env pull` geeft geheimen terug als "[sensitive]": de sleutel testen kan alleen via de site zelf (fout →
-  Vercel-logs). UniFi laat 100 vragen per minuut per console toe.
+  Vercel-logs). UniFi laat 100 vragen per minuut per console toe (ook: 25 s en 10 MB per vraag via de connector).
+- **De camera's** (Xin, 22-10-2026): G5 Bullet en G5 Dome, geen AI Port of AI Key (dus geen gezichtsherkenning), en geen
+  enkele ziet de straat. Alle vier hangen aan **één console** (IJzerlaan 13, Diksmuide): Diksmuide (Chens), Brood,
+  ChocaBake ("5&6") en SFERIO ("7 & 8"); twee camera's zien elk twee automaten. MATO Info en de drie klantsites delen dus
+  één budget van 100 per minuut.
+- **Sneller en zuiniger** (22-10-2026, Xin: "faster photos, fewer failures, rate limits"; tak `cloud/camera-photo-speed`,
+  nog niet live): wie binnen 2,5 s dezelfde camera vraagt, krijgt dezelfde foto (`sharedSnapshot`, per server, zoals de
+  klantsites). Elke vraag aan UniFi telt in de databank: `unifi_call_take(console, 80)` op tabel `unifi_calls` (per console
+  per minuut; RLS aan, alleen de servicerol; toevoegend), zodat live- en testsite samen onder de 100 blijven. De klantsites
+  tellen (nog) niet mee, vandaar 80. Vol, of een 429 van UniFi zelf (dan wacht die console zo lang, `WAIT_UNTIL`), geeft een
+  429 met Retry-After. Kan de databank niet tellen, dan gaat de foto toch door. Live volgt `X-Camera-Next` (3 s; 5 s vanaf
+  40 vragen in die minuut; 8 s vanaf 60; `liveInterval` in `src/lib/camera-pace.ts`, zonder imports), zegt "UniFi krijgt nu
+  te veel vragen" en gaat daarna door, probeert een mislukte foto één keer opnieuw en toont een foto pas als hij gedecodeerd
+  is. `machine_cameras.full_hd` (toevoegend) onthoudt "geen full HD": bij het koppelen uit `featureFlags.supportFullHdSnapshot`,
+  en zodra een camera er een weigert (`rememberNoFullHd`). Het lijstje bij Instellingen toont het model (`type`, zonder
+  "UVC "). `Server-Timing: unifi;dur=…` toont hoe lang UniFi deed. Getest in `test:flow` (delen, tempo, Retry-After).
+- **Klantanalyse met de camera: studie van 22-10-2026, nog niets gebouwd.** Protect zelf geeft geen tellingen: zijn
+  persoonsdetectie komt alleen als live gebeurtenis (begin, einde, "person") op het winkelnetwerk, zonder zone, richting of
+  telling, en zonder geschiedenis in de officiële API (7.3.70). Wél sinds 7.2: `POST /v1/pos/cameras/{id}/transactions` zet
+  een verkoop (bedrag, producten) op de tijdlijn van de camera; via de connector nog niet getest. Tellen, tijd aan de automaat en
+  kijkers tegen kopers vragen een kastje bij de console (N100 + go2rtc + een Apache/MIT-detector, nooit Ultralytics/YOLOv6/v9
+  om de licentie); alleen uurtotalen verlaten de winkel. Geen leeftijdsschatting (te onnauwkeurig van boven, en AI Act
+  art. 50(3) sinds 2-8-2026). Het demo-account kan analyse niet testen (echte camera, verzonnen verkoop): test op Brood en
+  ChocaBake. Cijfers alleen als de camera ≥ 95 % van de Payter-verkopen zag, per dagdeel; conversie per 4 weken.
 - **Meer camera's per automaat** (21-10-2026): tabel `machine_cameras` (machine_id, console_id, camera_id, name, position;
   RLS aan, alleen de servicerol; toevoegend). De kolommen `machines.unifi_*` houden alleen nog de eerste camera bij. In MATO
   Info vink je bij Instellingen één of meer camera's aan (`setMachineCameras`), kies je in het camerablok welke, en geeft het

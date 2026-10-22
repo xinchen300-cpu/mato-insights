@@ -252,6 +252,7 @@ export const nl: Messages = {
     cameraTakenAt: "Foto van {time}",
     cameraAlt: "{name}, zoals de camera hem nu ziet",
     cameraError: "De camera gaf geen beeld. Staat hij aan en is hij online?",
+    cameraBusy: "UniFi krijgt nu te veel vragen. Nieuwe foto over {seconds} s.",
     cameraSetting: "Camera bij deze automaat",
     cameraSettingHint: "Vink de UniFi-camera's aan die op deze automaat gericht zijn. Er wordt niets bewaard: alleen als je op Toon automaat nu of Live tikt, wordt een foto genomen. Klanten met een eigen site zien de camera's van hun automaat.",
     cameraLinkedList: "Gekoppeld: {names}",
