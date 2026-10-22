@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { ChevronRight, ClipboardList, ListChecks } from "lucide-react";
 import { FiguresCard, HowItWorks } from "@/components/filler/figures";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
@@ -84,7 +85,6 @@ export default async function RefillPage() {
     const grid = gridMachines(fleet, slots, settings.route, { onRound: filledOnOpenRound(rounds) });
     const stats = fillerStats(mine, DISPLAY_TIME_ZONE);
     const name = displayName(me.data.user);
-    const map = await machineMap(mapMachines(fleet, grid), settings.depotAddress);
     // The round to do now, big at the top: one already under way first, else the newest.
     const next = rounds.find((round) => round.readyAt) ?? rounds[0] ?? null;
     return (
@@ -112,11 +112,9 @@ export default async function RefillPage() {
               <MachineGrid machines={grid} m={m} />
             </Section>
           )}
-          {map.places.length > 0 && (
-            <Section title={m.machineMap.title} hint={m.machineMap.hint}>
-              <MachineMap data={map} />
-            </Section>
-          )}
+          <Suspense>
+            <MapSection machines={mapMachines(fleet, grid)} depot={settings.depotAddress} m={m} />
+          </Suspense>
           <LiveSold initial={sold} />
           {/* Someone new sees how a round goes; after the first one, their own figures. */}
           {stats.rounds > 0 ? <FiguresCard stats={stats} look={cleanLook(me.data.user?.user_metadata?.avatar)} /> : <HowItWorks />}
@@ -184,8 +182,6 @@ export default async function RefillPage() {
   }
   const shortList = [...shortByProduct.values()].sort((a, b) => b.units - a.units);
   const machineName = new Map(machines.map((mc) => [mc.id, mc.name]));
-  // Every machine of the owner's on the map, with how full it is where it is counted.
-  const map = operator ? await machineMap(mapMachines(machines, ownerGrid), ownerSettings?.depotAddress ?? null) : null;
 
   // Bijvullen is about the rounds: a new one, the ones out now, and what each came to.
   return (
@@ -218,10 +214,11 @@ export default async function RefillPage() {
             </div>
           </details>
         )}
-        {map && map.places.length > 0 && (
-          <Section title={m.machineMap.title} hint={m.machineMap.hint}>
-            <MachineMap data={map} />
-          </Section>
+        {/* Every machine of the owner's on the map, with how full it is where it is counted. */}
+        {operator && (
+          <Suspense>
+            <MapSection machines={mapMachines(machines, ownerGrid)} depot={ownerSettings?.depotAddress ?? null} m={m} />
+          </Suspense>
         )}
         {!operator && <p className="max-w-[60ch] px-1 text-[15px] text-muted-foreground">{m.refill.operatorOnly}</p>}
 
@@ -275,6 +272,25 @@ function FillListButton({ m }: { m: Awaited<ReturnType<typeof getI18n>>["m"] }) 
       {m.fillList.open}
       <ChevronRight className="ml-auto size-5 text-muted-foreground" aria-hidden="true" />
     </Link>
+  );
+}
+
+/** The map, streamed in after the rest of the page: the page never waits for the addresses (22-10-2026). */
+async function MapSection({
+  machines,
+  depot,
+  m,
+}: {
+  machines: (MapMachine & { address: string | null })[];
+  depot: string | null;
+  m: Awaited<ReturnType<typeof getI18n>>["m"];
+}) {
+  const map = await machineMap(machines, depot);
+  if (map.places.length === 0) return null;
+  return (
+    <Section title={m.machineMap.title} hint={m.machineMap.hint}>
+      <MachineMap data={map} />
+    </Section>
   );
 }
 

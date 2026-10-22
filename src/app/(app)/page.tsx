@@ -75,18 +75,15 @@ export default async function OverviewPage() {
 
   // Everything on the page is asked for at once, each loader with its own
   // checks, and the onboarding question below runs alongside instead of first.
-  // The last whole weeks only say whether anything sold lately, for the empty page below.
   const patternWeeks = 8;
   const loads = Promise.all([
     operator ? getOpenRounds(orgId) : Promise.resolve<OpenRound[]>([]),
     getStatsReport(orgId, { period: "today" }),
     getStatsReport(orgId, { period: "week" }),
     getStatsReport(orgId, { period: "month" }),
-    getStatsReport(orgId, { period: "custom", ...lastFullWeeks(patternWeeks, DISPLAY_TIME_ZONE) }),
     getMachines(orgId),
     getMachineStock(orgId),
     getLastSyncedAt(orgId),
-    getSetupState(orgId),
     getLiveSales(orgId, { limit: LIVE_ROWS }),
     getLastRefills(orgId),
     hasProducerDishes(orgId),
@@ -110,12 +107,22 @@ export default async function OverviewPage() {
     orgName = (org?.name as string | null) ?? null;
   }
 
-  const [openRounds, today, week, month, weeks, machines, stock, syncedAt, setup, recentSales, refills, kitchen, roundSettings, cameras] =
+  const [openRounds, today, week, month, machines, stock, syncedAt, recentSales, refills, kitchen, roundSettings, cameras] =
     await loads;
   // Only the rounds actually out (started), and only for the operator.
   const liveRounds = openRounds.filter((round) => round.readyAt);
 
-  if (month.totals.units === 0 && weeks.totals.units === 0) {
+  // Nothing this month: then the last whole weeks say whether anything sold lately, and the setup what to do next.
+  // Asked only then (22-10-2026): two heavy questions less on every visit, the database is shared by every page.
+  const [weeks, setup] =
+    month.totals.units === 0
+      ? await Promise.all([
+          getStatsReport(orgId, { period: "custom", ...lastFullWeeks(patternWeeks, DISPLAY_TIME_ZONE) }),
+          getSetupState(orgId),
+        ])
+      : [null, null];
+
+  if (weeks && setup && weeks.totals.units === 0) {
     return (
       <>
         <AutoRefresh />

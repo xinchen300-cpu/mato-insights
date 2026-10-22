@@ -649,7 +649,11 @@ export async function getMonthlyReport(
 const MACHINE_COLUMNS =
   "id, name, type, payter_serial_number, business_id, shared_business_id, data_since, km_round_trip, photo_path, last_connected_at, last_disconnected_at, terminal_model, terminal_network, terminal_flags, refill_manual, address, businesses!machines_business_id_fkey(name, logo_path)";
 
-export async function getMachines(orgId: string): Promise<Machine[]> {
+/**
+ * Every machine in scope. Asked once per page, however many loaders want it
+ * (the overview asked three times, 22-10-2026): callers only read the list.
+ */
+export const getMachines = cache(async (orgId: string): Promise<Machine[]> => {
   const { businessId } = await getScope();
   let query = createAdminClient()
     .from("machines")
@@ -661,7 +665,7 @@ export async function getMachines(orgId: string): Promise<Machine[]> {
   const { data, error } = await query.order("name");
   if (error) throw new Error(error.message);
   return (data ?? []).map(toMachine);
-}
+});
 
 export async function getMachine(orgId: string, id: string): Promise<Machine | null> {
   const { businessId } = await getScope();

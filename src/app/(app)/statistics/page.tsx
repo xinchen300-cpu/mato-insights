@@ -1,8 +1,7 @@
 import { Suspense } from "react";
 import { ArrowRight, ChartNoAxesColumn, ChevronRight, Link2, TriangleAlert } from "lucide-react";
 import { BarList } from "@/components/charts/bar-list";
-import { HourChart } from "@/components/charts/hour-chart";
-import { RevenueChart } from "@/components/charts/revenue-chart";
+import { HourChart, RevenueChart } from "@/components/charts/lazy";
 import { Delta } from "@/components/delta";
 import { KpiHero, MiniStat } from "@/components/kpi";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
@@ -66,7 +65,6 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
     : business
       ? machines.filter((mc) => mc.business_id === business || mc.shared_business_id === business).map((mc) => mc.id)
       : null;
-  const visits = await getRefillVisits(orgId, { from: report.cur_start, to: report.cur_end }, visitMachines);
   // "Koekelare" rather than "Koekelare Chens Garden": every machine here is the organisation's own.
   const machineNames = new Map(machines.map((mc) => [mc.id, withoutOrgName(mc.name, orgName)]));
 
@@ -283,8 +281,10 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
               </RowList>
             </Section>
 
-            {/* When each machine was filled, with how many and at what time. */}
-            {visits.length > 0 && <RefillLog visits={visits} names={machineNames} m={m} f={f} />}
+            {/* When each machine was filled, with how many and at what time; streams in, the figures above don't wait for it. */}
+            <Suspense>
+              <RefillVisits orgId={orgId} range={{ from: report.cur_start, to: report.cur_end }} machines={visitMachines} names={machineNames} m={m} f={f} />
+            </Suspense>
 
             {/* Said once, right above the product figures it is about. */}
             {scrambled.length > 0 && (
@@ -465,3 +465,22 @@ function ProductAvatar({ row }: { row: StatsReport["by_product"][number] }) {
   );
 }
 
+/** Bijvullingen in the period, asked on its own so the page above it never waits for it (22-10-2026). */
+async function RefillVisits({
+  orgId,
+  range,
+  machines,
+  names,
+  m,
+  f,
+}: {
+  orgId: string;
+  range: { from: string; to: string };
+  machines: string[] | null;
+  names: Map<string, string>;
+  m: Awaited<ReturnType<typeof getI18n>>["m"];
+  f: Awaited<ReturnType<typeof getI18n>>["f"];
+}) {
+  const visits = await getRefillVisits(orgId, range, machines);
+  return visits.length > 0 ? <RefillLog visits={visits} names={names} m={m} f={f} /> : null;
+}

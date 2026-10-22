@@ -129,13 +129,25 @@ export const getOrgBrand = cache(async (): Promise<string | null> => {
   try {
     const orgId = (await getScope()).orgId;
     if (!orgId) return null;
+    // Every page asks (the layout's titles and texts); a brand changes by hand, if ever.
+    const known = brands.get(orgId);
+    if (known && Date.now() - known.at < BRAND_TTL_MS) return known.name;
     const { data } = await createAdminClient().from("organizations").select("brand_name").eq("id", orgId).maybeSingle();
-    const name = typeof data?.brand_name === "string" ? data.brand_name.trim() : "";
-    return name || null;
+    const name = (typeof data?.brand_name === "string" ? data.brand_name.trim() : "") || null;
+    brands.set(orgId, { name, at: Date.now() });
+    return name;
   } catch {
     return null;
   }
 });
+
+/**
+ * Brand names kept a few minutes per organisation, in this server process: one
+ * round trip less before every page (22-10-2026, mobile speed). Not a secret:
+ * only the name the app goes by, and only after the scope check above.
+ */
+const BRAND_TTL_MS = 5 * 60_000;
+const brands = new Map<string, { name: string | null; at: number }>();
 
 export async function getCurrentOrgId(): Promise<string | null> {
   return (await getScope()).orgId;

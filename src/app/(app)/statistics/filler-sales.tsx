@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { CalendarCheck } from "lucide-react";
-import { HourChart } from "@/components/charts/hour-chart";
+import { HourChart } from "@/components/charts/lazy";
 import { Avatar } from "@/components/list-row";
 import { MachineIcon } from "@/components/machine/machine-icon";
 import { PageHeader, Panel, Section } from "@/components/page-header";

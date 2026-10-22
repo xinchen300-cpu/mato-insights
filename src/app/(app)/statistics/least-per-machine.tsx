@@ -37,10 +37,28 @@ export async function LeastPerMachine({
   f: Formatters;
 }) {
   const [reports, stock] = await Promise.all([
-    Promise.all(machines.map((machine) => getStatsReport(orgId, { ...filters, machines: [machine.id], businesses: null, products: null }))),
+    fewAtATime(machines, 3, (machine) => getStatsReport(orgId, { ...filters, machines: [machine.id], businesses: null, products: null })),
     includesNow ? getMachineStock(orgId, machines.map((machine) => machine.id)) : Promise.resolve([]),
   ]);
   return <LeastPerMachineList perMachine={leastPerMachine(machines, reports, stock, includesNow)} m={m} f={f} />;
+}
+
+/**
+ * A few at a time, in order: every machine's report at once kept the shared database busy for seconds, and every
+ * other page waited with it (22-10-2026). This list streams in under the rest of the page anyway.
+ */
+async function fewAtATime<T, R>(items: T[], size: number, run: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(size, items.length) }, async () => {
+      while (next < items.length) {
+        const i = next++;
+        results[i] = await run(items[i]);
+      }
+    }),
+  );
+  return results;
 }
 
 export type MachineDishes = { machine: { id: string; name: string }; list: Dish[] };
