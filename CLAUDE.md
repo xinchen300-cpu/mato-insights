@@ -527,6 +527,18 @@ ronde". **Terug** (Xin: "er moet ook een knop zijn met terug") naast Automaat he
 vinkjes (ook na herladen; onder de knop dan "x van y stuks aangevinkt"). Getest op Brugge Station van het demo-account:
 87 % → 90 %, 4 vakken, 10 stuks.
 
+## De automaat op de vulpagina (23-10-2026, testsite, nog niet live)
+Xin, met een foto van een zwarte MATO-automaat: "in stead of a blank refill layout … a layout like this automaat, that it makes
+you feel like you are refilling an automaat". Op `/refill/machines/[id]` (Alus via Automaten, de uitbater via Bijvullen) staat
+Voorraad per vak nu in **`CabinetView`** (`src/components/machine/cabinet.tsx`, via `StockAdjust` zonder `embedded`; de
+automaatpagina zelf houdt `FrontView`): een zwarte kast, het glas met lichtstrip en weerspiegeling, per rij een schap met witte
+nummerlabels, per vak de stuks als blokjes in de kleur van het vulniveau (één per plaats tot 12, daarboven een balk), rechts
+het merk (`m.brand.name`, dus "MATO" voor de demo), het logo op een schermpje (vanaf `sm`), een blauw schermpje met hoe vol, het
+toetsenbord, de kaartlezer met een lampje = de echte terminalstatus, het muntbakje, en onderaan de lade (`m.machines.cabinetPull`:
+TREKKEN / TIRER / PULL). Zwart in beide thema's (tokens `--cabinet*` in `:root`, klassen `.cabinet*` in `globals.css`); binnenin
+de klasse `dark`, zodat de − en + van Aantallen aanpassen op het glas leesbaar zijn. Kijken: een schap past op een gsm (namen
+breken af); aanpassen: vakken van 76 px, het schap scrollt achter het glas, de kast blijft staan.
+
 ## Snelheid op de gsm (22-10-2026)
 Xin: "the mobile version is slow and not responsive". Gemeten op live (demo-account, gsm 4× trager, 4G): elke pagina laadde
 ±760 KB JavaScript, waarvan 204 KB de teksten van alle drie de talen; Statistieken hield de gsm 0,85 s bezig met recharts; het
