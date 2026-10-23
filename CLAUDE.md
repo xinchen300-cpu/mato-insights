@@ -40,7 +40,7 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   overzicht zonder meldingen, de camera onder Net verkocht, de statistieken per maand en automaat, en een ronde die
   pas telt als hij af is, het groene vinkje na Voorraad aanpassen en het donkere thema, zie hieronder); sinds de avond van 21-10
   @ 2da6284 ook de export voor de boekhouding, Alles samen op de vullijst, Profiel, de kaart en de eigen merknaam (zie
-  "Export, vullijst, profiel en kaart"); sinds 22-10 @ a448514 de vullijst per automaat met Automaat hervuld en Terug; sinds de middag van 22-10 @ d0008cf het snellere laden op de gsm (zie "Snelheid op de gsm"); sinds 22-10 @ 0394c8a het volledig scherm van de camera dat het hele scherm vult (zonder de cameratak `cloud/camera-photo-speed`, die nog niet live is); sinds 22-10 @ 607fe6d de app-cache v4 (zie "De app-cache"); sinds 22-10 @ 0fb11a6 meer Payter-accounts per organisatie (zie "Payter"); sinds 22-10 @ 25ffe19 de Payter-hulpteksten zonder "vak met het huisje". Sinds 23-10 @ 1e69266 de code voor de automaat op de vulpagina, nergens aangezet (zie "De automaat op de vulpagina"); sinds 23-10 @ 5fee39d de eigen weergave en meldingen in Instellingen, alleen voor het demo-account (zie "Instellingen: eigen weergave en meldingen"). Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
+  "Export, vullijst, profiel en kaart"); sinds 22-10 @ a448514 de vullijst per automaat met Automaat hervuld en Terug; sinds de middag van 22-10 @ d0008cf het snellere laden op de gsm (zie "Snelheid op de gsm"); sinds 22-10 @ 0394c8a het volledig scherm van de camera dat het hele scherm vult (zonder de cameratak `cloud/camera-photo-speed`, die nog niet live is); sinds 22-10 @ 607fe6d de app-cache v4 (zie "De app-cache"); sinds 22-10 @ 0fb11a6 meer Payter-accounts per organisatie (zie "Payter"); sinds 22-10 @ 25ffe19 de Payter-hulpteksten zonder "vak met het huisje". Sinds 23-10 @ 1e69266 de code voor de automaat op de vulpagina, nergens aangezet (zie "De automaat op de vulpagina"); sinds 23-10 @ 5fee39d de eigen weergave en meldingen in Instellingen, alleen voor het demo-account (zie "Instellingen: eigen weergave en meldingen"; @ e3232d7 zegt een test die niemand bereikte per kanaal waarom). Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
 
@@ -584,6 +584,10 @@ wat van de zaak is (Abonnement, Team, Payter, …):
   het huidige) en in `vendly-alerts` zelf: dagoverzicht ("695,20 € · 167 ventes · meilleur : Kortrijk Campus"), elke verkoop ("35
   verkopen · € 178,70" voor 3 uur), bijna leeg (4 automaten onder een testgrens van 80 %). Echte push kon hier niet (headless Chromium
   krijgt geen pushabonnement): dat test Xin op zijn gsm. Het demo-account staat daarna weer op dagoverzicht 20:00 en fouten, via push.
+- Xins eerste test op live (23-10, 20:47): niets aangekomen, want `push_subscriptions` was leeg (nog nooit één toestel, voor geen
+  enkel account) en e-mail/sms hebben geen sleutels. De pagina zei toch groen "Test verstuurd": nu zegt `TestOutcome` per kanaal
+  waarom (geen toestel → tik op Aanzetten; staat nog niet aan; vul een adres/nummer in), en een mislukt Aanzetten zegt het ook.
+  Op een iPhone kan push alleen vanuit MATO Info op het beginscherm (iOS 16.4+), en daar opnieuw aanmelden.
 
 ## Snelheid op de gsm (22-10-2026)
 Xin: "the mobile version is slow and not responsive". Gemeten op live (demo-account, gsm 4× trager, 4G): elke pagina laadde
