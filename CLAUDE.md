@@ -578,7 +578,9 @@ dan pas wat van de zaak is (Abonnement, Team, Payter, …):
   `vendly-notify` (de oude avondmelding) slaat wie eigen keuzes heeft over. Titel van een sms: `brand_name` of anders "Vendly"
   (een zaak "MATO Info"); push en e-mail hebben de gebeurtenis als titel.
 - Getest op de testsite met het demo-account (opslaan, weigeren zonder nummer/adres, test, thema, talen, wachtwoord geweigerd als
-  het huidige). Echte push kon hier niet (headless Chromium krijgt geen pushabonnement): dat test Xin op zijn gsm.
+  het huidige) en in `vendly-alerts` zelf: dagoverzicht ("695,20 € · 167 ventes · meilleur : Kortrijk Campus"), elke verkoop ("35
+  verkopen · € 178,70" voor 3 uur), bijna leeg (4 automaten onder een testgrens van 80 %). Echte push kon hier niet (headless Chromium
+  krijgt geen pushabonnement): dat test Xin op zijn gsm. Het demo-account staat daarna weer op dagoverzicht 20:00 en fouten, via push.
 
 ## Snelheid op de gsm (22-10-2026)
 Xin: "the mobile version is slow and not responsive". Gemeten op live (demo-account, gsm 4× trager, 4G): elke pagina laadde
