@@ -1567,6 +1567,18 @@ export const en = {
       },
     },
   },
+  help: {
+    title: "Help and contact",
+    hint: "A question, a machine acting up or something in this app? You reach MATO directly.",
+    mail: "Email us",
+    mailSubject: "Question from {org}",
+    mailBody: "Account: {email}",
+    call: "Call us",
+    visit: "Drop by",
+    visitValue: "IJzerlaan 13, 8600 Diksmuide",
+    website: "Contact form",
+    websiteValue: "matoautomaat.be/contact",
+  },
   prefs: {
     profileHint: "Name, picture and account",
     display: "Display",

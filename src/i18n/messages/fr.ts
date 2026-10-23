@@ -1567,6 +1567,18 @@ export const fr: Messages = {
       },
     },
   },
+  help: {
+    title: "Aide et contact",
+    hint: "Une question, un distributeur qui ne fonctionne pas comme il faut, ou quelque chose dans cette application ? Vous arrivez directement chez MATO.",
+    mail: "Écrivez-nous",
+    mailSubject: "Question de {org}",
+    mailBody: "Compte : {email}",
+    call: "Appelez-nous",
+    visit: "Passez nous voir",
+    visitValue: "IJzerlaan 13, 8600 Dixmude",
+    website: "Formulaire de contact",
+    websiteValue: "matoautomaat.be/contact",
+  },
   prefs: {
     profileHint: "Nom, photo et compte",
     display: "Affichage",
