@@ -221,7 +221,6 @@ export const fr: Messages = {
     legendLow: "Presque vide",
     legendEmpty: "Vide",
     legendUnknown: "Pas compté",
-    cabinetPull: "TIRER",
     shelfDays: "{n} j",
     shelfToday: "aujourd'hui",
     shelfTomorrow: "demain",

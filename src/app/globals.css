@@ -137,8 +137,6 @@
   --cabinet-label: #f4f4f5;
   --cabinet-label-ink: #111113;
   --cabinet-led: #eef4ff;
-  --cabinet-lcd: #1d3b8f;
-  --cabinet-lcd-ink: #d6e4ff;
   color-scheme: light;
 }
 
@@ -660,8 +658,8 @@
   }
 }
 
-/* The machine on the refill page (23-10-2026): a black cabinet, the glass with its light strip and a soft
-   reflection, every shelf's edge with white number labels, the drawer below. */
+/* The machine on the refill page (23-10-2026): a black frame, the glass with its light strip and a soft
+   reflection, every shelf's edge with white number labels. */
 .cabinet {
   background: linear-gradient(180deg, var(--cabinet-edge), var(--cabinet) 5%, var(--cabinet) 95%, var(--cabinet-edge));
   box-shadow:
@@ -712,18 +710,6 @@
 .cabinet-label {
   background: var(--cabinet-label);
   color: var(--cabinet-label-ink);
-}
-.cabinet-lcd {
-  background: var(--cabinet-lcd);
-  color: var(--cabinet-lcd-ink);
-  box-shadow: inset 0 0 8px rgb(0 0 0 / 0.45);
-  text-shadow: 0 0 6px var(--cabinet-lcd-ink);
-}
-.cabinet-drawer {
-  background: linear-gradient(180deg, var(--cabinet-glass), var(--cabinet));
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.08),
-    inset 0 0 0 1px rgb(255 255 255 / 0.06);
 }
 
 /* The machines on a map (Bijvullen, 21-10-2026). Leaflet's own layers count
