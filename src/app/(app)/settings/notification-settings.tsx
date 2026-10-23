@@ -2,19 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  AlertTriangle,
-  CalendarDays,
-  Eye,
-  CalendarRange,
-  Mail,
-  MessageSquare,
-  Moon,
-  PackageOpen,
-  Send,
-  ShoppingBag,
-  Smartphone,
-} from "lucide-react";
+import { AlertTriangle, CalendarDays, Eye, CalendarRange, Mail, PackageOpen, Send, ShoppingBag } from "lucide-react";
 import { Avatar } from "@/components/list-row";
 import { SavedCheck } from "@/components/saved-check";
 import { Button } from "@/components/ui/button";
@@ -27,21 +15,20 @@ import type { NotificationSettings as Settings, SentNotification } from "@/lib/d
 import { LOW_PERCENTS, NOTIFY_CHANNELS, type NotifyChannel, type NotifyPrefs, type NotifyTopic } from "@/lib/notify-prefs";
 import { cn } from "@/lib/utils";
 import { previewEmail, saveNotifications, testNotifications } from "./actions";
-import { PrefRow, Switch, selectClass } from "./preference-controls";
+import { Switch, selectClass } from "./preference-controls";
 
 /** How long the big green check stays; a tap closes it sooner. */
 const CHECK_MS = 2000;
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
-const ICON: Record<NotifyChannel, React.ComponentType<{ className?: string }>> = { email: Mail, sms: MessageSquare };
 
-type Problem = "email" | "phone" | "emailMissing" | "phoneMissing";
+type Problem = "email" | "emailMissing";
 
 /**
  * Meldingen (23-10-2026, Xin: "put notifications on and send them on email or sms and also filter what they
  * notifications about such as one time per day a overview or every sale or if error"): where messages go, and per
- * topic on which of them. Email first, sms beside it; push went the same day (Xin: "remove push but focus more on
- * email"). Stored per person; supabase/functions/vendly-alerts sends them, and shows the email before it is sent.
- * Nothing is stored before "save"; a test saves first, so it shows what was chosen.
+ * topic on or off. Email only: push went the same day (Xin: "remove push but focus more on email"), then sms ("i dont
+ * wnat to activate sms"). Stored per person; supabase/functions/vendly-alerts sends them, and shows the email before
+ * it is sent. Nothing is stored before "save"; a test saves first, so it shows what was chosen.
  */
 export function NotificationSettings({ settings, shop }: { settings: Settings; shop: boolean }) {
   const { m, f, locale } = useI18n();
@@ -69,7 +56,7 @@ export function NotificationSettings({ settings, shop }: { settings: Settings; s
   const hour = (h: number) =>
     new Intl.DateTimeFormat(intlLocale[locale], { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(new Date(Date.UTC(2000, 0, 1, h)));
   const pct = (n: number) => fmt(m.prefs.percent, { n });
-  const channelName: Record<NotifyChannel, string> = { email: m.prefs.channelEmail, sms: m.prefs.channelSms };
+  const channelName: Record<NotifyChannel, string> = { email: m.prefs.channelEmail };
 
   function change(next: Partial<NotifyPrefs>) {
     setPrefs((current) => ({ ...current, ...next }));
@@ -77,12 +64,8 @@ export function NotificationSettings({ settings, shop }: { settings: Settings; s
     setTest(null);
   }
 
-  function toggle(topic: NotifyTopic, channel: NotifyChannel) {
-    setPrefs((current) => {
-      const list = current.topics[topic];
-      const next = list.includes(channel) ? list.filter((c) => c !== channel) : NOTIFY_CHANNELS.filter((c) => c === channel || list.includes(c));
-      return { ...current, topics: { ...current.topics, [topic]: next } };
-    });
+  function toggle(topic: NotifyTopic, on: boolean) {
+    setPrefs((current) => ({ ...current, topics: { ...current.topics, [topic]: on ? [...NOTIFY_CHANNELS] : [] } }));
     setProblem(null);
     setTest(null);
   }
@@ -118,8 +101,6 @@ export function NotificationSettings({ settings, shop }: { settings: Settings; s
       router.refresh();
     });
   }
-
-  const usesSms = Object.values(prefs.topics).some((channels) => channels.includes("sms"));
 
   function showPreview() {
     setPreview("loading");
@@ -170,16 +151,11 @@ export function NotificationSettings({ settings, shop }: { settings: Settings; s
     },
   ];
 
-  const problemText: Record<Problem, string> = {
-    email: m.prefs.emailInvalid,
-    phone: m.prefs.phoneInvalid,
-    emailMissing: m.prefs.emailMissing,
-    phoneMissing: m.prefs.phoneMissing,
-  };
+  const problemText: Record<Problem, string> = { email: m.prefs.emailInvalid, emailMissing: m.prefs.emailMissing };
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Where to: an address first, a number beside it. */}
+      {/* Where to. */}
       <div className="surface-card flex flex-col p-2">
         <p className="px-3 pb-1 pt-2 text-[13px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">{m.prefs.where}</p>
         <Field
@@ -204,107 +180,30 @@ export function NotificationSettings({ settings, shop }: { settings: Settings; s
             {preview === "loading" ? m.common.loading : m.prefs.previewEmail}
           </Button>
         </Field>
-        <Field
-          id="notify-phone"
-          icon={<Smartphone />}
-          label={m.prefs.phone}
-          hint={m.prefs.phoneHint}
-          notReady={settings.ready.sms ? null : m.prefs.notReady}
-          invalid={problem === "phone" || problem === "phoneMissing"}
-        >
-          <Input
-            id="notify-phone"
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            placeholder={m.prefs.phonePlaceholder}
-            value={prefs.phone ?? ""}
-            onChange={(e) => change({ phone: e.target.value })}
-            aria-invalid={problem === "phone" || problem === "phoneMissing"}
-          />
-        </Field>
       </div>
 
-      {/* What about, and on which of them. */}
+      {/* What about: each on or off; the hour or the limit under it while it is on. */}
       <div className="surface-card flex flex-col p-2">
         <p className="px-3 pb-1 pt-2 text-[13px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">{m.prefs.what}</p>
-        {topics.map(({ topic, icon, title, hint, extra }) => (
-          <div key={topic} className="flex flex-col gap-3 rounded-xl px-3 py-3">
-            <div className="flex min-w-0 items-center gap-3.5">
-              <Avatar tone={prefs.topics[topic].length ? "positive" : "neutral"}>{icon}</Avatar>
-              <div className="min-w-0">
-                <p className="text-[15px] font-semibold tracking-[-0.01em]">{title}</p>
-                <p className="mt-0.5 text-[13px] leading-snug text-muted-foreground">{hint}</p>
+        {topics.map(({ topic, icon, title, hint, extra }) => {
+          const on = prefs.topics[topic].length > 0;
+          return (
+            <div key={topic} className="flex flex-col gap-2 rounded-xl px-3 py-3">
+              <div className="flex items-center gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-3.5">
+                  <Avatar tone={on ? "positive" : "neutral"}>{icon}</Avatar>
+                  <div className="min-w-0">
+                    <p className="text-[15px] font-semibold tracking-[-0.01em]">{title}</p>
+                    <p className="mt-0.5 text-[13px] leading-snug text-muted-foreground">{hint}</p>
+                  </div>
+                </div>
+                <Switch on={on} onChange={(next) => toggle(topic, next)} label={title} />
               </div>
+              {extra && on && <div className="pl-[54px]">{extra}</div>}
             </div>
-            <div className="flex flex-wrap items-center gap-2 pl-[54px]">
-              {NOTIFY_CHANNELS.map((channel) => {
-                const Icon = ICON[channel];
-                const on = prefs.topics[topic].includes(channel);
-                return (
-                  <button
-                    key={channel}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => toggle(topic, channel)}
-                    className={cn(
-                      "inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-[13.5px] font-semibold transition-colors",
-                      on ? "border-foreground bg-foreground text-background" : "bg-card text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    <Icon className="size-4" />
-                    {channelName[channel]}
-                  </button>
-                );
-              })}
-              {extra && <span className="basis-full sm:ml-2 sm:basis-auto">{extra}</span>}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
-
-      {/* Quiet hours: only for text messages; an email waits in the inbox anyway. */}
-      {usesSms && (
-        <div className="surface-card flex flex-col p-2">
-          <PrefRow
-            inline
-            icon={<Moon />}
-            title={m.prefs.quiet}
-            hint={m.prefs.quietHint}
-            control={<Switch on={prefs.quiet} onChange={(quiet) => change({ quiet })} label={m.prefs.quiet} />}
-          />
-          {prefs.quiet && (
-            <div className="flex flex-wrap items-center gap-2 px-3 pb-3 pl-[66px] text-[14px] text-muted-foreground">
-              {m.prefs.quietFrom}
-              <select
-                aria-label={m.prefs.quietFrom}
-                value={prefs.quietFrom}
-                onChange={(e) => change({ quietFrom: Number(e.target.value) })}
-                className={selectClass}
-              >
-                {HOURS.map((h) => (
-                  <option key={h} value={h}>
-                    {hour(h)}
-                  </option>
-                ))}
-              </select>
-              {m.prefs.quietTo}
-              <select
-                aria-label={m.prefs.quietTo}
-                value={prefs.quietTo}
-                onChange={(e) => change({ quietTo: Number(e.target.value) })}
-                className={selectClass}
-              >
-                {HOURS.map((h) => (
-                  <option key={h} value={h}>
-                    {hour(h)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
-      )}
 
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap gap-2">
@@ -323,7 +222,7 @@ export function NotificationSettings({ settings, shop }: { settings: Settings; s
           </p>
         )}
         {test === "done" && tested ? (
-          <TestOutcome sent={tested} channelName={channelName} />
+          <TestOutcome sent={tested} channelName={channelName} email={saved.email || settings.loginEmail || ""} />
         ) : (
           test && (
             <p role="status" className="px-1 text-[14px] text-negative">
@@ -362,21 +261,20 @@ export function NotificationSettings({ settings, shop }: { settings: Settings; s
   );
 }
 
-/** What a test did: by which channels it went, and for each one that could not, why and what to do. */
-function TestOutcome({ sent, channelName }: { sent: SentNotification["sent"]; channelName: Record<NotifyChannel, string> }) {
+/** What a test did: where it went, or why it could not and what to do. */
+function TestOutcome({ sent, channelName, email }: { sent: SentNotification["sent"]; channelName: Record<NotifyChannel, string>; email: string }) {
   const { m } = useI18n();
   const arrived = NOTIFY_CHANNELS.filter((channel) => sent[channel] === "sent");
   const reasons = NOTIFY_CHANNELS.filter((channel) => sent[channel] && sent[channel] !== "sent").map((channel) => {
     const status = sent[channel];
     if (status === "no_address") return m.prefs.reasonNoAddress;
-    if (status === "no_number") return m.prefs.reasonNoNumber;
     if (status === "no_provider") return fmt(m.prefs.reasonNoProvider, { channel: channelName[channel] });
     return fmt(m.prefs.reasonFailed, { channel: channelName[channel] });
   });
   return (
     <div role="status" className="flex flex-col gap-1 px-1 text-[14px] leading-snug">
       <p className={cn("font-medium", arrived.length ? "text-positive" : "text-negative")}>
-        {arrived.length ? fmt(m.prefs.testArrived, { channels: arrived.map((channel) => channelName[channel]).join(", ") }) : m.prefs.testNothing}
+        {arrived.length ? fmt(m.prefs.testArrived, { email }) : m.prefs.testNothing}
       </p>
       {reasons.map((reason) => (
         <p key={reason} className="text-muted-foreground">
@@ -440,10 +338,7 @@ function Recent({
   const { m } = useI18n();
   const status: Record<string, string> = {
     sent: m.prefs.statusSent,
-    quiet: m.prefs.statusQuiet,
-    no_device: m.prefs.statusNoDevice,
     no_address: m.prefs.statusNoAddress,
-    no_number: m.prefs.statusNoNumber,
     no_provider: m.prefs.statusNoProvider,
     failed: m.prefs.statusFailed,
   };
