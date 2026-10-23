@@ -1,11 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useI18n } from "@/i18n/client";
 import { cn } from "@/lib/utils";
 
 export const HIDE_NUMBERS_KEY = "vendly:hide-numbers";
+
+// The attribute on <html> is the truth: the layout's script sets it before paint, and the settings page and the
+// shell's button both follow it.
+function subscribe(changed: () => void) {
+  const watch = new MutationObserver(changed);
+  watch.observe(document.documentElement, { attributes: true, attributeFilter: ["data-hide-numbers"] });
+  return () => watch.disconnect();
+}
+
+/** Whether the figures are hidden now. */
+export function useHiddenNumbers(): boolean {
+  return useSyncExternalStore(subscribe, () => document.documentElement.hasAttribute("data-hide-numbers"), () => false);
+}
+
+/** Blurs or shows every figure, and keeps that in this browser. */
+export function setHideNumbers(hidden: boolean) {
+  document.documentElement.toggleAttribute("data-hide-numbers", hidden);
+  try {
+    localStorage.setItem(HIDE_NUMBERS_KEY, hidden ? "1" : "0");
+  } catch {
+    // A private window without storage still switches, just not next time.
+  }
+}
 
 /**
  * Blurs every figure in the app so you can show Vendly to someone without
@@ -14,23 +37,10 @@ export const HIDE_NUMBERS_KEY = "vendly:hide-numbers";
  */
 export function HideNumbers({ variant = "icon" }: { variant?: "icon" | "row" }) {
   const { m } = useI18n();
-  const [hidden, setHidden] = useState(false);
-
-  // The inline script in the layout already set the attribute before paint;
-  // this only catches the state up with it.
-  useEffect(() => {
-    setHidden(document.documentElement.hasAttribute("data-hide-numbers"));
-  }, []);
+  const hidden = useHiddenNumbers();
 
   function toggle() {
-    const next = !hidden;
-    setHidden(next);
-    document.documentElement.toggleAttribute("data-hide-numbers", next);
-    try {
-      localStorage.setItem(HIDE_NUMBERS_KEY, next ? "1" : "0");
-    } catch {
-      // A private window without storage still switches, just not next time.
-    }
+    setHideNumbers(!hidden);
   }
 
   const label = hidden ? m.nav.showNumbers : m.nav.hideNumbers;

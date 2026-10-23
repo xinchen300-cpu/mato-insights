@@ -1,10 +1,11 @@
-// Vendly's service worker. It shows a notification when something needs a
-// decision, keeps Vendly's own files on the phone so the app opens fast on a
+// MATO Info's service worker. It shows a notification when something needs a
+// decision, keeps the app's own files on the phone so the app opens fast on a
 // weak signal, and shows a page of its own when there is no connection at all.
 // It never keeps a page with someone's data in it: those always come fresh.
 
 // Raise when this file changes how it caches, so the old caches go.
-const VERSION = "v2";
+// v4 (22-10-2026): v3 kept machine pages' data (/machines/<id>?_rsc=…) as if they were pictures; they go with it.
+const VERSION = "v4";
 const STATIC_CACHE = `vendly-static-${VERSION}`;
 const PAGE_CACHE = `vendly-pages-${VERSION}`;
 const OFFLINE_URL = "/offline";
@@ -38,9 +39,18 @@ function isBuildFile(url) {
   return url.pathname.startsWith("/_next/static/");
 }
 
-/** Vendly's own pictures and icons: shown from the phone, refreshed behind it. */
+/**
+ * The app's own pictures and icons: shown from the phone, refreshed behind it. Only the default machine photo under
+ * /machines/: that folder is also the machine pages, and a page's data kept here came back from the visit before,
+ * with old stock, old figures and the code of an earlier version (22-10-2026, the camera's full screen "still black").
+ */
 function isOwnPicture(url) {
-  return url.pathname.startsWith("/pwa-icon/") || url.pathname.startsWith("/brand/") || url.pathname.startsWith("/machines/") || url.pathname === "/icon.svg";
+  return url.pathname.startsWith("/pwa-icon/") || url.pathname.startsWith("/brand/") || url.pathname === "/machines/default.webp" || url.pathname === "/icon.svg";
+}
+
+/** Data for a page (what Next asks for on a tap): never kept, whatever its address looks like. */
+function isPageData(request, url) {
+  return url.searchParams.has("_rsc") || request.headers.get("RSC") === "1";
 }
 
 async function trim(cache) {
@@ -89,6 +99,7 @@ self.addEventListener("fetch", (event) => {
   // Other sites (the database, photos in storage) are left to the browser.
   if (url.origin !== self.location.origin) return;
   if (request.mode === "navigate") return event.respondWith(page(event));
+  if (isPageData(request, url)) return;
   if (isBuildFile(url)) return event.respondWith(buildFile(request));
   if (isOwnPicture(url)) return event.respondWith(ownPicture(request));
   // Everything else (data for a page, actions, the sales feed) goes straight to the server.
@@ -118,7 +129,7 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = event.notification.data?.url || "/";
 
-  // Bring an open Vendly tab forward rather than opening another one.
+  // Bring an open app tab forward rather than opening another one.
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       for (const client of clients) {

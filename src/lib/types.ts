@@ -53,6 +53,12 @@ export type Machine = {
   terminal_model: string | null;
   terminal_network: string | null;
   terminal_flags: string[];
+  /** Filled by hand, outside Vendly: in the sales, never in a round, the vullijst or a stock warning. */
+  refill_manual: boolean;
+  /** Where it stands, for navigating there from a round. */
+  address: string | null;
+  /** Which MATO model it is (src/lib/machine-models.ts, "mato-b1"), or null when not known. */
+  model: string | null;
 };
 
 export type SlotStock = {
@@ -87,6 +93,8 @@ export type Product = {
   shelf_life_days: number | null;
   shelf_life_preset_id: string | null;
   producer_id: string | null;
+  /** The smallest amount the producer makes of it at once (the kitchen list rounds up to it). */
+  batch_min: number;
 };
 
 export type Business = {

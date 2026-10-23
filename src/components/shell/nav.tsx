@@ -1,13 +1,13 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ChartColumn,
   ClipboardList,
+  House,
   LayoutDashboard,
   ListChecks,
-  Package,
   type LucideIcon,
 } from "lucide-react";
 import { MachineIcon } from "@/components/machine/machine-icon";
@@ -23,22 +23,23 @@ type NavItem = {
   also?: string;
 };
 
+/** Producten left (Xin, 20-10-2026): a slot's product is set in the layout; the page opens from Automaten. */
 const items: NavItem[] = [
   { href: "/", label: "overview", icon: LayoutDashboard },
-  { href: "/machines", label: "machines", icon: MachineIcon },
-  { href: "/products", label: "products", icon: Package },
+  { href: "/machines", label: "machines", icon: MachineIcon, also: "/products" },
   { href: "/refill", label: "refill", icon: ClipboardList },
   { href: "/statistics", label: "statistics", icon: ChartColumn },
 ];
 
 /**
- * What a filler may open: the machines, the refill work, the vullijst (what
- * each machine needs, box by box) and what sells, in pieces. Their machines
- * open in the refill pages, so those count as the machines tab.
+ * What a filler may open: home (their start screen, the refill work), the
+ * machines, the vullijst (what each machine needs, box by box) and what sells,
+ * in pieces. Their machines open in the refill pages, so those count as the
+ * machines tab. Home was "Bijvullen" until Xin asked for a home button (19-10-2026).
  */
 const fillerItems: NavItem[] = [
+  { href: "/refill", label: "home", icon: House },
   { href: "/machines", label: "machines", icon: MachineIcon, also: "/refill/machines" },
-  { href: "/refill", label: "refill", icon: ClipboardList },
   { href: "/refill/list", label: "fillList", icon: ListChecks },
   { href: "/statistics", label: "sales", icon: ChartColumn },
 ];
@@ -99,7 +100,7 @@ export function MobileNav({ filler = false }: { filler?: boolean }) {
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
-      <div className={cn("mx-auto grid max-w-xl px-2", filler ? "grid-cols-4" : "grid-cols-5")}>
+      <div className="mx-auto grid max-w-xl grid-cols-4 px-2">
         {list.map(({ href, label, icon: Icon }) => {
           const active = href === current;
           return (
@@ -109,24 +110,31 @@ export function MobileNav({ filler = false }: { filler?: boolean }) {
               aria-current={active ? "page" : undefined}
               className={cn(
                 // Four tabs for a filler still leave room for a label that reads outdoors.
-                "flex flex-col items-center gap-1 py-2 transition-colors",
+                "flex flex-col items-center gap-1 py-2 transition-[color,transform] active:scale-95",
                 filler ? "text-[12px]" : "text-[10.5px]",
                 active ? "font-semibold text-foreground" : "font-medium text-muted-foreground",
               )}
             >
-              <span
-                className={cn(
-                  "grid h-7 w-12 place-items-center rounded-full transition-colors duration-150",
-                  active && "bg-surface",
-                )}
-              >
-                <Icon className="size-5" strokeWidth={active ? 2.25 : 1.9} aria-hidden="true" />
-              </span>
+              <TabIcon icon={Icon} active={active} />
               {m.nav[label]}
             </Link>
           );
         })}
       </div>
     </nav>
+  );
+}
+
+/**
+ * The tab lights up on the tap itself, not when the next page is in (22-10-2026, Xin: "slow and not responsive"): on
+ * a phone with a weak signal that can take a second, and a tab that did nothing looked like a missed tap.
+ */
+function TabIcon({ icon: Icon, active }: { icon: NavItem["icon"]; active: boolean }) {
+  const { pending } = useLinkStatus();
+  const lit = active || pending;
+  return (
+    <span className={cn("grid h-7 w-12 place-items-center rounded-full transition-colors duration-150", lit && "bg-surface")}>
+      <Icon className="size-5" strokeWidth={lit ? 2.25 : 1.9} aria-hidden="true" />
+    </span>
   );
 }

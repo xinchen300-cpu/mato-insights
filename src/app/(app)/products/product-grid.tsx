@@ -31,7 +31,7 @@ const fieldSelectClass =
 // A filter pill: soft grey at rest, near-black once it narrows the list.
 const pillClass =
   "inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-full text-base font-medium outline-none transition-[background-color,color,box-shadow] duration-150 md:h-9 md:text-[13.5px]";
-const pillIdle = "bg-surface text-foreground hover:bg-[#e6e6e9]";
+const pillIdle = "bg-surface text-foreground hover:bg-hover";
 const pillActive = "bg-foreground text-background";
 
 export function ProductGrid({
@@ -39,8 +39,11 @@ export function ProductGrid({
   businesses,
   initialBusiness = "",
   presets,
+  producers = [],
   title,
   subtitle,
+  backHref,
+  backLabel,
   actions,
   notice,
 }: {
@@ -48,9 +51,14 @@ export function ProductGrid({
   businesses: BusinessOption[];
   initialBusiness?: string;
   presets: ShelfLifePreset[];
+  /** Who can make a dish: choosing one puts the dish on their kitchen list. */
+  producers?: BusinessOption[];
   /** The page header lives here so "add" can sit next to the page's other actions. */
   title: string;
   subtitle?: string;
+  /** Where the page was opened from, now that it is not in the menu. */
+  backHref?: string;
+  backLabel?: string;
   actions?: ReactNode;
   /** Shown between the header and the list, e.g. the unassigned-selections row. */
   notice?: ReactNode;
@@ -93,6 +101,8 @@ export function ProductGrid({
       <PageHeader
         title={title}
         subtitle={subtitle}
+        backHref={backHref}
+        backLabel={backLabel}
         actions={
           <>
             {actions}
@@ -240,6 +250,7 @@ export function ProductGrid({
           product={editing === "new" ? null : editing}
           businesses={businesses}
           presets={presets}
+          producers={producers}
           defaultBusiness={business === NO_BUSINESS ? "" : business}
           onClose={() => setEditing(null)}
         />
@@ -280,12 +291,14 @@ function ProductDialog({
   product,
   businesses,
   presets,
+  producers,
   defaultBusiness,
   onClose,
 }: {
   product: Product | null;
   businesses: BusinessOption[];
   presets: ShelfLifePreset[];
+  producers: BusinessOption[];
   defaultBusiness: string;
   onClose: () => void;
 }) {
@@ -295,6 +308,7 @@ function ProductDialog({
   const [shelfLife, setShelfLife] = useState(
     product?.shelf_life_preset_id ?? (product?.shelf_life_days ? CUSTOM_SHELF_LIFE : ""),
   );
+  const [producer, setProducer] = useState(product?.producer_id ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -380,6 +394,29 @@ function ProductDialog({
             )}
             <p className={hint}>{m.products.shelfLifeHint}</p>
           </div>
+          {producers.length > 0 && (
+            <div className="grid gap-2">
+              <Label htmlFor="producerId">
+                {m.products.producer} {optional}
+              </Label>
+              <FieldSelect id="producerId" name="producerId" value={producer} onChange={(e) => setProducer(e.target.value)}>
+                <option value="">{m.producers.none}</option>
+                {producers.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </FieldSelect>
+              <p className={hint}>{m.products.producerHint}</p>
+              {producer && (
+                <div className="mt-2 grid gap-2">
+                  <Label htmlFor="batchMin">{m.products.batchMin}</Label>
+                  <Input id="batchMin" name="batchMin" inputMode="numeric" defaultValue={product?.batch_min ?? 5} className="max-w-36" />
+                  <p className={hint}>{m.products.batchMinHint}</p>
+                </div>
+              )}
+            </div>
+          )}
           {businesses.length > 0 && (
             <div className="grid gap-2">
               <Label htmlFor="businessId">{m.products.business}</Label>

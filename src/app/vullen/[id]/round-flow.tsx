@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarCheck, CalendarX, Check, ChevronLeft, ChevronRight, MessageSquareText, Timer, TriangleAlert, Truck } from "lucide-react";
+import { CalendarCheck, CalendarX, Check, ChevronLeft, ChevronRight, MessageSquareText, Navigation, Timer, Trash2, TriangleAlert, Truck } from "lucide-react";
 import Link from "next/link";
+import { FillerAvatar } from "@/components/filler/avatar";
 import { FrontView, type FrontSlot } from "@/components/machine/front-view";
 import { RefillTips } from "@/components/refill/refill-tips";
 import { useI18n } from "@/i18n/client";
 import { duration, fmt } from "@/i18n/format";
+import type { AvatarLook } from "@/lib/avatar";
 import type { RefillRound, RouteTimes } from "@/lib/data";
 import { roundReward, summarizeRound, type MyRound } from "@/lib/filler-stats";
 import { haptic } from "@/lib/haptics";
@@ -20,16 +22,15 @@ import {
   slotTally,
   stillMissing,
   tapOnce,
-  type Disposition,
   type FlowLine,
   type RemovalReason,
-  type ReturnRow,
   type StopRecord,
 } from "@/lib/refill-flow";
 import { DEFAULT_MACHINE_PHOTO, mediaUrl } from "@/lib/media";
+import { legKey, samePlace, wazeLink } from "@/lib/round-settings";
 import { bandBg, machineFill, machineTotals, type FillBand } from "@/lib/stock";
 import { cn } from "@/lib/utils";
-import { completeRound, completeStop, savePicked, skipStop, startRound, type StopInput } from "./actions";
+import { completeRound, completeStop, deleteRound, reopenStop, savePicked, skipStop, startRound, type StopInput } from "./actions";
 import { RoundDone, RoundProgress, SlotProgress, StopToast, type SegmentState } from "./round-moments";
 import { chip, ghost, outline, primary, stepper } from "./styles";
 
@@ -40,8 +41,10 @@ export type RoundApi = {
   completeStop: typeof completeStop;
   skipStop: typeof skipStop;
   completeRound: typeof completeRound;
+  reopenStop: typeof reopenStop;
+  deleteRound: typeof deleteRound;
 };
-const serverApi: RoundApi = { savePicked, startRound, completeStop, skipStop, completeRound };
+const serverApi: RoundApi = { savePicked, startRound, completeStop, skipStop, completeRound, reopenStop, deleteRound };
 
 // The round as a checklist: pack, each machine, bring back. One list that
 // always says where the filler is, a clock that runs by itself from the start,
@@ -75,7 +78,7 @@ type StopDraft = {
 };
 type Saved = { picked: Record<string, number>; touched: boolean; drafts: Record<string, StopDraft> };
 type ReportKind = RemovalReason | "count" | "technical";
-type View = "home" | "pick" | "stop" | "returns";
+type View = "home" | "pick" | "stop";
 /** A stop as it is sent; when it happened is added at the moment of sending. */
 type StopWork = Omit<StopInput, "checkedAgo" | "doneAgo">;
 /** A machine just finished or skipped, waiting out its moment to be taken back. */
@@ -83,6 +86,18 @@ type Pending = { machineId: string; work: StopWork | null; checkedAt: string | n
 
 const emptyDraft = (): StopDraft => ({ checkedAt: null, technical: false, note: null, allFull: null, lines: {} });
 const emptyLine = (): LineDraft => ({ removed: [], countAfter: null, full: false });
+/** A stop as it was sent, as a draft again: opened anew, it shows what was entered, ready to change. */
+const draftFrom = (record: StopRecord): StopDraft => ({
+  checkedAt: record.checkedAt,
+  openedAt: record.checkedAt,
+  technical: record.technical,
+  note: record.note,
+  allFull: null,
+  checks: record.checks,
+  lines: Object.fromEntries(
+    record.lines.map((line) => [line.selection, { filled: line.filled, typed: true, removed: line.removed, countAfter: line.countAfter, full: line.full }]),
+  ),
+});
 const storageKey = (id: string) => `vendly-round-${id}`;
 /** The moment of a tap. Only ever read in a handler, never while drawing. */
 const tapTime = () => Date.now();
@@ -100,17 +115,23 @@ function load(id: string): Saved | null {
 export function RoundFlow({
   round: initial,
   who,
+  look = null,
   times,
   history = null,
+  filler = false,
   api = serverApi,
 }: {
   round: RefillRound;
   /** The person holding the phone, under the name a round gets. */
   who: string | null;
+  /** Their avatar, once they made one; else the first letter of their name. */
+  look?: AvatarLook | null;
   /** Earlier rounds' drives, for the plan. */
   times: RouteTimes;
   /** This person's own finished rounds, for what the end of this one earned; null until it ends. */
   history?: MyRound[] | null;
+  /** A filler knows the page the round leaves to as Home. */
+  filler?: boolean;
   api?: RoundApi;
 }) {
   const { m, f } = useI18n();
@@ -137,7 +158,18 @@ export function RoundFlow({
   const [unchecked, setUnchecked] = useState<number | null>(null);
   const [skipArmed, setSkipArmed] = useState(false);
   const [skipAsk, setSkipAsk] = useState(false);
+  const [reopenAsk, setReopenAsk] = useState(false);
+  const [revertAsk, setRevertAsk] = useState(false);
+  const [deleteAsk, setDeleteAsk] = useState(false);
   const [fullAsk, setFullAsk] = useState<{ open: "empty" | "planned"; selections: string[] } | null>(null);
+  // The last question before a machine is done (Xin, 19-10-2026): anything over date? And if so, which.
+  const [expiredAsk, setExpiredAsk] = useState<{
+    machineId: string;
+    open: "empty" | "planned";
+    full?: string[];
+    step: "ask" | "pick";
+    counts: Record<string, number>;
+  } | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [pendingSkip, setPendingSkip] = useState(false);
@@ -200,6 +232,20 @@ export function RoundFlow({
   const fills = useMemo(() => machineTotals(initial.slots.map((slot) => ({ machine_id: slot.machineId, stock: slot.stock, capacity: slot.capacity }))), [initial.slots]);
   const fillOf = (machineId: string) => {
     const total = fills.get(machineId);
+    return total ? machineFill(total.stock, total.capacity, total.counted) : null;
+  };
+  // How full a finished machine was before this round got to it: its stock now
+  // less what its stop changed (sales since then stay off).
+  const fillBefore = (machineId: string) => {
+    const total = machineTotals(
+      initial.slots
+        .filter((slot) => slot.machineId === machineId)
+        .map((slot) => ({
+          machine_id: machineId,
+          stock: slot.stock === null ? null : Math.max(0, slot.stock - (initial.changed[slotKey(machineId, slot.selection)] ?? 0)),
+          capacity: slot.capacity,
+        })),
+    ).get(machineId);
     return total ? machineFill(total.stock, total.capacity, total.counted) : null;
   };
 
@@ -429,6 +475,16 @@ export function RoundFlow({
   const visits = initial.machines.filter((mc) => !isFull(mc.id));
   const openStops = visits.filter((mc) => !isDone(mc.id));
   const nextStop = openStops[0] ?? null;
+  const lastDone =
+    Object.entries(stops)
+      .filter(([, stop]) => stop.completedAt && !stop.skipped)
+      .map(([machineId, stop]) => ({ machineId, at: stop.completedAt as string }))
+      .sort((a, b) => b.at.localeCompare(a.at))[0] ?? null;
+  // Two machines at one address are one stop on the road (Xin, 19-10-2026: the
+  // snack machine stands with Diksmuide): no drive and no Waze between them.
+  const addressOf = (stop: string) =>
+    stop === "start" || stop === "end" ? initial.settings.depotAddress : (initial.machines.find((mc) => mc.id === stop)?.address ?? null);
+  const hereAddress = addressOf(lastDone?.machineId ?? "start");
 
   function openStop(machineId: string) {
     // A machine may be opened before the drive there: the first thing done at
@@ -441,12 +497,113 @@ export function RoundFlow({
     setView("stop");
   }
 
+  /** A machine already done or skipped: what was entered there, and the way to change it. */
+  function viewStop(machineId: string) {
+    if (countdown !== null) setCountdown(0);
+    setReopenAsk(false);
+    setRevertAsk(false);
+    setStopId(machineId);
+    setView("stop");
+  }
+
+  /** The arrows between machines: a done one shows what was entered, an open one opens. */
+  function goToMachine(machineId: string) {
+    if (stops[machineId]?.completedAt && pendingId !== machineId) viewStop(machineId);
+    else openStop(machineId);
+  }
+
+  /** A done or skipped machine opened again (Xin, 19-10-2026): the stock goes back, what was entered stays to change. */
+  function reopen(machineId: string) {
+    const record = stops[machineId];
+    if (!record) return;
+    run(
+      () => api.reopenStop(initial.id, machineId),
+      () => {
+        setReopenAsk(false);
+        setStops((all) => {
+          const rest = { ...all };
+          delete rest[machineId];
+          return rest;
+        });
+        setDrafts((all) => ({ ...all, [machineId]: draftFrom(record) }));
+        openStop(machineId);
+        router.refresh();
+      },
+    );
+  }
+
+  /**
+   * "Terugzetten naar 40%" (Xin, 20-10-2026: for a machine filled by mistake):
+   * the stock goes back as with "Aanpassen", but nothing entered is kept; the
+   * machine is open again on the round, to fill afresh or skip.
+   */
+  function revert(machineId: string) {
+    if (!stops[machineId]) return;
+    run(
+      () => api.reopenStop(initial.id, machineId),
+      () => {
+        setRevertAsk(false);
+        setStops((all) => {
+          const rest = { ...all };
+          delete rest[machineId];
+          return rest;
+        });
+        setDrafts((all) => {
+          const rest = { ...all };
+          delete rest[machineId];
+          return rest;
+        });
+        setView("home");
+        router.refresh();
+      },
+    );
+  }
+
+  /**
+   * "Ronde afronden": the round closes as it stands (Xin, 19-10-2026: no
+   * "Terugbrengen" step). What was taken along and not used goes back to stock,
+   * what came out over date counts as waste, as the round always reckoned it.
+   */
+  function finishRound() {
+    run(
+      () => api.completeRound(initial.id, []),
+      () => {
+        setCompleted(true);
+        setCompletedAt(new Date().toISOString());
+        try {
+          localStorage.removeItem(storageKey(initial.id));
+        } catch {
+          // Nothing to clean up then.
+        }
+        router.refresh();
+      },
+    );
+  }
+
+  /** "Ronde verwijderen", at any point; then back to Bijvullen. */
+  function removeRound() {
+    run(
+      () =>
+        api.deleteRound(initial.id).then(() => {
+          try {
+            localStorage.removeItem(storageKey(initial.id));
+          } catch {
+            // Nothing kept on this phone then.
+          }
+          router.push("/refill");
+          router.refresh();
+        }),
+      () => setDeleteAsk(false),
+    );
+  }
+
   function hold(job: Pending) {
     pendingStop.current = job;
     setPendingId(job.machineId);
     setPendingSkip(job.work === null);
     setUnchecked(null);
     setFullAsk(null);
+    setExpiredAsk(null);
     setSkipAsk(false);
     setSkipArmed(false);
     setView("home");
@@ -454,10 +611,44 @@ export function RoundFlow({
     setCountdown(3);
   }
 
-  function finishStop(machineId: string, open: "empty" | "planned", full?: Set<string>) {
+  function finishStop(machineId: string, open: "empty" | "planned", full?: Set<string>, expired?: Record<string, number>) {
     haptic("success");
     const draft = draftFor(machineId);
-    hold({ machineId, work: stopInput(machineId, open, full), checkedAt: draft.checkedAt ?? draft.openedAt ?? null, tappedAt: tapTime() });
+    const work = stopInput(machineId, open, full);
+    if (expired) {
+      // What the last question says came out over date, per slot: it replaces what was noted before; 0 is none.
+      work.lines = work.lines.map((line) =>
+        line.selection in expired
+          ? {
+              ...line,
+              removed: [
+                ...line.removed.filter((r) => r.reason !== "expired"),
+                ...(expired[line.selection] > 0 ? [{ reason: "expired", qty: expired[line.selection] }] : []),
+              ],
+            }
+          : line,
+      );
+      for (const [selection, qty] of Object.entries(expired)) {
+        if (qty > 0 && !work.lines.some((line) => line.selection === selection)) {
+          work.lines.push({ selection, filled: 0, removed: [{ reason: "expired", qty }], countAfter: null, full: false });
+        }
+      }
+    }
+    hold({ machineId, work, checkedAt: draft.checkedAt ?? draft.openedAt ?? null, tappedAt: tapTime() });
+  }
+
+  /** Before a machine is done: "Zijn er gerechten over datum?", starting from what was already noted here. */
+  function askExpired(machineId: string, open: "empty" | "planned", full?: Set<string>) {
+    setUnchecked(null);
+    setFullAsk(null);
+    // A snack machine holds no dishes to ask about (Xin, 19-10-2026): done at once.
+    if (initial.machines.find((mc) => mc.id === machineId)?.type === "spiral") return finishStop(machineId, open, full);
+    const counts: Record<string, number> = {};
+    for (const [selection, line] of Object.entries(draftFor(machineId).lines)) {
+      const qty = line.removed.find((r) => r.reason === "expired")?.qty ?? 0;
+      if (qty > 0) counts[selection] = qty;
+    }
+    setExpiredAsk({ machineId, open, full: full ? [...full] : undefined, step: "ask", counts });
   }
 
   /** "Klaar", or after the question about unticked slots: one more question when a slot may be full now. */
@@ -468,7 +659,7 @@ export function RoundFlow({
       setFullAsk({ open, selections: unsure });
       return;
     }
-    finishStop(machineId, open);
+    askExpired(machineId, open);
   }
 
   function skipMachine(machineId: string) {
@@ -510,7 +701,7 @@ export function RoundFlow({
         // Not while a machine waits out its three seconds: leaving then would never send it.
         <Link href="/refill" className="flex h-11 items-center gap-1 rounded-full bg-surface pl-2 pr-4 text-[15px] font-semibold active:scale-95">
           <ChevronLeft className="size-5" />
-          {m.nav.refill}
+          {filler ? m.nav.home : m.nav.refill}
         </Link>
       ) : (
         <span />
@@ -549,37 +740,10 @@ export function RoundFlow({
     );
   }
 
-  // ——— Bring back and close ———
-  if (view === "returns" && readyAt && openStops.length === 0 && countdown === null) {
-    return (
-      <ReturnsScreen
-        rows={returnsFor(initial.lines, initial.slots, picked, stops)}
-        busy={pending}
-        header={header(() => setView("home"))}
-        onBack={() => setView("home")}
-        visited={Object.values(stops).filter((stop) => !stop.skipped).length}
-        skipped={Object.values(stops).filter((stop) => stop.skipped).length}
-        onFinish={(choices) =>
-          run(
-            () => api.completeRound(initial.id, choices),
-            () => {
-              setCompleted(true);
-              setCompletedAt(new Date().toISOString());
-              try {
-                localStorage.removeItem(storageKey(initial.id));
-              } catch {
-                // Nothing to clean up then.
-              }
-              router.refresh();
-            },
-          )
-        }
-      />
-    );
-  }
-
   // ——— Packing ———
-  if (view === "pick" && !readyAt) {
+  // Once the round is on, the boxes are only looked at: what went in each, to check at a machine (Xin, 19-10-2026).
+  if (view === "pick") {
+    const locked = Boolean(readyAt);
     const short = shortages(rows, picked);
     // Which slots a product goes in at a machine, so a box can be packed slot by slot.
     const slotsOf = (machineId: string, productId: string) =>
@@ -608,17 +772,19 @@ export function RoundFlow({
             />
           </div>
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[14.5px] text-muted-foreground">{t.pickHint}</p>
-            <button
-              type="button"
-              className="h-10 shrink-0 whitespace-nowrap rounded-full px-3 text-[14.5px] font-semibold"
-              onClick={() => {
-                haptic();
-                setPicks(() => Object.fromEntries(rows.map((row) => [row.key, row.take])));
-              }}
-            >
-              {t.checkAll}
-            </button>
+            <p className="text-[14.5px] text-muted-foreground">{locked ? t.pickLocked : t.pickHint}</p>
+            {!locked && (
+              <button
+                type="button"
+                className="h-10 shrink-0 whitespace-nowrap rounded-full px-3 text-[14.5px] font-semibold"
+                onClick={() => {
+                  haptic();
+                  setPicks(() => Object.fromEntries(rows.map((row) => [row.key, row.take])));
+                }}
+              >
+                {t.checkAll}
+              </button>
+            )}
           </div>
         </div>
 
@@ -636,6 +802,7 @@ export function RoundFlow({
                     role="checkbox"
                     aria-checked={boxDone}
                     aria-label={fmt(t.boxAll, { n: index + 1, machine: box.machine.name })}
+                    disabled={locked}
                     onClick={() => {
                       haptic();
                       setPicks((current) => ({ ...current, ...Object.fromEntries(box.rows.map((row) => [row.key, boxDone ? 0 : row.take])) }));
@@ -666,6 +833,7 @@ export function RoundFlow({
                           type="button"
                           role="checkbox"
                           aria-checked={done}
+                          disabled={locked}
                           onClick={() => {
                             haptic();
                             setPicks((current) => ({ ...current, [row.key]: done ? 0 : row.take }));
@@ -686,6 +854,7 @@ export function RoundFlow({
                         <span className="tabular w-16 shrink-0 text-center text-[18px] font-bold">{row.take}</span>
                         <button
                           type="button"
+                          disabled={locked}
                           onClick={() => setCountSheet(row.key)}
                           className={cn(
                             "tabular h-11 w-16 shrink-0 rounded-xl text-[18px] font-bold transition-colors",
@@ -705,17 +874,24 @@ export function RoundFlow({
         </div>
 
         <BottomBar>
-          <div className="flex gap-2">
-            <BackButton onClick={() => setView("home")} />
-            <button
-              type="button"
-              className={cn(primary, "flex-1")}
-              disabled={pending || totalPicked === 0}
-              onClick={() => (shortTotal > 0 ? setShowShort(true) : start())}
-            >
-              {pending ? t.sending : t.start}
+          {locked ? (
+            <button type="button" className={outline} onClick={() => setView("home")}>
+              <ChevronLeft className="size-5" aria-hidden="true" />
+              {t.back}
             </button>
-          </div>
+          ) : (
+            <div className="flex gap-2">
+              <BackButton onClick={() => setView("home")} />
+              <button
+                type="button"
+                className={cn(primary, "flex-1")}
+                disabled={pending || totalPicked === 0}
+                onClick={() => (shortTotal > 0 ? setShowShort(true) : start())}
+              >
+                {pending ? t.sending : t.start}
+              </button>
+            </div>
+          )}
         </BottomBar>
 
         {countRow && (
@@ -760,6 +936,116 @@ export function RoundFlow({
     );
   }
 
+  // ——— A machine already done or skipped: what was entered, and "Aanpassen" ———
+  const doneMachine =
+    view === "stop" && stopId && pendingId !== stopId && stops[stopId]?.completedAt ? (initial.machines.find((mc) => mc.id === stopId) ?? null) : null;
+  if (doneMachine && readyAt) {
+    const record = stops[doneMachine.id];
+    const index = visits.findIndex((mc) => mc.id === doneMachine.id);
+    const before = index > 0 ? visits[index - 1] : undefined;
+    const after = index >= 0 ? visits[index + 1] : undefined;
+    const productOf = (selection: string) =>
+      initial.lines.find((line) => line.machineId === doneMachine.id && line.selection === selection)?.productName ??
+      initial.slots.find((slot) => slot.machineId === doneMachine.id && slot.selection === selection)?.productName ??
+      "";
+    // Only the slots something happened to.
+    const entered = record.lines.filter((line) => line.filled > 0 || line.removed.length > 0 || line.countAfter !== null || line.full);
+    // The owner can put a machine back as it was before (Xin, 20-10-2026); a filler keeps "Aanpassen".
+    const changedHere = initial.slots.some((slot) => slot.machineId === doneMachine.id && (initial.changed[slotKey(doneMachine.id, slot.selection)] ?? 0) !== 0);
+    const was = !filler && !record.skipped && changedHere ? fillBefore(doneMachine.id) : null;
+    const now = was ? fillOf(doneMachine.id) : null;
+    return (
+      <Screen padded={false}>
+        <div className="flex flex-col gap-2 px-4 pt-4">
+          {header(() => setView("home"))}
+          <StopNav
+            label={fmt(t.stopOf, { n: index + 1, total: visits.length })}
+            onPrev={before ? () => goToMachine(before.id) : undefined}
+            onNext={after ? () => goToMachine(after.id) : undefined}
+          />
+          <div className="flex items-center gap-3.5">
+            <MachineThumb path={doneMachine.photoPath} className="size-16 rounded-2xl" />
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-[28px] font-bold leading-tight tracking-[-0.03em]">{doneMachine.name}</h1>
+              <p className={cn("mt-0.5 flex items-center gap-1.5 text-[15px] font-semibold", record.skipped ? "text-warning" : "text-positive")}>
+                {!record.skipped && <Check className="size-4" strokeWidth={3} aria-hidden="true" />}
+                {record.skipped ? t.skipped : fmt(t.doneAt, { time: f.time(record.completedAt!) })}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-3 pb-36 pt-3">
+          {was && now && (
+            <div className="surface-card flex flex-col gap-3 px-4 py-3.5">
+              <p className="tabular text-[16px] font-semibold">{fmt(t.revertLine, { before: was.percent, after: now.percent })}</p>
+              <button type="button" className={outline} disabled={pending} onClick={() => setRevertAsk(true)}>
+                {fmt(t.revertTo, { n: was.percent })}
+              </button>
+            </div>
+          )}
+          {entered.length === 0 ? (
+            <p className="px-2 text-[15px] text-muted-foreground">{t.nothingEntered}</p>
+          ) : (
+            <ul className="surface-card flex flex-col px-3 py-1">
+              {entered.map((line) => {
+                const out = line.removed.reduce((sum, r) => sum + r.qty, 0);
+                const notes = [
+                  ...(out > 0 ? [fmt(t.removedBadge, { n: out })] : []),
+                  ...(line.countAfter !== null ? [fmt(t.countedTo, { n: line.countAfter })] : line.full ? [t.seenFull] : []),
+                ];
+                return (
+                  <li key={line.selection} className="flex min-h-[60px] items-center gap-3 border-b border-border/60 py-2 last:border-0">
+                    <span className="min-w-8 rounded-lg bg-surface px-1.5 py-1 text-center font-mono text-[12.5px] font-semibold">{line.selection}</span>
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-[15.5px] font-semibold">{productOf(line.selection)}</span>
+                      {notes.length > 0 && <span className="text-[13px] text-muted-foreground">{notes.join(" · ")}</span>}
+                    </span>
+                    <span className="tabular shrink-0 text-[17px] font-bold">{line.filled > 0 ? fmt(t.filledIn, { n: line.filled }) : "–"}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        <BottomBar>
+          <div className="flex gap-2">
+            <BackButton onClick={() => setView("home")} />
+            <button type="button" className={cn(primary, "min-w-0 flex-1")} disabled={pending} onClick={() => setReopenAsk(true)}>
+              <span className="truncate">{record.skipped ? t.doAnyway : t.reopen}</span>
+            </button>
+          </div>
+        </BottomBar>
+
+        {reopenAsk && (
+          <Sheet onClose={() => setReopenAsk(false)}>
+            <h2 className="text-[22px] font-bold tracking-[-0.02em]">{fmt(t.reopenTitle, { machine: doneMachine.name })}</h2>
+            <p className="text-[15.5px] text-muted-foreground">{record.skipped ? t.reopenSkippedHint : t.reopenHint}</p>
+            <button type="button" className={primary} disabled={pending} onClick={() => reopen(doneMachine.id)}>
+              {pending ? t.reopening : t.reopenConfirm}
+            </button>
+            <button type="button" className={ghost} onClick={() => setReopenAsk(false)}>
+              {t.back}
+            </button>
+          </Sheet>
+        )}
+        {revertAsk && was && (
+          <Sheet onClose={() => setRevertAsk(false)}>
+            <h2 className="text-[22px] font-bold tracking-[-0.02em]">{fmt(t.revertTitle, { machine: doneMachine.name, n: was.percent })}</h2>
+            <p className="text-[15.5px] text-muted-foreground">{t.revertHint}</p>
+            <button type="button" className={primary} disabled={pending} onClick={() => revert(doneMachine.id)}>
+              {pending ? t.reverting : t.revertConfirm}
+            </button>
+            <button type="button" className={ghost} onClick={() => setRevertAsk(false)}>
+              {t.back}
+            </button>
+          </Sheet>
+        )}
+      </Screen>
+    );
+  }
+
   // ——— At a machine ———
   const current = view === "stop" && stopId && !isDone(stopId) ? initial.machines.find((mc) => mc.id === stopId) ?? null : null;
   if (current && readyAt) {
@@ -767,6 +1053,8 @@ export function RoundFlow({
     const planned = initial.lines.filter((line) => line.machineId === current.id);
     const machineSlots = initial.slots.filter((slot) => slot.machineId === current.id);
     const stopIndex = visits.findIndex((mc) => mc.id === current.id) + 1;
+    const before = visits[stopIndex - 2];
+    const after = visits[stopIndex];
     const prepOf = (line: FlowLine) => prepared[slotKey(current.id, line.selection)] ?? 0;
     const tallyOf = (line: FlowLine) => {
       const edit = draft.lines[line.selection];
@@ -805,9 +1093,11 @@ export function RoundFlow({
       <Screen padded={false}>
         <div className="flex flex-col gap-2 px-4 pt-4">
           {header(() => setView("home"))}
-          <p className="mt-1 text-[14px] font-semibold text-muted-foreground">
-            {fmt(t.stopOf, { n: stopIndex, total: visits.length })}
-          </p>
+          <StopNav
+            label={fmt(t.stopOf, { n: stopIndex, total: visits.length })}
+            onPrev={before ? () => goToMachine(before.id) : undefined}
+            onNext={after ? () => goToMachine(after.id) : undefined}
+          />
           <div className="flex items-center gap-3.5">
             <MachineThumb path={current.photoPath} className="size-16 rounded-2xl" />
             <div className="min-w-0 flex-1">
@@ -821,11 +1111,20 @@ export function RoundFlow({
               <TriangleAlert className="size-4 text-warning" />
               {t.reportShort}
             </button>
-            {/* Straight to "how many over date", the one he needs most (Xin, 18-10-2026). */}
-            <button type="button" className={chip} onClick={() => setReport({ selection: null, only: "expired" })}>
-              <CalendarX className="size-4 text-negative" />
-              {t.reasonExpired}
-            </button>
+            {/* Straight to "how many over date", the one he needs most (Xin, 18-10-2026); not for snacks (19-10). */}
+            {current.type !== "spiral" && (
+              <button type="button" className={chip} onClick={() => setReport({ selection: null, only: "expired" })}>
+                <CalendarX className="size-4 text-negative" />
+                {t.reasonExpired}
+              </button>
+            )}
+            {/* The way there in Waze, also once the machine is open. */}
+            {current.address && !samePlace(hereAddress, current.address) && (
+              <a href={wazeLink(current.address) ?? undefined} target="_blank" rel="noopener noreferrer" className={chip}>
+                <Navigation className="size-4 text-[#05c8f7]" aria-hidden="true" />
+                {t.waze}
+              </a>
+            )}
             {initial.settings.allowSkip && (
               <button
                 type="button"
@@ -843,11 +1142,13 @@ export function RoundFlow({
             )}
             {removedHere > 0 && <span className={cn(chip, "ring-warning/40")}>{fmt(t.removedBadge, { n: removedHere })}</span>}
           </div>
-          {/* The dates are the filler's to check by eye: one line at every machine, nothing to tap (Xin, 18-10-2026). */}
-          <p className="mt-3 flex items-center gap-2.5 rounded-xl bg-surface px-3 py-2.5 text-[14.5px] font-medium">
-            <CalendarCheck className="size-5 shrink-0" aria-hidden="true" />
-            {t.checkDates}
-          </p>
+          {/* The dates are the filler's to check by eye: one line at every machine with dishes, nothing to tap (Xin, 18-10-2026). */}
+          {current.type !== "spiral" && (
+            <p className="mt-3 flex items-center gap-2.5 rounded-xl bg-surface px-3 py-2.5 text-[14.5px] font-medium">
+              <CalendarCheck className="size-5 shrink-0" aria-hidden="true" />
+              {t.checkDates}
+            </p>
+          )}
           <div className="mt-2 flex items-center justify-between">
             <p className="text-[14.5px] text-muted-foreground">{t.fillHint}</p>
             {open.length > 0 && (
@@ -979,11 +1280,9 @@ export function RoundFlow({
             <button type="button" className={primary} onClick={() => requestFinish(current.id, "planned")}>
               {t.yesAllIn}
             </button>
-            <button type="button" className={outline} onClick={() => requestFinish(current.id, "empty")}>
-              {open.some((line) => tallyOf(line).n > 0) ? t.noOnlyTapped : open.length === 1 ? t.noNotInOne : t.noNotIn}
-            </button>
-            <button type="button" className={ghost} onClick={() => setUnchecked(null)}>
-              {t.backToTap}
+            {/* Not all in: back to the slots to set the right numbers (Xin, 19-10-2026). */}
+            <button type="button" className={outline} onClick={() => setUnchecked(null)}>
+              {t.noAdjust}
             </button>
           </Sheet>
         )}
@@ -1003,14 +1302,47 @@ export function RoundFlow({
               ))}
             </ul>
             <p className="text-[15px] text-muted-foreground">{t.unknownHint}</p>
-            <button type="button" className={primary} onClick={() => finishStop(current.id, fullAsk.open, new Set(fullAsk.selections))}>
+            <button type="button" className={primary} onClick={() => askExpired(current.id, fullAsk.open, new Set(fullAsk.selections))}>
               {t.yesFull}
             </button>
-            <button type="button" className={outline} onClick={() => finishStop(current.id, fullAsk.open)}>
+            <button type="button" className={outline} onClick={() => askExpired(current.id, fullAsk.open)}>
               {t.notAll}
             </button>
           </Sheet>
         )}
+        {expiredAsk?.machineId === current.id &&
+          (expiredAsk.step === "ask" ? (
+            <Sheet onClose={() => setExpiredAsk(null)}>
+              <h2 className="text-[24px] font-bold tracking-[-0.02em]">{t.expiredQuestion}</h2>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" className={cn(outline, "gap-2")} onClick={() => setExpiredAsk({ ...expiredAsk, step: "pick" })}>
+                  <CalendarX className="size-5 text-negative" aria-hidden="true" />
+                  {t.expiredYes}
+                </button>
+                <button
+                  type="button"
+                  className={primary}
+                  onClick={() =>
+                    finishStop(current.id, expiredAsk.open, expiredAsk.full ? new Set(expiredAsk.full) : undefined)
+                  }
+                >
+                  {t.expiredNo}
+                </button>
+              </div>
+            </Sheet>
+          ) : (
+            <ExpiredPick
+              slots={machineSlots.filter((slot) => slot.productName)}
+              counts={expiredAsk.counts}
+              doneLabel={fmt(t.doneWith, { machine: current.name })}
+              onChange={(selection, n) => setExpiredAsk({ ...expiredAsk, counts: { ...expiredAsk.counts, [selection]: n } })}
+              onDone={() =>
+                finishStop(current.id, expiredAsk.open, expiredAsk.full ? new Set(expiredAsk.full) : undefined, expiredAsk.counts)
+              }
+              onBack={() => setExpiredAsk({ ...expiredAsk, step: "ask" })}
+              onClose={() => setExpiredAsk(null)}
+            />
+          ))}
         {skipAsk && (
           <Sheet onClose={() => setSkipAsk(false)}>
             <h2 className="text-[22px] font-bold tracking-[-0.02em]">{fmt(t.skipTickedTitle, { machine: current.name })}</h2>
@@ -1085,7 +1417,8 @@ export function RoundFlow({
       title: t.pickTitle,
       sub: readyAt ? fmt(t.stepPickDone, { n: totalPicked }) : fmt(t.stepPickSub, { n: totalTake }),
       state: readyAt ? "done" : "now",
-      onOpen: readyAt ? undefined : () => setView("pick"),
+      // Also once the round is on: then only to look at what went in each box.
+      onOpen: () => setView("pick"),
     },
     ...initial.route.map((machine) => {
       if (isFull(machine.id)) {
@@ -1110,18 +1443,28 @@ export function RoundFlow({
           : record?.completedAt
             ? fmt(t.doneAt, { time: f.time(record.completedAt) })
             : undefined,
-        onOpen: readyAt && !done ? () => openStop(machine.id) : undefined,
+        onOpen: !readyAt
+          ? undefined
+          : !done
+            ? () => openStop(machine.id)
+            : record?.completedAt && pendingId !== machine.id
+              ? () => viewStop(machine.id)
+              : undefined,
         machine: { photoPath: machine.photoPath, id: machine.id },
       };
     }),
+    // Back to where the round began (Xin, 19-10-2026: no "Terugbrengen" step any more).
     {
       key: "finish",
-      title: t.stepFinish,
-      sub: t.stepFinishSub,
+      title: t.stepBackStart,
+      sub: initial.settings.depotAddress ?? t.stepBackStartSub,
       state: readyAt && openStops.length === 0 && countdown === null ? "now" : "later",
-      onOpen: readyAt && openStops.length === 0 && countdown === null ? () => setView("returns") : undefined,
     },
   ];
+
+  // The round can always go (Xin, 19-10-2026), just not while a machine is on its way to being saved.
+  const canDelete = countdown === null && !pendingId;
+  const doneCount = Object.values(stops).filter((stop) => stop.completedAt && !stop.skipped).length;
 
   // The round as a bar, one segment per machine, and where the filler was
   // last done, for the estimate: the latest machine filled (a skip says
@@ -1134,24 +1477,21 @@ export function RoundFlow({
         : machineId === nextStop?.id
           ? "now"
           : "later";
-  const lastDone =
-    Object.entries(stops)
-      .filter(([, stop]) => stop.completedAt && !stop.skipped)
-      .map(([machineId, stop]) => ({ machineId, at: stop.completedAt as string }))
-      .sort((a, b) => b.at.localeCompare(a.at))[0] ?? null;
-
   // The drive into each step, as earlier rounds measured it: from the start to
-  // the first machine, between machines (either way round), and back. It comes
-  // from the last step before it with work: a full machine is driven past.
+  // the first machine, between machines (either way round), and back; until
+  // then, as worked out from the addresses. It comes from the last step before
+  // it with work: a full machine is driven past.
   const endOf = (key: string) => (key === "pick" ? "start" : key === "finish" ? "end" : key);
   const driveInto = (index: number) => {
     let back = index - 1;
     while (back > 0 && steps[back].state === "full") back -= 1;
     const from = endOf(steps[back].key);
     const to = endOf(steps[index].key);
+    if (samePlace(addressOf(from), addressOf(to))) return t.samePlace;
     const measured = times.legs[`${from}→${to}`] ?? (from !== "start" && to !== "end" ? times.legs[`${to}→${from}`] : undefined);
-    if (!measured) return null;
-    const time = duration(Math.max(1, measured.minutes), m.refill.runTime, m.refill.runTimeHours);
+    const minutes = measured?.minutes ?? initial.settings.drive[legKey(from, to)];
+    if (!minutes) return null;
+    const time = duration(Math.max(1, minutes), m.refill.runTime, m.refill.runTimeHours);
     return fmt(to === "end" ? t.driveBack : t.drive, { time });
   };
 
@@ -1161,16 +1501,22 @@ export function RoundFlow({
         {header()}
         {/* A big hello before the start; once the round is on, the name steps back for the work. */}
         <div className={cn("flex items-center", readyAt ? "mt-3 gap-2.5" : "mt-4 gap-3.5")}>
-          {who && (
-            <span
-              className={cn(
-                "grid shrink-0 place-items-center rounded-full bg-primary/15 font-bold text-[#8a6117]",
-                readyAt ? "size-9 text-[15px]" : "size-12 text-[19px]",
-              )}
-              aria-hidden="true"
-            >
-              {who.trim().charAt(0).toUpperCase()}
+          {look ? (
+            <span className={cn("block shrink-0 overflow-hidden rounded-full bg-primary/15", readyAt ? "size-10" : "size-14")} aria-hidden="true">
+              <FillerAvatar look={look} className="size-full" />
             </span>
+          ) : (
+            who && (
+              <span
+                className={cn(
+                  "grid shrink-0 place-items-center rounded-full bg-primary/15 font-bold text-gold-ink",
+                  readyAt ? "size-9 text-[15px]" : "size-12 text-[19px]",
+                )}
+                aria-hidden="true"
+              >
+                {who.trim().charAt(0).toUpperCase()}
+              </span>
+            )
           )}
           <div className="min-w-0">
             <h1
@@ -1203,9 +1549,9 @@ export function RoundFlow({
         {/* This round's own note first, then what the operator says before every round. */}
         {(initial.notes || initial.settings.message) && (
           <div className="mt-3 flex gap-3 rounded-2xl bg-primary/10 px-4 py-3">
-            <MessageSquareText className="mt-0.5 size-5 shrink-0 text-[#8a6117]" aria-hidden="true" />
+            <MessageSquareText className="mt-0.5 size-5 shrink-0 text-gold-ink" aria-hidden="true" />
             <div className="flex min-w-0 flex-col gap-1.5">
-              <p className="text-[13px] font-semibold text-[#8a6117]">{t.messageTitle}</p>
+              <p className="text-[13px] font-semibold text-gold-ink">{t.messageTitle}</p>
               {initial.notes && <p className="whitespace-pre-wrap text-[15px] leading-snug">{initial.notes}</p>}
               {initial.settings.message && <p className="whitespace-pre-wrap text-[15px] leading-snug">{initial.settings.message}</p>}
             </div>
@@ -1216,82 +1562,106 @@ export function RoundFlow({
       {/* The route as a line with a stop for every step: done in green, the
           one to do now in black, the rest still ahead, the drive in between. */}
       <h2 className="px-5 pt-6 text-[13px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{t.routeTitle}</h2>
-      <ol className="flex flex-1 flex-col overflow-y-auto px-3 pb-44 pt-3">
-        {steps.map((step, index) => {
-          const last = index === steps.length - 1;
-          const passed = step.state === "done" || step.state === "skipped";
-          const next = steps[index + 1];
-          const nextPassed = next?.state === "done" || next?.state === "skipped";
-          const drive = !last && next.state !== "full" && !nextPassed ? driveInto(index + 1) : null;
-          // The line past a full machine turns green with the stop after it.
-          const lineDone = passed || (step.state === "full" && nextPassed);
-          return (
-            <li key={step.key} className="flex gap-3">
-              <div className="flex w-10 shrink-0 flex-col items-center pt-[18px]" aria-hidden="true">
-                <span
-                  className={cn(
-                    "relative grid size-10 shrink-0 place-items-center rounded-full text-[15px] font-bold",
-                    step.state === "done" && "bg-positive text-background",
-                    step.state === "skipped" && "bg-warning/25 text-foreground",
-                    step.state === "now" && "bg-foreground text-background ring-4 ring-foreground/12",
-                    step.state === "later" && "border-2 border-border bg-card text-muted-foreground",
-                    step.state === "full" && "border-2 border-dashed border-border bg-background text-muted-foreground/70",
-                  )}
-                >
-                  {step.state === "done" ? <Check className="size-5" strokeWidth={3} /> : index + 1}
-                </span>
-                {!last && <span className={cn("-mb-[18px] w-[3px] flex-1 rounded-full", lineDone ? "bg-positive" : "bg-border")} />}
-              </div>
-              <div className="flex min-w-0 flex-1 flex-col pb-2">
-                <button
-                  type="button"
-                  disabled={!step.onOpen}
-                  onClick={step.onOpen}
-                  className={cn(
-                    "flex min-h-[76px] w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-[transform,background-color] active:scale-[0.99]",
-                    step.state === "now"
-                      ? "bg-card shadow-[0_0_0_2px_var(--foreground)]"
-                      : step.state === "full"
-                        ? "border-2 border-dashed border-border bg-transparent"
-                        : "bg-card/70",
-                  )}
-                >
-                  {step.machine && (
-                    <MachineThumb
-                      path={step.machine.photoPath}
-                      // Only the picture fades for what comes later: faded text would no longer read outdoors.
-                      className={cn("size-12 rounded-xl", (passed || step.state === "full" || step.state === "later") && "opacity-60")}
-                    />
-                  )}
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className={cn("truncate text-[16.5px] font-semibold", (passed || step.state === "full") && "text-muted-foreground")}>
-                      {step.title}
-                    </span>
-                    <span className={cn("text-[13.5px] text-muted-foreground", step.state === "full" ? "font-medium leading-snug" : "truncate")}>
-                      {step.sub}
-                    </span>
+      <div className="flex flex-1 flex-col overflow-y-auto px-3 pb-44 pt-3">
+        <ol className="flex flex-col">
+          {steps.map((step, index) => {
+            const last = index === steps.length - 1;
+            const passed = step.state === "done" || step.state === "skipped";
+            const next = steps[index + 1];
+            const nextPassed = next?.state === "done" || next?.state === "skipped";
+            const drive = !last && next.state !== "full" && !nextPassed ? driveInto(index + 1) : null;
+            // The line past a full machine turns green with the stop after it.
+            const lineDone = passed || (step.state === "full" && nextPassed);
+            return (
+              <li key={step.key} className="flex gap-3">
+                <div className="flex w-10 shrink-0 flex-col items-center pt-[18px]" aria-hidden="true">
+                  <span
+                    className={cn(
+                      "relative grid size-10 shrink-0 place-items-center rounded-full text-[15px] font-bold",
+                      step.state === "done" && "bg-positive text-background",
+                      step.state === "skipped" && "bg-warning/25 text-foreground",
+                      step.state === "now" && "bg-foreground text-background ring-4 ring-foreground/12",
+                      step.state === "later" && "border-2 border-border bg-card text-muted-foreground",
+                      step.state === "full" && "border-2 border-dashed border-border bg-background text-muted-foreground/70",
+                    )}
+                  >
+                    {step.state === "done" ? <Check className="size-5" strokeWidth={3} /> : index + 1}
                   </span>
-                  {/* Not for a full one: it was full when the round was made, and sales since would contradict the word. */}
-                  {step.machine && !passed && step.state !== "full" && <FillPill fill={fillOf(step.machine.id)} compact />}
-                  {step.aside ? (
-                    <span className="shrink-0 text-[13px] font-semibold text-muted-foreground">{step.aside}</span>
-                  ) : step.state === "now" && !step.machine ? (
-                    <span className="shrink-0 rounded-full bg-foreground px-2.5 py-1 text-[12px] font-bold text-background">{t.now}</span>
-                  ) : step.onOpen ? (
-                    <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
-                  ) : null}
-                </button>
-                {drive && (
-                  <p className="flex items-center gap-2 px-1 pb-1 pt-2.5 text-[13px] font-medium text-muted-foreground">
-                    <Truck className="size-4" aria-hidden="true" />
-                    {drive}
-                  </p>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
+                  {!last && <span className={cn("-mb-[18px] w-[3px] flex-1 rounded-full", lineDone ? "bg-positive" : "bg-border")} />}
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col pb-2">
+                  <button
+                    type="button"
+                    disabled={!step.onOpen}
+                    onClick={step.onOpen}
+                    className={cn(
+                      "flex min-h-[76px] w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-[transform,background-color] active:scale-[0.99]",
+                      step.state === "now"
+                        ? "bg-card shadow-[0_0_0_2px_var(--foreground)]"
+                        : step.state === "full"
+                          ? "border-2 border-dashed border-border bg-transparent"
+                          : "bg-card/70",
+                    )}
+                  >
+                    {step.machine && (
+                      <MachineThumb
+                        path={step.machine.photoPath}
+                        // Only the picture fades for what comes later: faded text would no longer read outdoors.
+                        className={cn("size-12 rounded-xl", (passed || step.state === "full" || step.state === "later") && "opacity-60")}
+                      />
+                    )}
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className={cn("truncate text-[16.5px] font-semibold", (passed || step.state === "full") && "text-muted-foreground")}>
+                        {step.title}
+                      </span>
+                      <span className={cn("text-[13.5px] text-muted-foreground", step.state === "full" ? "font-medium leading-snug" : "truncate")}>
+                        {step.sub}
+                      </span>
+                    </span>
+                    {/* Not for a full one: it was full when the round was made, and sales since would contradict the word. */}
+                    {step.machine && !passed && step.state !== "full" && <FillPill fill={fillOf(step.machine.id)} compact />}
+                    {step.aside ? (
+                      <span className="shrink-0 text-[13px] font-semibold text-muted-foreground">{step.aside}</span>
+                    ) : step.state === "now" && !step.machine ? (
+                      <span className="shrink-0 rounded-full bg-foreground px-2.5 py-1 text-[12px] font-bold text-background">{t.now}</span>
+                    ) : step.onOpen ? (
+                      <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+                    ) : null}
+                  </button>
+                  {drive && (
+                    <p className="flex items-center gap-2 px-1 pb-1 pt-2.5 text-[13px] font-medium text-muted-foreground">
+                      <Truck className="size-4" aria-hidden="true" />
+                      {drive}
+                    </p>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+        {/* The round can go (Xin, 19-10-2026): quiet, at the end of the route. */}
+        {canDelete && (
+          <button type="button" className={cn(ghost, "mt-4 gap-2 text-negative")} onClick={() => setDeleteAsk(true)}>
+            <Trash2 className="size-4" aria-hidden="true" />
+            {t.deleteRound}
+          </button>
+        )}
+      </div>
+
+      {deleteAsk && (
+        <Sheet onClose={() => setDeleteAsk(false)}>
+          <h2 className="text-[22px] font-bold tracking-[-0.02em]">{t.deleteTitle}</h2>
+          <p className="text-[15.5px] text-muted-foreground">
+            {doneCount === 0 ? t.deleteHint : fmt(doneCount === 1 ? t.deleteHintStartedOne : t.deleteHintStarted, { n: doneCount })}
+          </p>
+          <button type="button" className={cn(primary, "bg-negative")} disabled={pending} onClick={removeRound}>
+            {pending ? t.sending : t.deleteConfirm}
+          </button>
+          <button type="button" className={ghost} onClick={() => setDeleteAsk(false)}>
+            {t.back}
+          </button>
+        </Sheet>
+      )}
 
       <BottomBar>
         {failedMachine && (
@@ -1315,22 +1685,26 @@ export function RoundFlow({
             {touched ? t.continuePicking : t.beginPicking}
           </button>
         ) : nextStop ? (
-          <button type="button" className={primary} disabled={pending || settling} onClick={() => openStop(nextStop.id)}>
-            {fmt(t.goTo, { machine: nextStop.name })}
-            <ChevronRight className="size-5" />
-          </button>
+          <div className="flex gap-2">
+            <NavigateButton address={samePlace(hereAddress, nextStop.address) ? null : nextStop.address} place={nextStop.name} />
+            <button type="button" className={cn(primary, "min-w-0 flex-1")} disabled={pending || settling} onClick={() => openStop(nextStop.id)}>
+              <span className="truncate">{fmt(t.goTo, { machine: nextStop.name })}</span>
+              <ChevronRight className="size-5 shrink-0" />
+            </button>
+          </div>
         ) : (
-          <button
-            type="button"
-            className={primary}
-            disabled={pending || settling}
-            onClick={() => {
-              if (countdown !== null) setCountdown(0);
-              setView("returns");
-            }}
-          >
-            {pending ? t.sending : t.finish}
-          </button>
+          // Every machine done: the round closes with one tap; what came back goes back to stock.
+          <div className="flex gap-2">
+            <NavigateButton address={initial.settings.depotAddress} place={t.stepBackStart} />
+            <button
+              type="button"
+              className={cn(primary, "min-w-0 flex-1")}
+              disabled={pending || settling || countdown !== null || pendingId !== null}
+              onClick={finishRound}
+            >
+              {pending ? t.sending : t.finishRound}
+            </button>
+          </div>
         )}
       </BottomBar>
     </Screen>
@@ -1363,7 +1737,7 @@ function MachineThumb({ path, className }: { path: string | null; className?: st
   return (
     <span
       className={cn(
-        "relative grid shrink-0 place-items-center overflow-hidden bg-[linear-gradient(160deg,#f6f2ea,#ece6da)] shadow-[inset_0_0_0_1px_rgb(0_0_0/0.04)]",
+        "relative grid shrink-0 place-items-center overflow-hidden bg-[linear-gradient(160deg,var(--photo-from),var(--photo-to))] shadow-[inset_0_0_0_1px_rgb(0_0_0/0.04)]",
         className,
       )}
       aria-hidden="true"
@@ -1511,271 +1885,6 @@ function CountSheet({
   );
 }
 
-function ReturnsScreen({
-  rows,
-  busy,
-  header,
-  onBack,
-  onFinish,
-  visited,
-  skipped,
-}: {
-  rows: ReturnRow[];
-  busy: boolean;
-  header: React.ReactNode;
-  onBack: () => void;
-  onFinish: (choices: { productId: string; source: "leftover" | "removed"; reason: string | null; disposition: string; qty: number }[]) => void;
-  visited: number;
-  skipped: number;
-}) {
-  const { m } = useI18n();
-  const t = m.round;
-  // Per product, how many go where: everything to one place, or split (1 Too Good To Go, the rest away).
-  const [parts, setParts] = useState<Record<string, Partial<Record<Disposition, number>>>>({});
-  const [splitting, setSplitting] = useState<ReturnRow | null>(null);
-  const keyOf = (row: ReturnRow) => `${row.productId}|${row.source}|${row.reason ?? ""}`;
-  const partsOf = (row: ReturnRow): [Disposition, number][] =>
-    (Object.entries(parts[keyOf(row)] ?? { [row.disposition]: row.qty }) as [Disposition, number][]).filter(([, qty]) => qty > 0);
-  const label: Record<Disposition, string> = {
-    stock: t.dispStock,
-    waste: t.dispWaste,
-    promo: t.dispPromo,
-    staff: t.dispStaff,
-    other: t.dispOther,
-  };
-  const reasonLabel: Record<RemovalReason, string> = {
-    expired: t.reasonExpired,
-    damaged: t.reasonDamaged,
-    nearExpiry: t.reasonNear,
-    other: t.reasonOther,
-  };
-  const leftover = rows.filter((row) => row.source === "leftover");
-  const removed = rows.filter((row) => row.source === "removed");
-
-  const list = (items: ReturnRow[]) => (
-    <ul className="surface-card flex flex-col px-3 py-1">
-      {items.map((row) => {
-        const where = partsOf(row);
-        const split = where.length > 1;
-        return (
-          <li key={keyOf(row)} className="flex flex-col gap-2 border-b border-border/60 py-3 last:border-0">
-            <div className="flex items-center gap-3">
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-[15.5px] font-semibold">{row.productName}</span>
-                {row.reason && <span className="text-[13px] text-muted-foreground">{reasonLabel[row.reason]}</span>}
-              </span>
-              <span className="tabular shrink-0 text-[17px] font-bold">{fmt(t.splitPieces, { n: row.qty })}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {split ? (
-                // Split over several places: the parts, and a tap to change them.
-                <button
-                  type="button"
-                  onClick={() => setSplitting(row)}
-                  className="flex min-h-10 min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-surface px-3 py-2 text-left text-[13.5px] font-semibold"
-                >
-                  {where.map(([to, qty]) => (
-                    <span key={to} className="tabular">
-                      {qty} {label[to]}
-                    </span>
-                  ))}
-                </button>
-              ) : (
-                <select
-                  aria-label={row.productName}
-                  className="h-10 min-w-0 flex-1 rounded-xl bg-surface px-2 text-base font-semibold md:text-[13.5px]"
-                  value={where[0]?.[0] ?? row.disposition}
-                  onChange={(event) => setParts((all) => ({ ...all, [keyOf(row)]: { [event.target.value]: row.qty } }))}
-                >
-                  {(Object.keys(label) as Disposition[]).map((option) => (
-                    <option key={option} value={option}>
-                      {label[option]}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {row.qty > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setSplitting(row)}
-                  className="h-10 shrink-0 rounded-xl px-3 text-[13.5px] font-semibold ring-1 ring-border transition-transform active:scale-95"
-                >
-                  {t.split}
-                </button>
-              )}
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
-
-  return (
-    <Screen padded={false}>
-      <div className="flex flex-col gap-3 px-4 pt-4">
-        {header}
-        <h1 className="mt-2 text-[32px] font-bold tracking-[-0.03em]">{t.returnsTitle}</h1>
-        <p className="text-[14px] text-muted-foreground">
-          {skipped
-            ? fmt(t.machinesDoneSkipped, { n: visited, skipped })
-            : fmt(visited === 1 ? t.machinesDoneOne : t.machinesDone, { n: visited })}
-        </p>
-      </div>
-      <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-3 pb-36 pt-4">
-        {rows.length === 0 && <p className="surface-card p-5 text-[15px]">{t.nothingBack}</p>}
-        {leftover.length > 0 && (
-          <>
-            <p className="px-2 text-[16px] font-semibold">{t.stillWithYou}</p>
-            {list(leftover)}
-          </>
-        )}
-        {removed.length > 0 && (
-          <>
-            <p className="mt-2 px-2 text-[16px] font-semibold">{t.removedFromMachine}</p>
-            {list(removed)}
-          </>
-        )}
-      </div>
-      <BottomBar>
-        <div className="flex gap-2">
-          <BackButton onClick={onBack} disabled={busy} />
-          <button
-            type="button"
-            className={cn(primary, "flex-1")}
-            disabled={busy}
-            onClick={() =>
-              onFinish(
-                rows.flatMap((row) =>
-                  partsOf(row).map(([disposition, qty]) => ({ productId: row.productId, source: row.source, reason: row.reason, disposition, qty })),
-                ),
-              )
-            }
-          >
-            {busy ? t.sending : t.finish}
-          </button>
-        </div>
-      </BottomBar>
-      {splitting && (
-        <SplitSheet
-          row={splitting}
-          start={Object.fromEntries(partsOf(splitting))}
-          label={label}
-          onClose={() => setSplitting(null)}
-          onSave={(next) => {
-            setParts((all) => ({ ...all, [keyOf(splitting)]: next }));
-            setSplitting(null);
-          }}
-        />
-      )}
-    </Screen>
-  );
-}
-
-/**
- * One product that came back, split over places: a number for each, and the
- * rest to the place chosen at the bottom. The pieces always add up, so there
- * is nothing to get wrong: a plus takes one from the rest, a minus gives it back.
- */
-function SplitSheet({
-  row,
-  start,
-  label,
-  onClose,
-  onSave,
-}: {
-  row: ReturnRow;
-  start: Partial<Record<Disposition, number>>;
-  label: Record<Disposition, string>;
-  onClose: () => void;
-  onSave: (parts: Partial<Record<Disposition, number>>) => void;
-}) {
-  const { m } = useI18n();
-  const t = m.round;
-  // The rest goes where most of it went until now; its own number is whatever is left.
-  const firstRest = (Object.entries(start) as [Disposition, number][]).sort((a, b) => b[1] - a[1])[0]?.[0] ?? row.disposition;
-  const [rest, setRest] = useState<Disposition>(firstRest);
-  const [count, setCount] = useState<Record<Disposition, number>>(() => ({
-    stock: 0,
-    waste: 0,
-    promo: 0,
-    staff: 0,
-    other: 0,
-    ...start,
-    [firstRest]: 0,
-  }));
-  // Too Good To Go and the bin first: that is what a split is usually about.
-  const order: Disposition[] = ["promo", "waste", "stock", "staff", "other"];
-  const others = order.filter((where) => where !== rest);
-  const given = others.reduce((sum, where) => sum + count[where], 0);
-  const left = row.qty - given;
-
-  return (
-    <Sheet onClose={onClose}>
-      <h2 className="text-[22px] font-bold tracking-[-0.02em]">{row.productName}</h2>
-      <p className="-mt-2 text-[15px] text-muted-foreground">{fmt(t.splitHint, { n: row.qty })}</p>
-      <ul className="flex flex-col">
-        {others.map((where) => (
-          <li key={where} className="flex min-h-14 items-center gap-3 border-b border-border/60 last:border-0">
-            <span className="min-w-0 flex-1 text-[15.5px] font-semibold">{label[where]}</span>
-            <button
-              type="button"
-              aria-label={`${t.less}: ${label[where]}`}
-              className={cn(stepper, "size-11 text-2xl")}
-              disabled={count[where] === 0}
-              onClick={() => setCount((all) => ({ ...all, [where]: all[where] - 1 }))}
-            >
-              −
-            </button>
-            <span className="tabular w-8 text-center text-[22px] font-bold">{count[where]}</span>
-            <button
-              type="button"
-              aria-label={`${t.more}: ${label[where]}`}
-              className={cn(stepper, "size-11 text-2xl")}
-              disabled={left === 0}
-              onClick={() => setCount((all) => ({ ...all, [where]: all[where] + 1 }))}
-            >
-              +
-            </button>
-          </li>
-        ))}
-      </ul>
-      <div className="flex items-center gap-3 rounded-2xl bg-surface px-4 py-3">
-        <span className="text-[15px] font-semibold">{t.splitRest}</span>
-        <select
-          aria-label={t.splitRest}
-          value={rest}
-          onChange={(event) => {
-            const next = event.target.value as Disposition;
-            // What was counted for the new place becomes part of the rest, and the old rest starts at 0.
-            setCount((all) => ({ ...all, [next]: 0, [rest]: 0 }));
-            setRest(next);
-          }}
-          className="h-10 min-w-0 flex-1 rounded-xl bg-card px-2 text-base font-semibold md:text-[14px]"
-        >
-          {order.map((where) => (
-            <option key={where} value={where}>
-              {label[where]}
-            </option>
-          ))}
-        </select>
-        <span className="tabular w-8 shrink-0 text-right text-[22px] font-bold">{left}</span>
-      </div>
-      <button
-        type="button"
-        className={primary}
-        onClick={() =>
-          onSave({
-            ...Object.fromEntries(others.filter((where) => count[where] > 0).map((where) => [where, count[where]])),
-            ...(left > 0 ? { [rest]: left } : {}),
-          })
-        }
-      >
-        {t.save}
-      </button>
-    </Sheet>
-  );
-}
-
 /**
  * How long the round has been going, from "Start ronde" on. It runs by itself:
  * a timer the filler has to start and stop gets forgotten, and then the
@@ -1830,6 +1939,105 @@ function BackButton({ onClick, disabled }: { onClick: () => void; disabled?: boo
       <ChevronLeft className="size-5" aria-hidden="true" />
       {m.round.back}
     </button>
+  );
+}
+
+/** "Welke gerechten zijn over datum?": the machine's dishes, each with − and +, then the machine is done. */
+function ExpiredPick({
+  slots,
+  counts,
+  doneLabel,
+  onChange,
+  onDone,
+  onBack,
+  onClose,
+}: {
+  slots: RefillRound["slots"];
+  counts: Record<string, number>;
+  doneLabel: string;
+  onChange: (selection: string, n: number) => void;
+  onDone: () => void;
+  onBack: () => void;
+  onClose: () => void;
+}) {
+  const { m } = useI18n();
+  const t = m.round;
+  const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
+  return (
+    <Sheet onClose={onClose}>
+      <h2 className="text-[22px] font-bold tracking-[-0.02em]">{t.expiredPickTitle}</h2>
+      <p className="text-[15px] text-muted-foreground">{t.expiredPickHint}</p>
+      <ul className="flex flex-col">
+        {slots.map((slot) => {
+          const n = counts[slot.selection] ?? 0;
+          return (
+            <li key={slot.selection} className="flex min-h-[60px] items-center gap-2.5 border-b border-border/60 last:border-0">
+              <span className="min-w-8 rounded-lg bg-surface px-1.5 py-0.5 text-center font-mono text-[12.5px] font-semibold">{slot.selection}</span>
+              <span className={cn("min-w-0 flex-1 truncate text-[15.5px] font-semibold", n > 0 && "text-negative")}>{slot.productName}</span>
+              <button type="button" className={stepper} disabled={n === 0} onClick={() => onChange(slot.selection, n - 1)} aria-label={`− ${slot.selection}`}>
+                −
+              </button>
+              <span className="tabular w-7 text-center text-[19px] font-bold">{n}</span>
+              <button
+                type="button"
+                className={stepper}
+                disabled={n >= slot.capacity}
+                onClick={() => {
+                  haptic();
+                  onChange(slot.selection, n + 1);
+                }}
+                aria-label={`+ ${slot.selection}`}
+              >
+                +
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <button type="button" className={primary} disabled={total === 0} onClick={onDone}>
+        <Check className="size-5" strokeWidth={3} aria-hidden="true" />
+        <span className="truncate">{doneLabel}</span>
+      </button>
+      <button type="button" className={ghost} onClick={onBack}>
+        {t.back}
+      </button>
+    </Sheet>
+  );
+}
+
+/** "Waze": the way to an address, on a phone in the Waze app (Xin, 19-10-2026). Nothing without an address. */
+function NavigateButton({ address, place }: { address: string | null; place: string }) {
+  const { m } = useI18n();
+  const href = wazeLink(address);
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={fmt(m.round.navigateTo, { place })}
+      className={cn(outline, "w-auto shrink-0 gap-1.5 px-4")}
+    >
+      <Navigation className="size-5 text-[#05c8f7]" aria-hidden="true" />
+      {m.round.waze}
+    </a>
+  );
+}
+
+/** "Stop 2 of 5" between two arrows: the machine before and after it on the route (Xin, 19-10-2026). */
+function StopNav({ label, onPrev, onNext }: { label: string; onPrev?: () => void; onNext?: () => void }) {
+  const { m } = useI18n();
+  const arrow = "grid size-11 shrink-0 place-items-center rounded-full bg-surface active:scale-95 disabled:opacity-30";
+  return (
+    <div className="mt-1 flex items-center gap-2">
+      <button type="button" className={arrow} onClick={onPrev} disabled={!onPrev} aria-label={m.round.prevMachine}>
+        <ChevronLeft className="size-5" aria-hidden="true" />
+      </button>
+      <p className="tabular min-w-0 flex-1 text-center text-[14px] font-semibold text-muted-foreground">{label}</p>
+      <button type="button" className={arrow} onClick={onNext} disabled={!onNext} aria-label={m.round.nextMachine}>
+        <ChevronRight className="size-5" aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 

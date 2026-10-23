@@ -42,8 +42,15 @@ Deno.serve(async (req) => {
   const results: { org: string; audience: string; line: string | null; sent: number; dropped: number }[] = [];
 
   for (const org of orgs ?? []) {
-    const { data: subs } = await db.from("push_subscriptions").select("*").eq("org_id", org.id);
-    if (!subs?.length) continue;
+    const [{ data: all }, { data: chose }] = await Promise.all([
+      db.from("push_subscriptions").select("*").eq("org_id", org.id),
+      db.from("notification_prefs").select("user_id").eq("org_id", org.id),
+    ]);
+    // Whoever set their own notifications (Instellingen → Meldingen) gets their overview from vendly-alerts, at
+    // the hour they chose or not at all.
+    const own = new Set((chose ?? []).map((row) => row.user_id));
+    const subs = (all ?? []).filter((sub) => !sub.user_id || !own.has(sub.user_id));
+    if (!subs.length) continue;
 
     // A shop hears about its own machines, the operator about the whole fleet.
     // So: one line per audience, not one line per organisation.

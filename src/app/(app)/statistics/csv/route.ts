@@ -1,39 +1,41 @@
 import { csvResponse } from "@/lib/csv";
-import { getStatsReport } from "@/lib/data";
 import { getI18n } from "@/i18n/server";
-import { denyFiller, requireOrgId } from "@/lib/org";
-import { parseStatsParams } from "@/lib/stats-params";
-import { reportDay } from "@/lib/stats";
+import { denyFiller } from "@/lib/org";
+import { getSalesExport } from "@/lib/sales-export";
 
+// The same export as the PDF and the workbook, as one plain file: days as
+// 2026-09-01, which any accounting program reads, in the business's own days.
 export async function GET(request: Request) {
   await denyFiller();
+  const data = await getSalesExport(new URL(request.url).searchParams);
   const { m } = await getI18n();
-  const orgId = await requireOrgId();
-  const params = Object.fromEntries(new URL(request.url).searchParams);
-  const { filters } = parseStatsParams(params);
-  const report = await getStatsReport(orgId, filters);
-  // The period is read where the business stands, not in UTC: a September
-  // report must not tell the accountant it starts on 31 August. The end is the
-  // first moment after the period, so the last day it covers is a tick earlier.
-  const firstDay = reportDay(report.cur_start, report.timezone);
-  const lastDay = reportDay(new Date(report.cur_end).getTime() - 1, report.timezone);
+  const t = m.salesExport;
+  const total = [t.total, data.totals.units, data.totals.revenue];
 
   const rows: (string | number | null)[][] = [
-    [m.stats.period, firstDay, lastDay],
-    [m.stats.revenue, report.totals.revenue],
-    [m.stats.units, report.totals.units],
+    [data.owner ?? data.brand],
+    [`${t.heading} · ${data.title}`],
+    [m.stats.period, data.firstDay, data.lastDay],
+    ...data.filters.map((line) => [line]),
+    [t.revenue, data.totals.revenue],
+    [t.units, data.totals.units],
+    [t.inclVat],
+    [],
+    [t.perDay],
+    [t.date, t.units, t.revenue],
+    ...data.days.map((d) => [d.day, d.units, d.revenue]),
+    total,
     [],
     [m.stats.perProduct],
-    [m.stats.product, m.stats.units, m.stats.revenue],
-    ...report.by_product.map((p) => [p.product_name ?? m.stats.unassignedProduct, p.units, p.revenue]),
+    [m.stats.product, t.units, t.revenue],
+    ...[...data.products, ...(data.withoutProduct ? [data.withoutProduct] : [])].map((p) => [p.label, p.units, p.revenue]),
+    total,
     [],
     [m.stats.perMachine],
-    [m.stats.machine, m.stats.units, m.stats.revenue],
-    ...report.by_machine.map((r) => [r.machine_name, r.units, r.revenue]),
-    [],
-    [m.stats.revenueOverTime],
-    ...report.by_day.map((d) => [d.day, d.units, d.revenue]),
+    [m.stats.machine, t.units, t.revenue],
+    ...data.machines.map((r) => [r.label, r.units, r.revenue]),
+    total,
   ];
 
-  return csvResponse(`vendly-${report.period}-${firstDay}.csv`, rows);
+  return csvResponse(`${data.fileBase}.csv`, rows);
 }

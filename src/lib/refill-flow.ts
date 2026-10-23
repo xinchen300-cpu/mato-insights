@@ -70,6 +70,31 @@ export type ReturnRow = {
 export const pickKey = (machineId: string, productId: string) => `${machineId}:${productId}`;
 export const slotKey = (machineId: string, selection: string) => `${machineId}:${selection}`;
 
+/**
+ * What a round's finished machines changed per slot (slotKey → pieces), as
+ * `refill_reopen_stop` puts back: the stock events of the round on that slot
+ * since it was last reopened. Stock now less this is the stock before the
+ * stop, sales in between left out.
+ */
+export function stopChanges(
+  events: { machine_id: string; selection_number: string; delta: number; note: string | null; occurred_at: string }[],
+): Record<string, number> {
+  const reopened = new Map<string, number>();
+  for (const event of events) {
+    if (event.note !== "reopened") continue;
+    const key = slotKey(event.machine_id, event.selection_number);
+    reopened.set(key, Math.max(reopened.get(key) ?? -Infinity, Date.parse(event.occurred_at)));
+  }
+  const changed: Record<string, number> = {};
+  for (const event of events) {
+    if (event.note === "reopened") continue;
+    const key = slotKey(event.machine_id, event.selection_number);
+    if (Date.parse(event.occurred_at) <= (reopened.get(key) ?? -Infinity)) continue;
+    changed[key] = (changed[key] ?? 0) + event.delta;
+  }
+  return changed;
+}
+
 export type PickRow = { key: string; machineId: string; productId: string; productName: string; photoPath: string | null; take: number };
 
 /** What to take from storage, per machine and product, in the machine's own slot order. */

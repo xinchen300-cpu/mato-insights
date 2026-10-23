@@ -41,8 +41,10 @@ export function makeFormatters(locale: Locale) {
   const percent = new Intl.NumberFormat(tag, { style: "percent", maximumFractionDigits: 0 });
   const date = new Intl.DateTimeFormat(tag, { day: "numeric", month: "short", year: "numeric", timeZone });
   const dayMonth = new Intl.DateTimeFormat(tag, { day: "numeric", month: "short", timeZone });
+  const weekdayDay = new Intl.DateTimeFormat(tag, { weekday: "short", day: "numeric", month: "short", timeZone });
   const monthYear = new Intl.DateTimeFormat(tag, { month: "2-digit", year: "numeric", timeZone });
   const monthLong = new Intl.DateTimeFormat(tag, { month: "long", timeZone });
+  const monthLongYear = new Intl.DateTimeFormat(tag, { month: "long", year: "numeric", timeZone });
   const monthShort = new Intl.DateTimeFormat(tag, { month: "short", timeZone });
   const dateTime = new Intl.DateTimeFormat(tag, {
     day: "numeric",
@@ -52,6 +54,7 @@ export function makeFormatters(locale: Locale) {
     timeZone,
   });
   const clock = new Intl.DateTimeFormat(tag, { hour: "2-digit", minute: "2-digit", timeZone });
+  const clockSeconds = new Intl.DateTimeFormat(tag, { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone });
   const relative = new Intl.RelativeTimeFormat(tag, { numeric: "auto" });
 
   return {
@@ -63,13 +66,20 @@ export function makeFormatters(locale: Locale) {
     percent: (ratio: number) => percent.format(ratio),
     date: (value: string | Date) => date.format(new Date(value)),
     dayMonth: (value: string | Date) => dayMonth.format(new Date(value)),
+    /** "di 14 okt": a day with its weekday. A bare calendar day ("2026-10-14") is read at noon, so it stays that day. */
+    weekdayDay: (value: string | Date) =>
+      weekdayDay.format(typeof value === "string" && value.length === 10 ? new Date(`${value}T12:00:00Z`) : new Date(value)),
     /** "10/2026": enough for food that keeps for months. */
     monthYear: (value: string | Date) => monthYear.format(new Date(value)),
     /** A calendar month ("2026-09") by name: "september", "sep". */
     monthLong: (month: string) => monthLong.format(new Date(`${month}-15T12:00:00Z`)),
+    /** "oktober 2026". */
+    monthLongYear: (month: string) => monthLongYear.format(new Date(`${month}-15T12:00:00Z`)),
     monthShort: (month: string) => monthShort.format(new Date(`${month}-15T12:00:00Z`)),
     dateTime: (value: string | Date) => dateTime.format(new Date(value)),
     time: (value: string | Date) => clock.format(new Date(value)),
+    /** "14:32:05": where seconds matter, as for a photo every few seconds. */
+    timeSeconds: (value: string | Date) => clockSeconds.format(new Date(value)),
     /** "3 minutes ago", "yesterday", … Only render this on the server. */
     relative: (value: string | Date) => {
       const seconds = (new Date(value).getTime() - Date.now()) / 1000;

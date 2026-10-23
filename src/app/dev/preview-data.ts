@@ -64,6 +64,10 @@ export function previewRound(scenario: Scenario, now: number): RefillRound {
     photoPath: null,
     status: machine.id === "m-gits" ? ("offline" as const) : ("online" as const),
     lastSale: iso(now - minutes(25 + i * 40)),
+    // Gits is a snack machine in the preview: no question about dates there.
+    type: machine.id === "m-gits" ? ("spiral" as const) : ("lift" as const),
+    // The snack machine stands with Diksmuide, as at Chens Garden.
+    address: `${machine.id === "m-gits" ? "Diksmuide" : machine.name.split(" ")[0]}, België`,
   });
   const picked = Object.fromEntries(
     plan.reduce((sum, line) => sum.set(`${line.machineId}:${line.productId}`, (sum.get(`${line.machineId}:${line.productId}`) ?? 0) + line.take), new Map<string, number>()),
@@ -91,6 +95,12 @@ export function previewRound(scenario: Scenario, now: number): RefillRound {
       line.selection === "11" ? { ...line, filled: Math.max(0, line.filled - 2) } : line.selection === "13" ? { ...line, filled: Math.max(0, line.filled - 1), removed: [{ reason: "expired", qty: 1 }] } : line,
     );
   }
+  // What the done machines got, as the stock events of the round would say; their slots show it in.
+  const changed: Record<string, number> = Object.fromEntries(
+    Object.entries(stops).flatMap(([machineId, stop]) =>
+      stop.completedAt ? stop.lines.filter((line) => line.filled > 0).map((line) => [`${machineId}:${line.selection}`, line.filled] as const) : [],
+    ),
+  );
   return {
     id: `preview-${scenario}`,
     number: 14,
@@ -111,7 +121,7 @@ export function previewRound(scenario: Scenario, now: number): RefillRound {
         productId: line.productId,
         productName: line.productName,
         capacity: line.capacity,
-        stock: line.stock,
+        stock: line.stock === null ? null : Math.min(line.capacity, line.stock + (changed[`${line.machineId}:${line.selection}`] ?? 0)),
       })),
       ...PRODUCTS.slice(0, 3).map((name, i) => ({
         machineId: FULL.id,
@@ -126,7 +136,8 @@ export function previewRound(scenario: Scenario, now: number): RefillRound {
     ],
     picked: scenario === "pick" ? {} : picked,
     stops,
-    settings: { ...DEFAULT_ROUND_SETTINGS, checks: ["Ruit gepoetst"] },
+    changed,
+    settings: { ...DEFAULT_ROUND_SETTINGS, checks: ["Ruit gepoetst"], depotAddress: "Roeselaarseweg 69, 8820 Torhout" },
     notes: scenario === "pick" ? "Diksmuide: de deur klemt, even duwen." : null,
   };
 }

@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { setLocale } from "@/i18n/actions";
 import { useI18n } from "@/i18n/client";
-import { locales } from "@/i18n/config";
+import { locales, type Locale } from "@/i18n/config";
 
-export function LanguageToggle() {
+/** The language buttons; `only` narrows them, as for a filler (Dutch and French). */
+export function LanguageToggle({ only = locales }: { only?: readonly Locale[] }) {
   const { locale, m } = useI18n();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -18,7 +19,7 @@ export function LanguageToggle() {
       aria-label={m.nav.language}
       className={cn("flex rounded-full border bg-card p-0.5", isPending && "opacity-60")}
     >
-      {locales.map((l) => (
+      {only.map((l) => (
         <button
           key={l}
           type="button"

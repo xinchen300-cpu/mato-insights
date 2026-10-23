@@ -1,21 +1,22 @@
 import { Suspense } from "react";
-import { ArrowRight, ChartNoAxesColumn, Download, Link2, TriangleAlert } from "lucide-react";
+import { ArrowRight, ChartNoAxesColumn, ChevronRight, Link2, TriangleAlert, UsersRound } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
 import { BarList } from "@/components/charts/bar-list";
-import { HourChart } from "@/components/charts/hour-chart";
-import { RevenueChart } from "@/components/charts/revenue-chart";
+import { HourChart, RevenueChart } from "@/components/charts/lazy";
 import { Delta } from "@/components/delta";
 import { KpiHero, MiniStat } from "@/components/kpi";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { EmptyState, PageHeader, Panel, Section } from "@/components/page-header";
 import { StatsGuide } from "@/components/stats-guide";
-import { buttonVariants } from "@/components/ui/button";
 import { fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import Link from "next/link";
-import { getBusinesses, getMachines, getPriceMismatches, getProducts, getStatsReport } from "@/lib/data";
+import { getBusinesses, getMachines, getOrgName, getPriceMismatches, getProducts, getRefillVisits, getStatsReport } from "@/lib/data";
+import { withoutOrgName } from "@/lib/overview";
+import { RefillLog } from "@/components/stats/refill-log";
 import { mediaUrl } from "@/lib/media";
-import { isFiller, requireOrgId, requireRefillAccess } from "@/lib/org";
-import { cn } from "@/lib/utils";
+import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
+import { camerasEnabled } from "@/lib/unifi";
 import {
   busiestWeekday,
   compareMoneySince,
@@ -23,11 +24,14 @@ import {
   fillDays,
   MIN_WEEKS,
   periodDays,
+  reportDay,
   weekdayStats,
 } from "@/lib/stats";
 import { compareLabelKey, parseStatsParams, type StatsSearchParams } from "@/lib/stats-params";
 import type { StatsReport } from "@/lib/types";
+import { ExportMenu } from "./export-menu";
 import { FillerSales } from "./filler-sales";
+import { LeastPerMachine } from "./least-per-machine";
 import { MonthlyOverview, MonthlySkeleton } from "./monthly";
 import { StatsFilters } from "./stats-filters";
 import { MachineIcon } from "@/components/machine/machine-icon";
@@ -42,20 +46,29 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
   // A filler gets what sells and when, in pieces and without money.
   if (await isFiller()) {
     const fillerOrg = await requireRefillAccess();
-    return <FillerSales orgId={fillerOrg} />;
+    return <FillerSales orgId={fillerOrg} month={(await searchParams).month} />;
   }
   const raw = await searchParams;
   const { m, f } = await getI18n();
   const orgId = await requireOrgId();
   const { period, from, to, business, machine, product, year, thisYear, filters } = parseStatsParams(raw);
 
-  const [report, machines, businesses, products, mismatches] = await Promise.all([
+  const [report, machines, businesses, products, mismatches, orgName] = await Promise.all([
     getStatsReport(orgId, filters),
     getMachines(orgId),
     getBusinesses(orgId),
     getProducts(orgId),
     getPriceMismatches(orgId),
+    getOrgName(orgId),
   ]);
+  // When each machine was filled in the same period, how many and at what time (Xin, 20-10-2026): the owner's only.
+  const visitMachines = machine
+    ? [machine]
+    : business
+      ? machines.filter((mc) => mc.business_id === business || mc.shared_business_id === business).map((mc) => mc.id)
+      : null;
+  // "Koekelare" rather than "Koekelare Chens Garden": every machine here is the organisation's own.
+  const machineNames = new Map(machines.map((mc) => [mc.id, withoutOrgName(mc.name, orgName)]));
 
   // A slot taking several different prices carries several products through one
   // number, so nothing here can say what sold. Saying it is the whole point of
@@ -68,9 +81,9 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
     ),
   ];
 
+  const showVisitors = camerasEnabled(orgId) && (await isOperator());
   const compare = m.periods[compareLabelKey(report.period)];
   const { totals } = report;
-  const avg = totals.units ? totals.revenue / totals.units : 0;
 
   const named = report.by_product.filter((p) => p.product_id);
   // Sorted here on purpose: the headline above ranks by pieces, so this panel
@@ -79,10 +92,15 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
     .filter((p) => p.units > 0)
     .sort((a, b) => b.units - a.units || b.revenue - a.revenue)
     .slice(0, 5);
-  const slowest = [...named].sort((a, b) => a.units - b.units || a.revenue - b.revenue).slice(0, 5);
   // Judging a product slow takes whole weeks: fewer and it is mostly luck.
-  const days = periodDays(report).length;
-  const longEnough = days >= MIN_WEEKS * 7;
+  const periodDayList = periodDays(report);
+  const longEnough = periodDayList.length >= MIN_WEEKS * 7;
+  // Minst verkocht per automaat (Xin, 21-10-2026), for the machines the filters leave: one asked, a business's, or all.
+  const leastMachines = (machine ? machines.filter((mc) => mc.id === machine) : visitMachines ? machines.filter((mc) => visitMachines.includes(mc.id)) : machines).map(
+    (mc) => ({ id: mc.id, name: machineNames.get(mc.id) ?? mc.name }),
+  );
+  // Today's layout only says what was in a machine while the period runs up to today.
+  const includesNow = periodDayList.at(-1) === reportDay(new Date(), report.timezone);
   const weekdays = weekdayStats(report);
   // Coloured only when one weekday really sells more, by the same test the
   // overview uses, and only when that day is also the longest bar here: the
@@ -111,6 +129,28 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
     Object.entries({ period, from, to, business, machine, product }).filter(([, v]) => v) as [string, string][],
   );
 
+  // Statistics → Exporteren: the period shown, by name, and the other filters kept as they are.
+  const today = reportDay(new Date(), report.timezone);
+  const wholeMonth =
+    filters.period === "custom" && from && to && from.endsWith("-01") && to.slice(0, 7) === from.slice(0, 7) && reportDay(new Date(`${to}T12:00:00Z`).getTime() + 86_400_000, "UTC").endsWith("-01");
+  const shownLabel =
+    filters.period !== "custom"
+      ? m.periods[filters.period]
+      : wholeMonth
+        ? f.monthLongYear(from.slice(0, 7))
+        : `${f.dayMonth(`${from}T12:00:00Z`)} – ${f.dayMonth(`${to}T12:00:00Z`)}`;
+  const keepParams = new URLSearchParams(
+    Object.entries({ business, machine, product }).filter(([, v]) => v) as [string, string][],
+  );
+  const keepLabel =
+    [
+      business ? businesses.find((b) => b.id === business)?.name : null,
+      machine ? machineNames.get(machine) : null,
+      product ? products.find((p) => p.id === product)?.name : null,
+    ]
+      .filter(Boolean)
+      .join(" · ") || null;
+
   const monthly = (
     <Suspense fallback={<MonthlySkeleton />}>
       <MonthlyOverview
@@ -128,16 +168,31 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
       <PageHeader
         title={m.stats.title}
         actions={
-          <a href={`/statistics/csv?${exportParams}`} className={buttonVariants({ variant: "outline" })}>
-            <Download />
-            {m.stats.export}
-          </a>
+          <>
+            {/* Who came to the machines, from the UniFi cameras (22-10-2026): the operator's, where cameras are set up. */}
+            {showVisitors && (
+              <Link href="/statistics/visitors" className={buttonVariants({ variant: "outline" })}>
+                <UsersRound />
+                {m.visitors.link}
+              </Link>
+            )}
+            <ExportMenu
+            shown={{ period: filters.period, from: filters.period === "custom" ? from : null, to: filters.period === "custom" ? to : null }}
+            shownLabel={shownLabel}
+            keep={keepParams.toString()}
+            keepLabel={keepLabel}
+            firstDay={report.first_sale ? reportDay(report.first_sale, report.timezone) : today}
+            today={today}
+          />
+          </>
         }
       />
 
       <div className="flex flex-col gap-8 sm:gap-10">
         <Suspense>
           <StatsFilters
+            // A month picked or dates applied start the date fields over from the address.
+            key={`${period}|${from}|${to}`}
             period={period}
             from={from}
             to={to}
@@ -147,7 +202,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
             businesses={businesses.map((b) => ({ id: b.id, name: b.name }))}
             machines={machines.map((mc) => ({
               id: mc.id,
-              name: mc.name,
+              name: machineNames.get(mc.id) ?? mc.name,
               // A shared fridge belongs to both its businesses, here as everywhere else.
               businessIds: [mc.business_id, mc.shared_business_id].filter((id): id is string => Boolean(id)),
             }))}
@@ -189,7 +244,6 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                   }}
                   f={f}
                 />
-                <MiniStat label={m.stats.avgSale} value={f.euro(avg)} f={f} />
               </div>
 
               <div className="mt-7">
@@ -211,45 +265,14 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
               </div>
             </section>
 
-            {/* Said once, right above the product figures it is about. */}
-            {scrambled.length > 0 && (
-              <div className="surface-card flex items-start gap-3.5 p-4 sm:p-5">
-                <Avatar tone="warning">
-                  <TriangleAlert />
-                </Avatar>
-                <div className="min-w-0 pt-0.5">
-                  <p className="max-w-[62ch] text-[15px] leading-snug">{fmt(m.stats.mixedBody, { machines: scrambled.join(", ") })}</p>
-                  <Link
-                    href="/unassigned"
-                    className="-mx-1 mt-1.5 inline-flex items-center gap-1 rounded-full px-1 py-1 text-sm font-semibold text-foreground underline-offset-4 hover:underline"
-                  >
-                    {m.stats.mixedFix}
-                    <ArrowRight className="size-4" aria-hidden="true" />
-                  </Link>
-                </div>
-              </div>
-            )}
-
-            {/* What sold best first. Slow sellers only once the period is long
-                enough to call anything slow; before that the block stays away. */}
-            <div className={cn("grid gap-8 sm:gap-10", longEnough && "lg:grid-cols-2 lg:gap-6")}>
-              <Section title={m.stats.bestSellers}>
-                <ProductRanking rows={best} prevStart={report.prev_start} m={m} f={f} />
-              </Section>
-              {longEnough && (
-                <Section title={m.stats.worstSellers} hint={m.stats.worstSellersHint}>
-                  <ProductRanking rows={slowest} prevStart={report.prev_start} m={m} f={f} />
-                </Section>
-              )}
-            </div>
-
+            {/* Money machine by machine, right under the total (Xin, 20-10-2026). */}
             <Section title={m.stats.perMachine}>
               <RowList>
                 {report.by_machine.map((row) => (
                   <li key={row.machine_id}>
                     <ListRow
                       leading={<Avatar><MachineIcon /></Avatar>}
-                      title={row.machine_name}
+                      title={withoutOrgName(row.machine_name, orgName)}
                       subtitle={<span className="tabular">{plural(row.units, m.common.unitsOne, m.common.unitsOther)}</span>}
                       value={f.euro(row.revenue)}
                       valueSub={
@@ -269,6 +292,48 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                 ))}
               </RowList>
             </Section>
+
+            {/* When each machine was filled, with how many and at what time; streams in, the figures above don't wait for it. */}
+            <Suspense>
+              <RefillVisits orgId={orgId} range={{ from: report.cur_start, to: report.cur_end }} machines={visitMachines} names={machineNames} m={m} f={f} />
+            </Suspense>
+
+            {/* Said once, right above the product figures it is about. */}
+            {scrambled.length > 0 && (
+              <div className="surface-card flex items-start gap-3.5 p-4 sm:p-5">
+                <Avatar tone="warning">
+                  <TriangleAlert />
+                </Avatar>
+                <div className="min-w-0 pt-0.5">
+                  <p className="max-w-[62ch] text-[15px] leading-snug">{fmt(m.stats.mixedBody, { machines: scrambled.join(", ") })}</p>
+                  <Link
+                    href="/unassigned"
+                    className="-mx-1 mt-1.5 inline-flex items-center gap-1 rounded-full px-1 py-1 text-sm font-semibold text-foreground underline-offset-4 hover:underline"
+                  >
+                    {m.stats.mixedFix}
+                    <ArrowRight className="size-4" aria-hidden="true" />
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* What sold best first; what sold least is per machine below (Xin, 21-10-2026), and only once
+                the period is long enough to call anything slow. */}
+            <Section title={m.stats.bestSellers}>
+              <ProductRanking rows={best} prevStart={report.prev_start} m={m} f={f} />
+            </Section>
+            {!product &&
+              (longEnough ? (
+                <Suspense>
+                  <LeastPerMachine orgId={orgId} filters={filters} machines={leastMachines} includesNow={includesNow} m={m} f={f} />
+                </Suspense>
+              ) : (
+                <Section title={m.stats.leastPerMachine}>
+                  <p className="surface-card px-5 py-4 text-[14px] text-muted-foreground">{fmt(m.stats.leastTooShort, { weeks: MIN_WEEKS })}</p>
+                </Section>
+              ))}
+
+
 
             <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
               <Panel
@@ -296,7 +361,12 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
 
             {monthly}
 
-            <Section title={m.stats.perProduct}>
+            {/* Every product, folded: the best and slowest above say most of it. */}
+            <details className="group">
+              <summary className="flex h-12 cursor-pointer list-none items-center gap-1.5 px-1 text-[16px] font-semibold [&::-webkit-details-marker]:hidden">
+                <ChevronRight className="size-4 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden="true" />
+                {fmt(m.stats.productsAll, { n: report.by_product.filter((p) => p.units > 0).length })}
+              </summary>
               <RowList>
                 {report.by_product
                   .filter((p) => p.units > 0)
@@ -333,7 +403,7 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
                     </li>
                   ))}
               </RowList>
-            </Section>
+            </details>
 
             {/* How to read all this, for whoever wants to: at the foot, one row until opened. */}
             <StatsGuide m={m} f={f} />
@@ -405,4 +475,24 @@ function ProductAvatar({ row }: { row: StatsReport["by_product"][number] }) {
       )}
     </Avatar>
   );
+}
+
+/** Bijvullingen in the period, asked on its own so the page above it never waits for it (22-10-2026). */
+async function RefillVisits({
+  orgId,
+  range,
+  machines,
+  names,
+  m,
+  f,
+}: {
+  orgId: string;
+  range: { from: string; to: string };
+  machines: string[] | null;
+  names: Map<string, string>;
+  m: Awaited<ReturnType<typeof getI18n>>["m"];
+  f: Awaited<ReturnType<typeof getI18n>>["f"];
+}) {
+  const visits = await getRefillVisits(orgId, range, machines);
+  return visits.length > 0 ? <RefillLog visits={visits} names={names} m={m} f={f} /> : null;
 }

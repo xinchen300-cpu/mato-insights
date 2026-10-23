@@ -38,9 +38,9 @@ export function machineFill(stock: number, capacity: number, counted: boolean): 
 
 // The strong shades: these carry text (white on the pill, or the % itself), so they keep 4.5:1.
 export const bandText: Record<FillBand, string> = {
-  red: "text-level-low-strong",
-  orange: "text-level-half-strong",
-  green: "text-level-full-strong",
+  red: "text-level-low-ink",
+  orange: "text-level-half-ink",
+  green: "text-level-full-ink",
 };
 
 export const bandBg: Record<FillBand, string> = {
@@ -62,4 +62,20 @@ export function machineTotals(slots: { machine_id: string; stock: number | null;
     totals.set(slot.machine_id, t);
   }
   return totals;
+}
+
+/**
+ * The machines Vendly fills. One filled by hand, outside Vendly (refill_manual,
+ * Xin 19-10-2026), keeps its sales, but its stock is never brought up to date,
+ * so it stays out of rounds, the vullijst, a filler's tiles and every warning
+ * about stock.
+ */
+export function filledByVendly<M extends { refill_manual: boolean }>(machines: M[]): M[] {
+  return machines.filter((machine) => !machine.refill_manual);
+}
+
+/** The slots of the machines Vendly fills, by the same rule. */
+export function slotsFilledByVendly<S extends { machine_id: string }>(slots: S[], machines: { id: string; refill_manual: boolean }[]): S[] {
+  const byHand = new Set(machines.filter((machine) => machine.refill_manual).map((machine) => machine.id));
+  return byHand.size === 0 ? slots : slots.filter((slot) => !byHand.has(slot.machine_id));
 }

@@ -1,5 +1,6 @@
 import { getI18n } from "@/i18n/server";
-import { getMachines, getMachineStock, getOpenRounds, getRefillPlan, getRoundSettings } from "@/lib/data";
+import { getMachines, getMachineStock, getRefillPlan, getRoundSettings } from "@/lib/data";
+import { filledByVendly, slotsFilledByVendly } from "@/lib/stock";
 import { requireRefillAccess } from "@/lib/org";
 import { lineTake } from "@/lib/refill-flow";
 import { orderByRoute } from "@/lib/round-settings";
@@ -19,12 +20,14 @@ export async function generateMetadata() {
 export default async function FillListPage() {
   const orgId = await requireRefillAccess();
   const { m } = await getI18n();
-  const [fleet, slots, settings, rounds] = await Promise.all([
+  const [everyMachine, everySlot, settings] = await Promise.all([
     getMachines(orgId),
     getMachineStock(orgId),
     getRoundSettings(orgId),
-    getOpenRounds(orgId),
   ]);
+  // A machine filled by hand has no box here.
+  const fleet = filledByVendly(everyMachine);
+  const slots = slotsFilledByVendly(everySlot, everyMachine);
   // Only machines with dishes in them: one without a layout has nothing to fill yet.
   const stocked = new Set(slots.filter((slot) => slot.product_id).map((slot) => slot.machine_id));
   const order = orderByRoute(
@@ -51,7 +54,5 @@ export default async function FillListPage() {
     return [{ machineId, name: nameOf.get(machineId) ?? "—", items: list, take: list.reduce((sum, item) => sum + item.take, 0) }];
   });
   const full = order.filter((id) => !boxes.some((box) => box.machineId === id)).map((id) => nameOf.get(id) ?? "—");
-  // The round to go on with: one under way first, else the newest.
-  const open = rounds.find((round) => round.readyAt) ?? rounds[0] ?? null;
-  return <FillListView m={m} boxes={boxes} full={full} openId={open?.id ?? null} />;
+  return <FillListView m={m} boxes={boxes} full={full} />;
 }

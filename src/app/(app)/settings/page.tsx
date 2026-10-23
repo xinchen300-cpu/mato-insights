@@ -1,25 +1,34 @@
 import { headers } from "next/headers";
-import { CalendarClock, ChevronDown, CircleAlert, Clock, KeyRound, LayoutTemplate, Nfc, PlugZap, Store, Trash2, Users } from "lucide-react";
+import { CalendarClock, ChevronDown, CircleAlert, Clock, Globe, KeyRound, LayoutTemplate, LockKeyhole, Mail, MapPin, Nfc, Phone, PlugZap, Plus, Store, Trash2, Users } from "lucide-react";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { PageHeader, Section } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getBusinesses, getLayoutTemplates, getMachines, getShelfLifePresets, getTeam } from "@/lib/data";
+import { getBusinesses, getLayoutTemplates, getMachines, getNotificationSettings, getShelfLifePresets, getTeam } from "@/lib/data";
+import { FillerAvatar } from "@/components/filler/avatar";
+import { cleanLook } from "@/lib/avatar";
+import { displayName } from "@/lib/people";
 import { mediaUrl } from "@/lib/media";
 import { billingAllows, getBilling, paymentsEnabled } from "@/lib/billing";
+import { MATO_CONTACT_URL, MATO_EMAIL, MATO_MAP_URL, mailToMato } from "@/lib/contact";
+import { SUPPORT_PHONE } from "@/lib/plans";
 import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { PayterForm } from "./payter-form";
+import { PayterForm, RemovePayterAccount } from "./payter-form";
 import { deleteTemplate } from "./actions";
 import { CostForm } from "./cost-form";
+import { Appearance } from "./appearance";
+import { NotificationSettings } from "./notification-settings";
 import { NotifyToggle } from "./notify-toggle";
+import { PasswordForm } from "./password-form";
+import { LanguageToggle } from "@/components/shell/language-toggle";
 import { ShelfLifePresets } from "./shelf-life-presets";
 import { SubscriptionPanel } from "./subscription-panel";
 import { TeamPanel } from "./team-panel";
 import { AccountKind } from "./account-kind";
-import { LanguageToggle } from "@/components/shell/language-toggle";
+import { MovedToProfile } from "./moved-to-profile";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -38,31 +47,35 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   // and who is in the team (the operator's to see and change). The vendor has
   // no subscription; it is read alongside and simply not shown. Of the syncs
   // only the last failure matters: Payter is asked every 15 seconds anyway.
-  const [{ data: org }, { data: credentials }, { data: lastError }, templates, businesses, machines, presets, ownBilling, team] =
+  const [{ data: org }, { data: credentials }, { data: errors }, templates, businesses, machines, presets, ownBilling, team, { data: extraLogins }, notifications] =
     orgId
       ? await Promise.all([
           admin
             .from("organizations")
-            .select("is_vendor, is_demo, cost_per_hour, cost_per_km, first_charge_on, rents_to_businesses")
+            .select("name, is_vendor, is_demo, cost_per_hour, cost_per_km, first_charge_on, rents_to_businesses")
             .eq("id", orgId)
             .maybeSingle(),
           admin.from("payter_credentials").select("last_synced_at").eq("org_id", orgId).maybeSingle(),
+          // The last few: a further Payter account's failures carry its account code and belong on its own row.
           admin
             .from("sync_logs")
             .select("started_at, error")
             .eq("org_id", orgId)
             .eq("status", "error")
             .order("started_at", { ascending: false })
-            .limit(1)
-            .maybeSingle(),
+            .limit(20),
           getLayoutTemplates(orgId),
           getBusinesses(orgId),
           getMachines(orgId),
           getShelfLifePresets(orgId),
           operator ? getBilling(orgId) : Promise.resolve(null),
           operator ? getTeam(orgId) : Promise.resolve(null),
+          // Further Payter accounts of this business (22-10-2026), each synced on its own.
+          admin.from("payter_extra_logins").select("id, domain, serials, last_synced_at").eq("org_id", orgId).order("created_at"),
+          // One's own notifications (23-10-2026): what to hear about, and how. Null where not switched on.
+          getNotificationSettings(),
         ])
-      : [{ data: null }, { data: null }, { data: null }, [], [], [], [], null, null];
+      : [{ data: null }, { data: null }, { data: null }, [], [], [], [], null, null, { data: null }, null];
   const vendor = org;
 
   const ownTemplates = templates.filter((t) => t.org_id);
@@ -81,12 +94,17 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const canRent = Boolean(ownBilling && billingAllows(ownBilling, Boolean(org?.is_demo), "shareWithShops"));
 
   const payterConnected = Boolean(credentials || vendor?.is_demo);
+  const extras = extraLogins ?? [];
+  const ofAccount = (domain: string) => (errors ?? []).find((e) => e.error?.startsWith(`${domain}: `)) ?? null;
+  const lastError = (errors ?? []).find((e) => !extras.some((login) => e.error?.startsWith(`${login.domain}: `))) ?? null;
   // Red only while the last failure is newer than the last sync that worked.
-  const syncFailing =
-    Boolean(lastError) && (!credentials?.last_synced_at || lastError!.started_at > credentials.last_synced_at);
+  const failingSince = (error: { started_at: string } | null, syncedAt: string | null | undefined) =>
+    Boolean(error) && (!syncedAt || error!.started_at > syncedAt);
+  const syncFailing = failingSince(lastError, credentials?.last_synced_at);
   const {
     data: { user },
   } = await (await createClient()).auth.getUser();
+  const look = user ? cleanLook(user.user_metadata?.avatar) : null;
   const requestHeaders = await headers();
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
   const signupUrl = `${requestHeaders.get("x-forwarded-proto") ?? "https"}://${host}/signup`;
@@ -96,13 +114,50 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const showCustomers = operator && Boolean(vendor?.is_vendor);
   const onlyBusiness = businesses.length === 1 ? businesses[0] : null;
 
+  // One's own display and notifications first (23-10-2026), only where switched on: elsewhere the page as it was,
+  // the language in the header and push on this device further down.
+  const personal = Boolean(notifications);
+
   return (
     <div className="max-w-2xl">
-      <PageHeader title={m.settings.title} actions={<LanguageToggle />} />
+      <PageHeader title={m.settings.title} actions={personal ? undefined : <LanguageToggle />} />
 
-      {/* What you need most often first, what you rarely change last. */}
+      {/* What you need most often first, what you rarely change last: one's own settings, then the business's. */}
       <div className="flex flex-col gap-9 sm:gap-10">
-        {billing && (
+        {personal && user && (
+          <RowList>
+            <li>
+              <ListRow
+                href="/profile"
+                leading={
+                  <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-primary/12 text-[14px] font-bold uppercase">
+                    {look ? <FillerAvatar look={look} className="size-full" /> : initial(displayName(user) ?? "?")}
+                  </span>
+                }
+                title={displayName(user) ?? user.email ?? ""}
+                subtitle={m.prefs.profileHint}
+                chevron
+              />
+            </li>
+          </RowList>
+        )}
+
+        {personal && (
+          <Section title={m.prefs.display}>
+            <Appearance />
+          </Section>
+        )}
+
+        {notifications && (
+          <Section title={m.prefs.notifications} hint={m.prefs.notificationsHint}>
+            <NotificationSettings settings={notifications} shop={!operator} />
+          </Section>
+        )}
+
+        {/* Where one's own settings are on, Abonnement and Team are in Profiel (Xin, 24-10-2026). */}
+        {personal && <MovedToProfile />}
+
+        {billing && !personal && (
           <SubscriptionPanel
             planId={billing.plan?.id ?? null}
             status={billing.status}
@@ -115,7 +170,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           />
         )}
 
-        {team && (
+        {team && !personal && (
           <TeamPanel members={team.members} invites={team.invites} youId={user?.id ?? null} signupUrl={signupUrl} />
         )}
 
@@ -175,6 +230,46 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                       <PayterForm submitLabel={m.common.save} />
                     </div>
                   </Fold>
+
+                  {/* Further Payter accounts (22-10-2026, Xin: a second account with two machines of Mato Vending). */}
+                  {extras.map((login) => {
+                    const error = ofAccount(login.domain);
+                    const failing = failingSince(error, login.last_synced_at);
+                    return (
+                      <div key={login.id} className="flex min-h-16 items-center gap-3.5 rounded-xl px-3 py-3">
+                        <Avatar tone={failing ? "negative" : "positive"}>
+                          {failing ? <CircleAlert /> : <PlugZap />}
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[15px] font-semibold tracking-[-0.01em]">
+                            {fmt(m.settings.extraAccount, { domain: login.domain })}
+                          </p>
+                          <p className="mt-0.5 text-[13px] text-muted-foreground">
+                            {[
+                              fmt(m.settings.lastUpdate, {
+                                time: login.last_synced_at ? f.relative(login.last_synced_at) : m.settings.never,
+                              }),
+                              login.serials?.length ? plural(login.serials.length, m.settings.accountTerminalsOne, m.settings.accountTerminals) : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </p>
+                          {failing && (
+                            <p className="mt-1 text-[13.5px] font-medium text-negative">
+                              {/login|401|403/i.test(error?.error ?? "") ? m.settings.payterFailed : m.settings.payterUnreachable}
+                            </p>
+                          )}
+                        </div>
+                        <RemovePayterAccount loginId={login.id} domain={login.domain} />
+                      </div>
+                    );
+                  })}
+                  <Fold icon={<Plus />} title={m.settings.addAccount}>
+                    <div className="px-3 pb-3 sm:pl-[66px]">
+                      <p className="mb-4 max-w-[60ch] text-[13.5px] leading-relaxed text-muted-foreground">{m.settings.addAccountHint}</p>
+                      <PayterForm submitLabel={m.settings.connect} extra />
+                    </div>
+                  </Fold>
                 </>
               )}
 
@@ -187,18 +282,21 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </Section>
         )}
 
-        <Section title={m.settings.notifyTitle} hint={m.settings.notifyHint}>
-          <div className="surface-card p-2">
-            {process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ? (
-              <NotifyToggle publicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY} />
-            ) : (
-              <p className="px-3 py-3 text-[14px] text-muted-foreground">{m.settings.notifyUnsupported}</p>
-            )}
-          </div>
-        </Section>
+        {!personal && (
+          <Section title={m.settings.notifyTitle} hint={m.settings.notifyHint}>
+            <div className="surface-card p-2">
+              {process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ? (
+                <NotifyToggle publicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY} />
+              ) : (
+                <p className="px-3 py-3 text-[14px] text-muted-foreground">{m.settings.notifyUnsupported}</p>
+              )}
+            </div>
+          </Section>
+        )}
 
-        {/* The refill settings, each one row with its value; tap to change it. */}
-        {operator && (
+        {/* The refill settings, each one row with its value; tap to change it. Not where one's own settings are on
+            (Xin, 24-10-2026: "in settings, i want you to remove bijvullen"). */}
+        {operator && !personal && (
           <Section title={m.nav.refill}>
             <div className="surface-card flex flex-col p-2">
               <Fold
@@ -325,8 +423,64 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <AccountKind rents={rents} />
           </Section>
         )}
+
+        {personal && (
+          <Section title={m.prefs.account}>
+            <div className="surface-card flex flex-col p-2">
+              <Fold icon={<LockKeyhole />} title={m.prefs.password} value={m.prefs.passwordHint}>
+                <PasswordForm />
+              </Fold>
+            </div>
+          </Section>
+        )}
+
+        {/* Help and contact (Xin, 24-10-2026: "hulp of contact … dat ze bij mato terechtkomen"): straight to MATO. */}
+        {personal && (
+          <Section title={m.help.title} hint={m.help.hint}>
+            <RowList>
+              <ContactRow
+                href={mailToMato(fmt(m.help.mailSubject, { org: (org?.name as string | null) ?? "" }), fmt(m.help.mailBody, { email: user?.email ?? "" }))}
+                icon={<Mail />}
+                title={m.help.mail}
+                subtitle={MATO_EMAIL}
+              />
+              {SUPPORT_PHONE && (
+                <ContactRow href={`tel:${SUPPORT_PHONE.replace(/\s/g, "")}`} icon={<Phone />} title={m.help.call} subtitle={SUPPORT_PHONE} />
+              )}
+              <ContactRow href={MATO_MAP_URL} external icon={<MapPin />} title={m.help.visit} subtitle={m.help.visitValue} />
+              <ContactRow href={MATO_CONTACT_URL} external icon={<Globe />} title={m.help.website} subtitle={m.help.websiteValue} />
+            </RowList>
+          </Section>
+        )}
       </div>
     </div>
+  );
+}
+
+/** A way to reach MATO, as a row: mail and phone open their app, a web page opens beside MATO Info. */
+function ContactRow({
+  href,
+  icon,
+  title,
+  subtitle,
+  external = false,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  external?: boolean;
+}) {
+  return (
+    <li>
+      <a
+        href={href}
+        {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
+        className="hover-surface block rounded-xl transition-transform duration-150 active:scale-[0.99]"
+      >
+        <ListRow leading={<Avatar>{icon}</Avatar>} title={title} subtitle={subtitle} chevron />
+      </a>
+    </li>
   );
 }
 

@@ -19,6 +19,14 @@ export type RoundSettings = {
    * added up from these, never asked of the filler.
    */
   legs: Record<string, number>;
+  /**
+   * Minutes of driving between two stops, keyed like legs (Xin, 19-10-2026:
+   * worked out once from the addresses). Shown on the round until rounds
+   * driven there have measured times of their own.
+   */
+  drive: Record<string, number>;
+  /** Where a round starts and ends, as an address the filler can navigate to. */
+  depotAddress: string | null;
 };
 
 export const MAX_CHECKS = 8;
@@ -26,6 +34,7 @@ export const MAX_CHECK_LENGTH = 60;
 export const MAX_MESSAGE_LENGTH = 280;
 export const MAX_ROUTE = 200;
 export const MAX_LEGS = 500;
+export const MAX_ADDRESS_LENGTH = 160;
 /** Where a round leaves from and comes back to. */
 export const DEPOT = "depot";
 const MACHINE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -37,6 +46,8 @@ export const DEFAULT_ROUND_SETTINGS: RoundSettings = {
   notify: { start: true, eachMachine: false, finish: true },
   route: [],
   legs: {},
+  drive: {},
+  depotAddress: null,
 };
 
 /**
@@ -71,7 +82,45 @@ export function cleanRoundSettings(raw: unknown): RoundSettings {
     },
     route: [...new Set((Array.isArray(value.route) ? value.route : []).filter((id): id is string => typeof id === "string" && MACHINE_ID.test(id)))].slice(0, MAX_ROUTE),
     legs: cleanLegs(value.legs),
+    drive: cleanDrive(value.drive),
+    depotAddress: cleanAddress(value.depotAddress),
   };
+}
+
+/** A street address as stored or typed: one line, trimmed and capped; null when empty. */
+export function cleanAddress(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const address = raw.replace(/\s+/g, " ").trim().slice(0, MAX_ADDRESS_LENGTH);
+  return address || null;
+}
+
+/** Drive times as stored: known pairs only, 1 to 600 whole minutes. */
+function cleanDrive(raw: unknown): Record<string, number> {
+  const drive: Record<string, number> = {};
+  if (!raw || typeof raw !== "object") return drive;
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const ends = key.split("|");
+    const minutes = typeof value === "number" ? Math.round(value) : NaN;
+    if (ends.length !== 2 || ends[0] === ends[1] || !ends.every(isStop) || !(minutes >= 1 && minutes <= 600)) continue;
+    drive[legKey(ends[0], ends[1])] = minutes;
+    if (Object.keys(drive).length === MAX_LEGS) break;
+  }
+  return drive;
+}
+
+/**
+ * A link that opens Waze with the way to an address, on a phone in the app.
+ * Null without an address: nothing to navigate to.
+ */
+export function wazeLink(address: string | null): string | null {
+  return address ? `https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes` : null;
+}
+
+/** Two stops at one address, written the same way give or take case, commas and spaces. */
+export function samePlace(a: string | null, b: string | null): boolean {
+  const key = (address: string | null) => address?.toLocaleLowerCase("nl-BE").replace(/[\s,.]+/g, " ").trim() || null;
+  const first = key(a);
+  return first !== null && first === key(b);
 }
 
 /** One key per pair of stops, whichever way round: the depot or a machine on either end. */
@@ -83,14 +132,17 @@ export function legKey(from: string, to: string): string {
 
 const isStop = (end: string) => end === DEPOT || MACHINE_ID.test(end);
 
-/** Distances as stored or sent, made safe: known pairs only, 0.1 to 1000 km, to one decimal. */
+/**
+ * Distances as stored or sent, made safe: known pairs only, 0 to 1000 km, to
+ * one decimal. 0 is two machines at one place (since 19-10-2026).
+ */
 function cleanLegs(raw: unknown): Record<string, number> {
   const legs: Record<string, number> = {};
   if (!raw || typeof raw !== "object") return legs;
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
     const ends = key.split("|");
     const km = typeof value === "number" ? Math.round(value * 10) / 10 : NaN;
-    if (ends.length !== 2 || ends[0] === ends[1] || !ends.every(isStop) || !(km > 0 && km <= 1000)) continue;
+    if (ends.length !== 2 || ends[0] === ends[1] || !ends.every(isStop) || !(km >= 0 && km <= 1000)) continue;
     legs[legKey(ends[0], ends[1])] = km;
     if (Object.keys(legs).length === MAX_LEGS) break;
   }

@@ -44,6 +44,7 @@ export async function inviteTeamMember(email: string, role: string): Promise<Inv
     .insert({ email: address, org_id: orgId, role, business_id: null, token });
   if (error) return { ok: false, reason: error.code === "23505" ? "taken" : "failed" };
   revalidatePath("/settings");
+  revalidatePath("/profile");
   return { ok: true, email: address, token };
 }
 
@@ -58,6 +59,7 @@ export async function revokeInvite(email: string): Promise<void> {
     .eq("email", email.trim().toLowerCase())
     .is("claimed_at", null);
   revalidatePath("/settings");
+  revalidatePath("/profile");
 }
 
 /**
@@ -86,4 +88,5 @@ export async function removeMember(userId: string): Promise<void> {
   const { data } = await admin.auth.admin.getUserById(userId);
   if (data.user?.email) await admin.from("allowed_emails").delete().eq("org_id", orgId).eq("email", data.user.email.toLowerCase());
   revalidatePath("/settings");
+  revalidatePath("/profile");
 }

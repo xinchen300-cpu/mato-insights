@@ -1,13 +1,21 @@
 import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { denyFillerAccess, getScope, getSessionUser, isFiller, isOperator, requireOperator, requireRefillAccess, type Role, isBlockedOrg } from "@/lib/org";
+import { denyFillerAccess, getScope, getSessionUser, isFiller, isOperator, requireOperator, requireRefillAccess, requireSignedIn, type Role, isBlockedOrg } from "@/lib/org";
+import { cleanPrefs, NOTIFY_CHANNELS, NOTIFY_DEFAULTS, NOTIFY_TOPICS, type CleanPrefs, type NotifyChannel, type NotifyPrefs } from "@/lib/notify-prefs";
+import { SUPABASE_URL } from "@/lib/supabase/config";
+import { isLocale, type Locale } from "@/i18n/config";
 import { displayName } from "@/lib/people";
 import { cleanRoundSettings, type RoundSettings } from "@/lib/round-settings";
-import { lineTake, onlyMine, roundOrder, roundTimings, slotKey, type Average, type FlowLine, type RoundTimings, type ShopView, type StopRecord } from "@/lib/refill-flow";
+import { lineTake, onlyMine, roundOrder, roundTimings, slotKey, stopChanges, type Average, type FlowLine, type RoundTimings, type ShopView, type StopRecord } from "@/lib/refill-flow";
 import type { MyRound } from "@/lib/filler-stats";
 import { terminalStatus, type TerminalStatus } from "@/lib/terminal-status";
 import { DISPLAY_TIME_ZONE } from "@/i18n/format";
 import { reportDay } from "@/lib/stats";
+import { productionPlan, RATE_DAYS, type ProductionLine } from "@/lib/production";
+import { camerasEnabled } from "@/lib/unifi";
+import type { LinkedCamera } from "@/lib/camera-link";
+import { readSyncStates, staleConsoles, syncProtectConsole, type SyncState } from "@/lib/protect";
+import type { VisitorsReport } from "@/lib/visitors";
 import type {
   Producer,
   RunSummaryRow,
@@ -33,6 +41,7 @@ import type {
   UnassignedGroup,
   WasteRow,
   PriceMismatch,
+  MachineType,
 } from "@/lib/types";
 
 // Server-only data access. Every query is scoped to an org id that the caller
@@ -137,6 +146,10 @@ export type RoundMachine = {
   lastSale: string | null;
   /** The tile photo, so the filler recognises the machine at a glance. */
   photoPath: string | null;
+  /** A snack machine gets no question about dishes past their date. */
+  type: MachineType | null;
+  /** Where it stands, for "Navigeer". */
+  address: string | null;
 };
 /** Every slot of a machine on the round, for "something is wrong here" on any slot, planned or not. */
 export type RoundSlot = {
@@ -170,6 +183,11 @@ export type RefillRound = {
   slots: RoundSlot[];
   picked: Record<string, number>;
   stops: Record<string, StopRecord>;
+  /**
+   * What the finished machines changed per slot (slotKey → pieces): stock now
+   * less this is how it stood before, for "Terugzetten naar …%" (20-10-2026).
+   */
+  changed: Record<string, number>;
   /** How the operator wants the round to go (Werkwijze). */
   settings: RoundSettings;
   /** What the operator wrote for this one round, for whoever fills it. */
@@ -202,15 +220,25 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
   const machineIds = (sheet.machine_ids ?? []) as string[];
   // The full ones too: their place on the route and how full they are now.
   const order = roundOrder((sheet.chosen_machine_ids ?? []) as string[], machineIds);
-  const [{ data: machineRows }, stock, lastSales, { data: org }] = await Promise.all([
+  const [{ data: machineRows }, stock, lastSales, { data: org }, { data: events }] = await Promise.all([
     admin
       .from("machines")
-      .select("id, name, photo_path, last_connected_at, last_disconnected_at")
+      .select("id, name, photo_path, last_connected_at, last_disconnected_at, type, address")
       .eq("org_id", orgId)
       .in("id", order.length ? order : [NOTHING]),
-    getMachineStock(orgId, order.length ? order : [NOTHING]),
+    // With what this round already put in: what a finished stop changed, and Terugzetten, are measured on it.
+    getMachineStock(orgId, order.length ? order : [NOTHING], { withOpenRounds: true }),
     getLastSales(orgId),
     admin.from("organizations").select("refill_settings").eq("id", orgId).maybeSingle(),
+    // Only an open round can still be put back.
+    sheet.completed_at
+      ? Promise.resolve({ data: [] })
+      : admin
+          .from("stock_events")
+          .select("machine_id, selection_number, delta, note, occurred_at")
+          .eq("org_id", orgId)
+          .eq("refill_sheet_id", sheetId)
+          .limit(2000),
   ]);
   const byId = new Map((machineRows ?? []).map((row) => [row.id as string, row]));
   const live = new Map(stock.map((slot) => [slotKey(slot.machine_id, slot.selection_number), slot]));
@@ -222,6 +250,8 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
       status: terminalStatus(row.last_connected_at as string | null, row.last_disconnected_at as string | null),
       lastSale: lastSales.get(id) ?? null,
       photoPath: (row.photo_path as string | null) ?? null,
+      type: (row.type as MachineType | null) ?? null,
+      address: (row.address as string | null) ?? null,
     };
   };
 
@@ -270,6 +300,15 @@ export async function getRefillRound(orgId: string, sheetId: string): Promise<Re
       })),
     picked: (sheet.box ?? {}) as Record<string, number>,
     stops: (sheet.stops ?? {}) as Record<string, StopRecord>,
+    changed: stopChanges(
+      (events ?? []).map((event) => ({
+        machine_id: event.machine_id as string,
+        selection_number: event.selection_number as string,
+        delta: Number(event.delta ?? 0),
+        note: (event.note as string | null) ?? null,
+        occurred_at: event.occurred_at as string,
+      })),
+    ),
     settings: cleanRoundSettings(org?.refill_settings),
     notes: (sheet.notes as string | null)?.trim() || null,
   };
@@ -283,7 +322,8 @@ export async function getRefillPlan(orgId: string, machineIds: string[]): Promis
   if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
   // No machines asked for is nothing to plan, never every machine.
   if (machineIds.length === 0) return [];
-  const { data, error } = await createAdminClient().rpc("refill_plan", { target_org: orgId, machine_filter: machineIds });
+  // As every screen counts it: a machine filled on a round still open is not filled yet (21-10-2026).
+  const { data, error } = await createAdminClient().rpc("refill_plan_settled", { target_org: orgId, machine_filter: machineIds });
   if (error) throw new Error(error.message);
   return (data ?? []) as RefillLine[];
 }
@@ -305,6 +345,8 @@ export type OpenRound = {
   readyAt: string | null;
   /** Who started it ("Start ronde"), as they gave their name. */
   filledBy: string | null;
+  /** Made, or started, by whoever is looking: theirs to carry on with. */
+  mine: boolean;
   machines: { id: string; name: string; done: boolean; doneAt: string | null; skipped: boolean }[];
 };
 
@@ -317,25 +359,30 @@ export async function getOpenRounds(orgId: string): Promise<OpenRound[]> {
   const admin = createAdminClient();
   // The names come alongside the rounds, not after them: every machine of the
   // organisation, of which only the rounds' own are used.
-  const [{ data: sheets }, { data: machines }] = await Promise.all([
+  const [{ data: sheets }, { data: machines }, me] = await Promise.all([
     admin
       .from("refill_sheets")
-      .select("id, created_at, ready_at, machine_ids, stops, filled_by")
+      .select("id, created_at, ready_at, machine_ids, stops, filled_by, created_by")
       .eq("org_id", orgId)
       .eq("flow_version", 2)
       .is("completed_at", null)
       .order("created_at", { ascending: false })
       .limit(20),
     admin.from("machines").select("id, name").eq("org_id", orgId),
+    getSessionUser(),
   ]);
   const name = new Map((machines ?? []).map((row) => [row.id as string, row.name as string]));
+  const myName = displayName(me);
   return (sheets ?? []).map((sheet) => {
     const stops = (sheet.stops ?? {}) as Record<string, StopRecord>;
+    const createdBy = (sheet.created_by as string | null) ?? null;
     return {
       id: sheet.id as string,
       createdAt: sheet.created_at as string,
       readyAt: (sheet.ready_at as string | null) ?? null,
       filledBy: (sheet.filled_by as string | null) ?? null,
+      // Made by this person; a round from before 20-10-2026 knows only who started it.
+      mine: me !== null && (createdBy === me.id || (createdBy === null && myName !== null && sheet.filled_by === myName)),
       machines: ((sheet.machine_ids ?? []) as string[])
         .filter((id) => name.has(id))
         .map((id) => ({
@@ -605,9 +652,13 @@ export async function getMonthlyReport(
 
 // One literal: Supabase types the result by parsing this string.
 const MACHINE_COLUMNS =
-  "id, name, type, payter_serial_number, business_id, shared_business_id, data_since, km_round_trip, photo_path, last_connected_at, last_disconnected_at, terminal_model, terminal_network, terminal_flags, businesses!machines_business_id_fkey(name, logo_path)";
+  "id, name, type, payter_serial_number, business_id, shared_business_id, data_since, km_round_trip, photo_path, last_connected_at, last_disconnected_at, terminal_model, terminal_network, terminal_flags, refill_manual, address, model, businesses!machines_business_id_fkey(name, logo_path)";
 
-export async function getMachines(orgId: string): Promise<Machine[]> {
+/**
+ * Every machine in scope. Asked once per page, however many loaders want it
+ * (the overview asked three times, 22-10-2026): callers only read the list.
+ */
+export const getMachines = cache(async (orgId: string): Promise<Machine[]> => {
   const { businessId } = await getScope();
   let query = createAdminClient()
     .from("machines")
@@ -619,7 +670,7 @@ export async function getMachines(orgId: string): Promise<Machine[]> {
   const { data, error } = await query.order("name");
   if (error) throw new Error(error.message);
   return (data ?? []).map(toMachine);
-}
+});
 
 export async function getMachine(orgId: string, id: string): Promise<Machine | null> {
   const { businessId } = await getScope();
@@ -639,6 +690,35 @@ export async function getMachine(orgId: string, id: string): Promise<Machine | n
   return machine;
 }
 
+export type MachineAbout = {
+  machine: Machine;
+  /** How it is laid out now, for the operator: slots, rows and how many items fit. Null for a shop or without a layout. */
+  layout: { slots: number; rows: number; fits: number } | null;
+};
+
+/**
+ * One machine for Profiel → Mijn automaten (24-10-2026, Xin: "say what kind of automaat they have and also they can
+ * click on it to see key features"). A shop sees its machine but not the layout: on a shared machine half of it is
+ * someone else's.
+ */
+export async function getMachineAbout(machineId: string): Promise<MachineAbout> {
+  const { orgId } = await getScope();
+  if (!orgId) throw new Error("Not found");
+  await requireMachineAccess(orgId, machineId);
+  const machine = await getMachine(orgId, machineId);
+  if (!machine) throw new Error("Not found");
+  if (!(await isOperator())) return { machine, layout: null };
+  const { data, error } = await createAdminClient().from("slots").select("row_id, depth").eq("org_id", orgId).eq("machine_id", machineId);
+  if (error) throw new Error(error.message);
+  const slots = data ?? [];
+  return {
+    machine,
+    layout: slots.length
+      ? { slots: slots.length, rows: new Set(slots.map((slot) => slot.row_id)).size, fits: slots.reduce((sum, slot) => sum + (slot.depth ?? 0), 0) }
+      : null,
+  };
+}
+
 type MachineRow = {
   id: string;
   name: string;
@@ -654,6 +734,9 @@ type MachineRow = {
   terminal_model: string | null;
   terminal_network: string | null;
   terminal_flags: string[] | null;
+  refill_manual: boolean | null;
+  address: string | null;
+  model: string | null;
   businesses: { name: string; logo_path: string | null } | { name: string; logo_path: string | null }[] | null;
 };
 
@@ -676,12 +759,25 @@ function toMachine(row: MachineRow): Machine {
     terminal_model: row.terminal_model,
     terminal_network: row.terminal_network,
     terminal_flags: row.terminal_flags ?? [],
+    refill_manual: row.refill_manual === true,
+    address: row.address ?? null,
+    model: row.model ?? null,
   };
 }
 
-export async function getMachineStock(orgId: string, machineIds?: string[]): Promise<SlotStock[]> {
+/**
+ * What is in each slot now. A machine filled on a round that is still open counts as it was before
+ * that round (Xin, 21-10-2026: only when the whole route is done does a machine count as filled);
+ * when the round completes, its fills count from the moment each machine was filled, minus what sold
+ * since. Only the round itself asks `withOpenRounds`, to see what its own stops changed.
+ */
+export async function getMachineStock(
+  orgId: string,
+  machineIds?: string[],
+  options?: { withOpenRounds?: boolean },
+): Promise<SlotStock[]> {
   const { businessId, role } = await getScope();
-  const { data, error } = await createAdminClient().rpc("machine_stock", {
+  const { data, error } = await createAdminClient().rpc(options?.withOpenRounds ? "machine_stock" : "machine_stock_settled", {
     target_org: orgId,
     machine_filter: machineIds?.length ? machineIds : null,
   });
@@ -939,57 +1035,45 @@ export async function getLiveSold(orgId: string, options: { after?: string | nul
   }));
 }
 
-/** What sold over the last 30 days and when, as a filler sees it: pieces only, never an amount. */
+/** What sold in a stretch of days and when, as a filler sees it: pieces only, never an amount. */
 export type SoldReport = {
   from: string;
   to: string;
-  /** Linked products that sold, most pieces first. */
-  products: { productId: string; name: string | null; photoPath: string | null; units: number }[];
+  /** Machines that sold, most pieces first (Xin, 19-10-2026: machines instead of products). */
+  machines: { machineId: string; name: string; units: number }[];
   hours: { hour: number; units: number }[];
-  /**
-   * Machines where one slot takes several prices: several products go through
-   * one number there, so what sold per product is not certain (see getPriceMismatches).
-   */
-  mixed: string[];
 };
 
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
 /**
- * The best sellers and busiest hours for whoever fills (the operator or a
- * filler, never a shop): the statistics' own report, with every amount taken
- * out here, on the server, so none reaches the phone.
+ * The best-selling machines and busiest hours for whoever fills (the operator
+ * or a filler, never a shop), from the first to the last day asked: the
+ * statistics' own report, with every amount taken out here, on the server, so
+ * none reaches the phone.
  */
-export async function getSoldReport(orgId: string): Promise<SoldReport> {
+export async function getSoldReport(orgId: string, days: { from: string; to: string }): Promise<SoldReport> {
   if ((await requireRefillAccess()) !== orgId) throw new Error("Not found");
-  const admin = createAdminClient();
-  const [report, mismatches] = await Promise.all([
-    admin.rpc("stats_report", {
-      target_org: orgId,
-      period: "last30",
-      custom_from: null,
-      custom_to: null,
-      machine_filter: null,
-      business_filter: null,
-      product_filter: null,
-    }),
-    admin.rpc("price_mismatch", { target_org: orgId, days_back: 90 }),
-  ]);
-  if (report.error) throw new Error(report.error.message);
-  if (mismatches.error) throw new Error(mismatches.error.message);
-  const data = report.data as StatsReport;
+  if (!DAY.test(days.from) || !DAY.test(days.to) || days.to < days.from) throw new Error("invalid range");
+  const { data, error } = await createAdminClient().rpc("stats_report", {
+    target_org: orgId,
+    period: "custom",
+    custom_from: days.from,
+    custom_to: days.to,
+    machine_filter: null,
+    business_filter: null,
+    product_filter: null,
+  });
+  if (error) throw new Error(error.message);
+  const report = data as StatsReport;
   return {
-    from: data.cur_start,
-    to: data.cur_end,
-    // By pieces, as the statistics rank them; the revenue that breaks a tie there is not for this screen.
-    products: data.by_product
-      .filter((row) => row.product_id && row.units > 0)
-      .sort((a, b) => b.units - a.units)
-      .map((row) => ({ productId: row.product_id!, name: row.product_name, photoPath: row.photo_path, units: row.units })),
-    hours: data.by_hour.map((row) => ({ hour: row.hour, units: row.units })),
-    mixed: [
-      ...new Set(
-        ((mismatches.data ?? []) as PriceMismatch[]).filter((row) => Number(row.spread) > 0).map((row) => row.machine_name),
-      ),
-    ],
+    from: report.cur_start,
+    to: report.cur_end,
+    machines: report.by_machine
+      .filter((row) => row.units > 0)
+      .sort((a, b) => b.units - a.units || a.machine_name.localeCompare(b.machine_name))
+      .map((row) => ({ machineId: row.machine_id, name: row.machine_name, units: row.units })),
+    hours: report.by_hour.map((row) => ({ hour: row.hour, units: row.units })),
   };
 }
 
@@ -1092,6 +1176,262 @@ export async function getMachineSalesSplit(
  * only, and on a shared one the last sale of its own slots: when the
  * co-tenant last sold is not its business.
  */
+export type LastRefill = { at: string; by: string | null; pieces: number };
+
+/**
+ * When each machine was last filled, by whom, and how many pieces went in on
+ * that visit (Xin, 19-10-2026), in a round or through Voorraad aanpassen
+ * (21-10-2026). The operator's to see; anyone else gets none.
+ */
+export async function getLastRefills(orgId: string): Promise<Map<string, LastRefill>> {
+  if (!(await isOperator()) || (await getScope()).orgId !== orgId) return new Map();
+  // A round still open has not filled anything yet (21-10-2026).
+  const { data, error } = await createAdminClient().rpc("last_refills_settled", { target_org: orgId });
+  if (error) throw new Error(error.message);
+  return new Map(
+    ((data ?? []) as { machine_id: string; filled_at: string; filled_by: string | null; pieces: number }[]).map((row) => [
+      row.machine_id,
+      { at: row.filled_at, by: row.filled_by, pieces: Number(row.pieces) },
+    ]),
+  );
+}
+
+/** The organisation's own name, to leave off its machines' names; only for its own members. */
+export async function getOrgName(orgId: string): Promise<string | null> {
+  if ((await getScope()).orgId !== orgId) return null;
+  const { data } = await createAdminClient().from("organizations").select("name").eq("id", orgId).maybeSingle();
+  return (data?.name as string | null) ?? null;
+}
+
+/**
+ * What the profile page says about the account's organisation (Xin, 21-10-2026): its name, whether it is a demo with
+ * invented sales, and, for the operator only, how many people can open it.
+ */
+export async function getAccountFacts(orgId: string): Promise<{ orgName: string | null; isDemo: boolean; teamSize: number | null }> {
+  if ((await getScope()).orgId !== orgId) return { orgName: null, isDemo: false, teamSize: null };
+  const admin = createAdminClient();
+  const operator = await isOperator();
+  const [org, members] = await Promise.all([
+    admin.from("organizations").select("name, is_demo").eq("id", orgId).maybeSingle(),
+    operator ? admin.from("memberships").select("user_id", { count: "exact", head: true }).eq("org_id", orgId) : Promise.resolve(null),
+  ]);
+  return { orgName: (org.data?.name as string | null) ?? null, isDemo: Boolean(org.data?.is_demo), teamSize: members?.count ?? null };
+}
+
+/**
+ * Whether the refill page shows the slots in the machine itself (23-10-2026): only where it is switched on
+ * (`organizations.refill_cabinet`, Xin: the MATO Sales Test Account). False when it cannot be read, so the page never
+ * breaks on it.
+ */
+export async function hasRefillCabinet(orgId: string): Promise<boolean> {
+  if ((await getScope()).orgId !== orgId) return false;
+  const { data } = await createAdminClient().from("organizations").select("refill_cabinet").eq("id", orgId).maybeSingle();
+  return data?.refill_cabinet === true;
+}
+
+/** A message vendly-alerts sent, with how each channel fared ("sent", "no_provider", …). */
+export type SentNotification = { id: string; kind: string; title: string; body: string; sent: Partial<Record<NotifyChannel, string>>; at: string };
+
+export type NotificationSettings = {
+  prefs: NotifyPrefs;
+  /** Whether this person saved choices of their own; before that the defaults are what they get. */
+  chosen: boolean;
+  loginEmail: string | null;
+  /** Which channels MATO Info can send on now: mail needs a provider's keys. */
+  ready: Record<NotifyChannel, boolean>;
+};
+
+/** The keys a channel needs before anything goes out on it (read by supabase/functions/vendly-alerts). */
+const CHANNEL_KEYS: Record<NotifyChannel, string[]> = {
+  email: ["resend_api_key", "mail_from"],
+};
+
+/**
+ * One's own display and notifications in Instellingen (23-10-2026) are only where switched on
+ * (`organizations.personal_settings`, Xin: "Only put it live for mato sales test site"); elsewhere the page stays as it was.
+ */
+async function personalSettingsOn(orgId: string): Promise<boolean> {
+  const { data } = await createAdminClient().from("organizations").select("personal_settings").eq("id", orgId).maybeSingle();
+  return data?.personal_settings === true;
+}
+
+/**
+ * Instellingen → Meldingen (23-10-2026): what this person asked to hear about (the list of what was sent went on
+ * 24-10-2026, Xin: "remove … laatst verstuurd").
+ * Only ever one's own, in the organisation one is in now; a filler has none. Null where it is not switched on.
+ */
+export async function getNotificationSettings(): Promise<NotificationSettings | null> {
+  const user = await requireSignedIn();
+  await denyFillerAccess();
+  const { orgId } = await getScope();
+  if (!orgId) throw new Error("Not found");
+  if (!(await personalSettingsOn(orgId))) return null;
+  const admin = createAdminClient();
+  const [{ data: row }, { data: keys }] = await Promise.all([
+    admin.from("notification_prefs").select("*").eq("user_id", user.id).eq("org_id", orgId).maybeSingle(),
+    // Only whether a key is there; its value never leaves the database here.
+    admin.from("app_keys").select("name").in("name", Object.values(CHANNEL_KEYS).flat()),
+  ]);
+  const present = new Set((keys ?? []).map((k) => k.name as string));
+  const ready = Object.fromEntries(
+    NOTIFY_CHANNELS.map((channel) => [channel, CHANNEL_KEYS[channel].every((name) => present.has(name))]),
+  ) as Record<NotifyChannel, boolean>;
+  const prefs: NotifyPrefs = row
+    ? {
+        email: (row.email as string | null) ?? null,
+        // Only the channels there are now: a push or sms chosen before is no longer one.
+        topics: Object.fromEntries(
+          NOTIFY_TOPICS.map((topic) => [topic, NOTIFY_CHANNELS.filter((channel) => ((row[topic] as string[] | null) ?? []).includes(channel))]),
+        ) as NotifyPrefs["topics"],
+        dailyHour: Number(row.daily_hour),
+        lowPercent: Number(row.low_percent),
+      }
+    : NOTIFY_DEFAULTS;
+  return {
+    prefs,
+    chosen: Boolean(row),
+    loginEmail: user.email ?? null,
+    ready,
+  };
+}
+
+/**
+ * Stores one's own choices, in the organisation (and business) one is in now, never anyone else's. Every sale
+ * counts from the moment it is switched on, never from the past.
+ */
+export async function saveNotificationSettings(input: unknown, locale: Locale): Promise<CleanPrefs> {
+  const user = await requireSignedIn();
+  await denyFillerAccess();
+  const { orgId, businessId } = await getScope();
+  if (!orgId || !(await personalSettingsOn(orgId))) throw new Error("Not found");
+  const clean = cleanPrefs(input);
+  if (!clean.ok) return clean;
+  const { prefs } = clean;
+  const admin = createAdminClient();
+  const { data: before } = await admin.from("notification_prefs").select("sales").eq("user_id", user.id).eq("org_id", orgId).maybeSingle();
+  const now = new Date().toISOString();
+  const { error } = await admin.from("notification_prefs").upsert(
+    {
+      user_id: user.id,
+      org_id: orgId,
+      business_id: businessId,
+      locale: isLocale(locale) ? locale : "nl",
+      email: prefs.email,
+      // No sms (Xin, 23-10-2026: "i dont wnat to activate sms"): no number kept, and quiet hours were only for sms.
+      phone: null,
+      ...prefs.topics,
+      daily_hour: prefs.dailyHour,
+      low_percent: prefs.lowPercent,
+      quiet: false,
+      updated_at: now,
+      ...(prefs.topics.sales.length > 0 && !((before?.sales as string[] | null) ?? []).length ? { sales_seen_at: now } : {}),
+    },
+    { onConflict: "user_id,org_id" },
+  );
+  if (error) throw new Error(error.message);
+  return clean;
+}
+
+/** The language messages are written in follows the app's: kept along when someone switches it. */
+export async function rememberNotificationLocale(locale: Locale): Promise<void> {
+  const user = await getSessionUser();
+  if (!user || !isLocale(locale)) return;
+  await createAdminClient().from("notification_prefs").update({ locale }).eq("user_id", user.id);
+}
+
+/**
+ * "Stuur een test": one message at once on every channel this person chose, through the same sender as the real
+ * ones. Not more often than every 30 seconds: a text message costs money.
+ */
+export async function sendTestNotification(): Promise<{ ok: true; sent: SentNotification["sent"] } | { ok: false; reason: "wait" | "failed" }> {
+  const user = await requireSignedIn();
+  await denyFillerAccess();
+  const { orgId } = await getScope();
+  if (!orgId || !(await personalSettingsOn(orgId))) throw new Error("Not found");
+  const admin = createAdminClient();
+  const [{ data: recent }, { data: secret }] = await Promise.all([
+    admin
+      .from("notification_log")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("org_id", orgId)
+      .eq("kind", "test")
+      .gt("created_at", new Date(Date.now() - 30_000).toISOString())
+      .limit(1),
+    admin.from("app_keys").select("value").eq("name", "notify_secret").maybeSingle(),
+  ]);
+  if (recent?.length) return { ok: false, reason: "wait" };
+  if (!secret?.value) return { ok: false, reason: "failed" };
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/vendly-alerts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-notify-secret": secret.value as string },
+    body: JSON.stringify({ test: { user_id: user.id, org_id: orgId } }),
+    cache: "no-store",
+  }).catch(() => null);
+  if (!response?.ok) return { ok: false, reason: "failed" };
+  const { sent } = (await response.json()) as { sent: SentNotification["sent"] };
+  return { ok: true, sent };
+}
+
+/**
+ * "Bekijk de e-mail": the day's overview exactly as it would arrive by email, built by the same sender (vendly-alerts)
+ * from this person's own choices and figures; nothing is sent. Null when it cannot be made now.
+ */
+export async function getEmailPreview(): Promise<{ subject: string; html: string } | null> {
+  const user = await requireSignedIn();
+  await denyFillerAccess();
+  const { orgId } = await getScope();
+  if (!orgId || !(await personalSettingsOn(orgId))) throw new Error("Not found");
+  const { data: secret } = await createAdminClient().from("app_keys").select("value").eq("name", "notify_secret").maybeSingle();
+  if (!secret?.value) return null;
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/vendly-alerts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-notify-secret": secret.value as string },
+    body: JSON.stringify({ preview: { user_id: user.id, org_id: orgId } }),
+    cache: "no-store",
+  }).catch(() => null);
+  if (!response?.ok) return null;
+  const preview = (await response.json()) as { subject?: string; html?: string };
+  return preview.subject && preview.html ? { subject: preview.subject, html: preview.html } : null;
+}
+
+/** `adjusted`: stock added through Voorraad aanpassen rather than on a round (21-10-2026). */
+export type RefillVisit = { machineId: string; at: string; pieces: number; by: string | null; adjusted: boolean };
+
+/**
+ * Every time a machine was filled between two moments: when, how many pieces
+ * and by whom (Xin, 20-10-2026), also when it went through Voorraad aanpassen
+ * instead of a round (21-10-2026, Xin: "niet alleen op ronde"). The operator's
+ * to see, for their own machines (none asked is all of them); anyone else gets none.
+ */
+export async function getRefillVisits(
+  orgId: string,
+  range: { from: string; to: string },
+  machineIds: string[] | null,
+): Promise<RefillVisit[]> {
+  if (!(await isOperator()) || (await getScope()).orgId !== orgId) return [];
+  const own = new Set((await getMachines(orgId)).map((machine) => machine.id));
+  const asked = machineIds === null ? null : machineIds.filter((id) => own.has(id));
+  if (asked !== null && asked.length === 0) return [];
+  // A round still open has not filled anything yet (21-10-2026).
+  const { data, error } = await createAdminClient().rpc("refill_visits_settled", {
+    target_org: orgId,
+    from_ts: range.from,
+    to_ts: range.to,
+    machine_filter: asked,
+  });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as { machine_id: string; filled_at: string; pieces: number; filled_by: string | null; adjusted: boolean }[])
+    .filter((row) => own.has(row.machine_id))
+    .map((row) => ({
+      machineId: row.machine_id,
+      at: row.filled_at,
+      pieces: Number(row.pieces),
+      by: row.filled_by,
+      adjusted: Boolean(row.adjusted),
+    }));
+}
+
 export async function getLastSales(orgId: string): Promise<Map<string, string | null>> {
   const { data } = await createAdminClient().rpc("dashboard_machine_last_sale", { target_org: orgId });
   const all = new Map(
@@ -1138,7 +1478,7 @@ function brusselsMidnight(day: string): string {
 }
 
 export const PRODUCT_COLUMNS =
-  "id, name, price, photo_path, archived, business_id, shelf_life_days, shelf_life_preset_id, producer_id";
+  "id, name, price, photo_path, archived, business_id, shelf_life_days, shelf_life_preset_id, producer_id, batch_min";
 
 export async function getProducts(orgId: string, { includeArchived = false } = {}): Promise<Product[]> {
   await denyFillerAccess();
@@ -1269,7 +1609,8 @@ export type SlotShelfLife = { nextExpiresAt: string | null; expired: number };
 export async function getSlotShelfLife(orgId: string, machineId: string): Promise<Map<string, SlotShelfLife>> {
   await requireMachineAccess(orgId, machineId);
   const { businessId } = await getScope();
-  const { data, error } = await createAdminClient().rpc("slot_freshness", {
+  // Beside the stock it is shown with: a round still open has not filled anything yet (21-10-2026).
+  const { data, error } = await createAdminClient().rpc("slot_freshness_settled", {
     target_org: orgId,
     machine_filter: [machineId],
   });
@@ -1394,17 +1735,23 @@ export async function getRefillHistory(orgId: string, machineId: string): Promis
   await requireMachineAccess(orgId, machineId);
   const { businessId } = await getScope();
   const admin = createAdminClient();
-  const { data } = await admin
-    .from("stock_events")
-    .select("occurred_at, type, delta, refill_sheet_id, filled_by, selection_number")
-    .eq("org_id", orgId)
-    .eq("machine_id", machineId)
-    .order("occurred_at", { ascending: false })
-    .limit(500);
+  const [{ data: written }, { data: open }] = await Promise.all([
+    admin
+      .from("stock_events")
+      .select("occurred_at, type, delta, refill_sheet_id, filled_by, selection_number")
+      .eq("org_id", orgId)
+      .eq("machine_id", machineId)
+      .order("occurred_at", { ascending: false })
+      .limit(500),
+    admin.from("refill_sheets").select("id").eq("org_id", orgId).is("completed_at", null),
+  ]);
+  // A round still open has not filled anything yet: its stops show once it is completed (21-10-2026).
+  const pending = new Set((open ?? []).map((row) => row.id as string));
+  const data = (written ?? []).filter((row) => !row.refill_sheet_id || !pending.has(row.refill_sheet_id as string));
 
   // A shop on a shared fridge counts its own slots only, and does not get the
   // e-mail address of whoever filled: that is the operator's staff, not theirs.
-  let rows = data ?? [];
+  let rows = data;
   if (businessId) {
     const { data: slots } = await admin.rpc("machine_stock", { target_org: orgId, machine_filter: [machineId] });
     const own = new Set(
@@ -1545,6 +1892,180 @@ export async function getProducers(orgId: string): Promise<Producer[]> {
   return producers.filter((producer) => mine.has(producer.id));
 }
 
+/** Whether the operator has a kitchen list to pass on: a dish made by one of their producers. Never for anyone else. */
+export async function hasProducerDishes(orgId: string): Promise<boolean> {
+  if (!(await isOperator()) || (await getScope()).orgId !== orgId) return false;
+  const { count } = await createAdminClient()
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .eq("archived", false)
+    .not("producer_id", "is", null);
+  return (count ?? 0) > 0;
+}
+
+// ── The production list (Xin, 19-10-2026) ────────────────────────────────────
+
+export type ProductionList = {
+  producerId: string;
+  producerName: string;
+  /** The round this list is for. */
+  fillAt: string;
+  lines: ProductionLine[];
+};
+
+/**
+ * One producer's list, read with the service key. Not exported: the callers
+ * below are the operator's own, and check that first.
+ */
+async function productionFor(orgId: string, producerId: string, producerName: string): Promise<ProductionList> {
+  const admin = createAdminClient();
+  const now = new Date();
+  const daysAgo = (n: number) => reportDay(new Date(now.getTime() - n * 86_400_000), DISPLAY_TIME_ZONE);
+  const report = (from: string, to: string) =>
+    admin.rpc("stats_report", {
+      target_org: orgId,
+      period: "custom",
+      custom_from: from,
+      custom_to: to,
+      machine_filter: null,
+      business_filter: null,
+      product_filter: null,
+    });
+  const [dishes, machines, stock, sales, hours, trend, fridge] = await Promise.all([
+    admin.from("products").select("id, name, photo_path, batch_min").eq("org_id", orgId).eq("producer_id", producerId).eq("archived", false),
+    admin.from("machines").select("id, refill_manual").eq("org_id", orgId).eq("excluded", false),
+    // Machines and fridge as a round still open left them: neither has given or taken anything yet (21-10-2026).
+    admin.rpc("machine_stock_settled", { target_org: orgId, machine_filter: null }),
+    admin.rpc("slot_weekday_sales", { target_org: orgId, days: RATE_DAYS }),
+    // The hours of the last eight weeks; the trend over four full weeks against the four before.
+    report(daysAgo(RATE_DAYS), daysAgo(1)),
+    report(daysAgo(28), daysAgo(1)),
+    admin.rpc("producer_fridge_settled", { target_org: orgId, target_producer: producerId }),
+  ]);
+  for (const result of [dishes, machines, stock, sales, hours, trend, fridge]) {
+    if (result.error) throw new Error(result.error.message);
+  }
+  const trendReport = trend.data as StatsReport;
+  const plan = productionPlan({
+    now,
+    dishes: (dishes.data ?? []).map((d) => ({
+      id: d.id as string,
+      name: d.name as string,
+      photoPath: (d.photo_path as string | null) ?? null,
+      batchMin: Number(d.batch_min) || 1,
+    })),
+    manual: (machines.data ?? []).filter((m) => m.refill_manual).map((m) => m.id as string),
+    slots: ((stock.data ?? []) as SlotStock[]).map((slot) => ({
+      machineId: slot.machine_id,
+      selection: slot.selection_number,
+      productId: slot.product_id,
+      capacity: slot.capacity,
+      stock: slot.stock,
+      countedAt: slot.counted_at,
+    })),
+    sales: ((sales.data ?? []) as { machine_id: string; selection_number: string; weekday: number; units: number; first_sale: string }[]).map(
+      (row) => ({ machineId: row.machine_id, selection: row.selection_number, weekday: row.weekday, units: row.units, firstSale: row.first_sale }),
+    ),
+    hourUnits: (hours.data as StatsReport).by_hour,
+    fridge: ((fridge.data ?? []) as { product_id: string; in_fridge: number | null; made_today: number }[]).map((row) => ({
+      productId: row.product_id,
+      inFridge: row.in_fridge,
+      madeToday: row.made_today,
+    })),
+    trends: trendReport.by_product
+      .filter((row) => row.product_id)
+      .map((row) => ({ productId: row.product_id!, units: row.units, prevUnits: row.prev_units, firstSale: row.first_sale })),
+    trendPrevStart: trendReport.prev_start,
+  });
+  return { producerId, producerName, fillAt: plan.fillAt.toISOString(), lines: plan.lines };
+}
+
+/** The operator's production lists: one per producer that makes something. Only the operator sees them. */
+export async function getProductionLists(orgId: string): Promise<ProductionList[]> {
+  await requireOperator();
+  const admin = createAdminClient();
+  const [{ data: producers, error }, { data: made }] = await Promise.all([
+    admin.from("producers").select("id, name").eq("org_id", orgId).order("name"),
+    admin.from("products").select("producer_id").eq("org_id", orgId).eq("archived", false).not("producer_id", "is", null),
+  ]);
+  if (error) throw new Error(error.message);
+  const busy = new Set((made ?? []).map((row) => row.producer_id as string));
+  return Promise.all(
+    (producers ?? [])
+      .filter((producer) => busy.has(producer.id as string))
+      .map((producer) => productionFor(orgId, producer.id as string, producer.name as string)),
+  );
+}
+
+export type OrderLine = { name: string; qty: number };
+
+/**
+ * The operator passes tonight's list on to the kitchen (Xin, 19-10-2026: the
+ * kitchen types nothing). What is passed on counts as made tonight, so the
+ * fridge follows without anyone counting. The amounts are worked out again
+ * here, never taken from the screen; passing on twice only adds what became
+ * needed since, because what was passed on is already in the fridge. Returns
+ * everything passed on today, for the message to the kitchen.
+ */
+export async function sendProductionOrder(orgId: string, producerId: string): Promise<OrderLine[]> {
+  await requireOperator();
+  const admin = createAdminClient();
+  const { data: producer } = await admin.from("producers").select("id, name").eq("org_id", orgId).eq("id", producerId).maybeSingle();
+  if (!producer) throw new Error("Not found");
+  const list = await productionFor(orgId, producerId, producer.name as string);
+  const today = reportDay(new Date(), DISPLAY_TIME_ZONE);
+  const by = displayName(await getSessionUser())?.slice(0, 80) ?? null;
+  const rows = list.lines
+    .filter((line) => line.make > 0)
+    .map((line) => ({ org_id: orgId, producer_id: producerId, product_id: line.productId, kind: "made", qty: line.make, made_on: today, by_name: by }));
+  if (rows.length > 0) {
+    const { error } = await admin.from("producer_stock_events").insert(rows);
+    if (error) throw new Error(error.message);
+  }
+  const { data: passed, error } = await admin
+    .from("producer_stock_events")
+    .select("product_id, qty")
+    .eq("org_id", orgId)
+    .eq("producer_id", producerId)
+    .eq("kind", "made")
+    .eq("made_on", today);
+  if (error) throw new Error(error.message);
+  const names = new Map(list.lines.map((line) => [line.productId, line.name]));
+  const totals = new Map<string, number>();
+  for (const row of passed ?? []) totals.set(row.product_id as string, (totals.get(row.product_id as string) ?? 0) + Number(row.qty));
+  return [...totals]
+    .map(([productId, qty]) => ({ name: names.get(productId) ?? "—", qty }))
+    .sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name));
+}
+
+/**
+ * What the operator counted in a producer's fridge, for one of the producer's
+ * own dishes: the level the fridge is followed from again.
+ */
+export async function countProducerFridge(orgId: string, producerId: string, productId: string, qty: number): Promise<void> {
+  await requireOperator();
+  if (!Number.isInteger(qty) || qty < 0 || qty > 9999) throw new Error("invalid quantity");
+  const admin = createAdminClient();
+  const { data: dish } = await admin
+    .from("products")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("producer_id", producerId)
+    .eq("id", productId)
+    .maybeSingle();
+  if (!dish) throw new Error("Not found");
+  const { error } = await admin.from("producer_stock_events").insert({
+    org_id: orgId,
+    producer_id: producerId,
+    product_id: productId,
+    kind: "count",
+    qty,
+    by_name: displayName(await getSessionUser())?.slice(0, 80) ?? null,
+  });
+  if (error) throw new Error(error.message);
+}
+
 /** The report that closes a run: filled, out of date and short, per product. */
 export async function getRunSummary(orgId: string, sheetId: string): Promise<RunSummaryRow[]> {
   await denyFillerAccess();
@@ -1656,6 +2177,156 @@ export async function getSetupState(orgId: string): Promise<SetupState> {
 export async function requireMachineAccess(orgId: string, machineId: string): Promise<void> {
   await denyFillerAccess();
   if (!(await getMachine(orgId, machineId))) throw new Error("Not found");
+}
+
+type CameraRow = { machine_id: string; console_id: string; camera_id: string; name: string | null; full_hd?: boolean | null };
+const toLinked = (row: CameraRow): LinkedCamera => ({ consoleId: row.console_id, cameraId: row.camera_id, name: row.name });
+
+/**
+ * The UniFi cameras aimed at a machine (machine_cameras; since 21-10-2026 a
+ * machine can have several), for "Toon automaat nu", Live and the recording of
+ * each payment. The operator's alone (the cameras are theirs, not a shop's or
+ * a filler's), and only where UniFi is set up for this organisation.
+ */
+export async function getCamerasOf(orgId: string, machineId: string): Promise<LinkedCamera[]> {
+  await requireOperator();
+  await requireMachineAccess(orgId, machineId);
+  if (!camerasEnabled(orgId)) return [];
+  const { data, error } = await createAdminClient()
+    .from("machine_cameras")
+    .select("machine_id, console_id, camera_id, name, full_hd")
+    .eq("machine_id", machineId)
+    .order("position")
+    .order("created_at");
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as CameraRow[]).map((row) => ({ ...toLinked(row), fullHd: row.full_hd ?? null }));
+}
+
+/**
+ * A linked camera that answered it cannot make a full HD photo (Diksmuide's,
+ * 21-10-2026), remembered with this machine's link (22-10-2026), so its next
+ * photo asks for the usual one straight away, also after a server restart.
+ */
+export async function rememberNoFullHd(orgId: string, machineId: string, cameraId: string): Promise<void> {
+  await requireMachineAccess(orgId, machineId);
+  const { error } = await createAdminClient()
+    .from("machine_cameras")
+    .update({ full_hd: false })
+    .eq("machine_id", machineId)
+    .eq("camera_id", cameraId);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * The cameras of every machine that has one, by machine id, for "watch on
+ * camera" next to each payment. The operator's alone, like the cameras
+ * themselves; empty for anyone else and where UniFi is not set up.
+ */
+export async function getMachineCameras(orgId: string): Promise<Record<string, LinkedCamera[]>> {
+  if (!(await isOperator()) || !camerasEnabled(orgId)) return {};
+  const { data, error } = await createAdminClient()
+    .from("machine_cameras")
+    .select("machine_id, console_id, camera_id, name, machines!inner(org_id, excluded)")
+    .eq("machines.org_id", orgId)
+    .eq("machines.excluded", false)
+    .order("position")
+    .order("created_at");
+  if (error) throw new Error(error.message);
+  const byMachine: Record<string, LinkedCamera[]> = {};
+  for (const row of (data ?? []) as unknown as CameraRow[]) (byMachine[row.machine_id] ??= []).push(toLinked(row));
+  return byMachine;
+}
+
+export type VisitorCamera = {
+  consoleId: string;
+  cameraId: string;
+  name: string;
+  model: string | null;
+  /** What Protect has the camera detect now; null until the first read of its console. */
+  detects: string[] | null;
+  online: boolean | null;
+  /** This organisation's machines the camera looks at. */
+  machines: { id: string; name: string }[];
+};
+
+/**
+ * The cameras an organisation counts visitors with (22-10-2026): those aimed at
+ * its own machines, the same cameras it may look through, named as Protect
+ * names them. The operator's alone, and only where UniFi is set up for this
+ * organisation; once per request.
+ */
+export const getVisitorCameras = cache(async (orgId: string): Promise<VisitorCamera[]> => {
+  await requireOperator();
+  if (!camerasEnabled(orgId)) return [];
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("machine_cameras")
+    .select("console_id, camera_id, name, machine_id, machines!inner(name, org_id, excluded)")
+    .eq("machines.org_id", orgId)
+    .eq("machines.excluded", false)
+    .order("position")
+    .order("created_at");
+  if (error) throw new Error(error.message);
+  const rows = (data ?? []) as unknown as (CameraRow & { machines: { name: string } })[];
+  const ids = [...new Set(rows.map((row) => row.camera_id))];
+  if (!ids.length) return [];
+  const known = await admin.from("protect_cameras").select("camera_id, name, model, detects, online").in("camera_id", ids);
+  if (known.error) throw new Error(known.error.message);
+  const protect = new Map(
+    ((known.data ?? []) as { camera_id: string; name: string | null; model: string | null; detects: string[]; online: boolean | null }[]).map(
+      (row) => [row.camera_id, row],
+    ),
+  );
+  const cameras = new Map<string, VisitorCamera>();
+  for (const row of rows) {
+    const seen = protect.get(row.camera_id);
+    const camera = cameras.get(row.camera_id) ?? {
+      consoleId: row.console_id,
+      cameraId: row.camera_id,
+      name: seen?.name ?? row.name ?? row.camera_id,
+      model: seen?.model ?? null,
+      detects: seen ? seen.detects : null,
+      online: seen?.online ?? null,
+      machines: [],
+    };
+    camera.machines.push({ id: row.machine_id, name: row.machines.name });
+    cameras.set(row.camera_id, camera);
+  }
+  return [...cameras.values()];
+});
+
+/** The visitors of the organisation's cameras over the last `days` days (today included) and the same length before. */
+export async function getVisitorsReport(orgId: string, days: number): Promise<VisitorsReport | null> {
+  const cameras = await getVisitorCameras(orgId);
+  if (!cameras.length) return null;
+  const { data, error } = await createAdminClient().rpc("protect_visitors_report", {
+    target_org: orgId,
+    camera_ids: cameras.map((camera) => camera.cameraId),
+    period_days: days,
+    tz: DISPLAY_TIME_ZONE,
+  });
+  if (error) throw new Error(error.message);
+  return data as VisitorsReport;
+}
+
+/** How far the consoles of the organisation's cameras have been read from UniFi. */
+export async function getVisitorSync(orgId: string): Promise<SyncState[]> {
+  const cameras = await getVisitorCameras(orgId);
+  return readSyncStates([...new Set(cameras.map((camera) => camera.consoleId))]);
+}
+
+/**
+ * The read of the organisation's consoles that is due (or all of them, when
+ * asked), as work to run later, or null when nothing is due. Who may ask is
+ * decided here, before: the work itself needs no login, so a page can hand it
+ * to after(), where the login cannot be read.
+ */
+export async function visitorsRefresher(orgId: string, { force = false }: { force?: boolean } = {}): Promise<(() => Promise<void>) | null> {
+  const due = staleConsoles(await getVisitorSync(orgId), force);
+  if (!due.length) return null;
+  return async () => {
+    for (const consoleId of due) await syncProtectConsole(consoleId);
+  };
 }
 
 /**

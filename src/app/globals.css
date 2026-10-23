@@ -2,7 +2,8 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-/* Light-only app: keep the components' dark: styles from following the OS setting. */
+/* Dark follows the class on <html> (set before paint by the layout's script: the phone's setting, or the
+   person's own choice), never the OS setting on its own, so the switch can overrule it. */
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -40,6 +41,12 @@
   --color-level-half-strong: var(--level-half-strong);
   --color-level-low-strong: var(--level-low-strong);
   --color-level-empty: var(--level-empty);
+  --color-level-full-ink: var(--level-full-ink);
+  --color-level-half-ink: var(--level-half-ink);
+  --color-level-low-ink: var(--level-low-ink);
+  --color-gold-ink: var(--gold-ink);
+  --color-hover: var(--hover);
+  --color-brand-ink: var(--brand-ink);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -56,7 +63,8 @@
   --radius-4xl: 28px;
 }
 
-:root {
+:root,
+.light {
   --radius: 12px;
 
   /* Calm and neutral, like a good banking app: a near-white ground, white
@@ -97,6 +105,10 @@
   --level-full-strong: #137a49;
   --level-half-strong: #9a5b0e;
   --level-low-strong: #b83a2f;
+  /* The levels as text on the page: here the strong ones, in the dark the bright ones. */
+  --level-full-ink: #137a49;
+  --level-half-ink: #9a5b0e;
+  --level-low-ink: #b83a2f;
 
   --chart-1: #b5862a;
   --chart-2: #8a6117;
@@ -107,6 +119,89 @@
   /* One soft lift for surfaces that float above the page, nothing heavier. */
   --shadow-card: 0 1px 2px rgb(14 14 16 / 0.04), 0 1px 1px rgb(14 14 16 / 0.02);
   --shadow-pop: 0 12px 32px rgb(14 14 16 / 0.12), 0 2px 6px rgb(14 14 16 / 0.06);
+
+  /* Gold as text (MATO's brown-gold), a pressed chip, the warm ground behind a machine without a photo, the logo's words. */
+  --gold-ink: #8a6117;
+  --hover: #e6e6e9;
+  --photo-from: #f6f2ea;
+  --photo-to: #ece6da;
+  --brand-ink: #2a2520;
+  --shimmer: #f8f8fa;
+
+  /* The machine on the refill page (Xin, 23-10-2026: "like this automaat"): black in both themes, as the real one. */
+  --cabinet: #141416;
+  --cabinet-edge: #2c2c31;
+  --cabinet-glass: #0a0b0d;
+  --cabinet-rail: #303136;
+  --cabinet-rail-top: #5c5d64;
+  --cabinet-label: #f4f4f5;
+  --cabinet-label-ink: #111113;
+  --cabinet-led: #eef4ff;
+  color-scheme: light;
+}
+
+/* Dark (Xin, 21-10-2026: "een dark version theme bij alle versies"): a near-black ground, cards a step lighter,
+   the same gold. Text keeps at least 4.5:1 on the cards; the fill pills keep white text at 4.5:1. Never on paper:
+   a printed page stays light. */
+@media not print {
+  .dark {
+    --background: #0f0f11;
+    --surface: #1f1f23;
+    --foreground: #ededf0;
+    --card: #18181b;
+    --card-foreground: #ededf0;
+    --popover: #1c1c20;
+    --popover-foreground: #ededf0;
+    --primary: #c99a3c;
+    --primary-foreground: #0e0e10;
+    --secondary: #222226;
+    --secondary-foreground: #ededf0;
+    --muted: #222226;
+    --muted-foreground: #a1a1aa;
+    --accent: #26262b;
+    --accent-foreground: #ededf0;
+    --destructive: #f2756b;
+    --border: rgb(255 255 255 / 0.08);
+    --input: rgb(255 255 255 / 0.17);
+    --ring: #c99a3c;
+    --heading: #f4f4f6;
+
+    --positive: #3ecf85;
+    --negative: #f2756b;
+    --warning: #f0a54a;
+
+    --level-full: #2fbf73;
+    --level-half: #e6a640;
+    --level-low: #e8604d;
+    --level-empty: #2c2c31;
+    --level-full-strong: #17824f;
+    --level-half-strong: #a8650f;
+    --level-low-strong: #c4413a;
+    --level-full-ink: #3ecf85;
+    --level-half-ink: #f0a54a;
+    --level-low-ink: #f2756b;
+
+    --chart-1: #c99a3c;
+    --chart-2: #e0b45c;
+    --chart-3: #2fbf73;
+    --chart-4: #e8604d;
+    --chart-5: #3a3a40;
+
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.5);
+    --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.55), 0 2px 6px rgb(0 0 0 / 0.4);
+
+    --gold-ink: #e0b45c;
+    --hover: #2a2a2f;
+    --photo-from: #26231f;
+    --photo-to: #1d1b18;
+    --brand-ink: #ece8e3;
+    --shimmer: #2a2a2f;
+    color-scheme: dark;
+  }
+  /* A part that must stay light inside the dark (a page made to print). */
+  .dark .light {
+    color-scheme: light;
+  }
 }
 
 @layer base {
@@ -208,7 +303,7 @@
   /* Loading placeholders: a calm shimmer in the shape of what is coming. */
   .skeleton {
     border-radius: var(--radius-md);
-    background: linear-gradient(90deg, var(--surface) 25%, #f8f8fa 50%, var(--surface) 75%);
+    background: linear-gradient(90deg, var(--surface) 25%, var(--shimmer) 50%, var(--surface) 75%);
     background-size: 200% 100%;
     animation: skeleton-shimmer 1.4s ease-in-out infinite;
   }
@@ -561,4 +656,174 @@
   .bar-grow {
     transition: none;
   }
+}
+
+/* The machine on the refill page (23-10-2026): a black frame, the glass with its light strip and a soft
+   reflection, every shelf's edge with white number labels. */
+.cabinet {
+  background: linear-gradient(180deg, var(--cabinet-edge), var(--cabinet) 5%, var(--cabinet) 95%, var(--cabinet-edge));
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.06),
+    0 22px 44px -20px rgb(0 0 0 / 0.6),
+    0 2px 6px rgb(0 0 0 / 0.25);
+}
+.cabinet-glass {
+  position: relative;
+  min-width: 0;
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgb(255 255 255 / 0.07), transparent 60%),
+    var(--cabinet-glass);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.09),
+    inset 0 12px 26px rgb(0 0 0 / 0.65);
+}
+.cabinet-glass::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--cabinet-led);
+  box-shadow:
+    0 0 6px 1px var(--cabinet-led),
+    0 0 18px 3px rgb(238 244 255 / 0.3);
+  pointer-events: none;
+  z-index: 1;
+}
+.cabinet-glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg, transparent 28%, rgb(255 255 255 / 0.05) 36%, transparent 50%);
+  pointer-events: none;
+}
+.cabinet-bay {
+  background: linear-gradient(180deg, transparent, rgb(255 255 255 / 0.04));
+}
+.cabinet-rail {
+  background: linear-gradient(180deg, var(--cabinet-rail-top), var(--cabinet-rail) 30%, var(--cabinet-rail));
+  box-shadow: 0 4px 8px rgb(0 0 0 / 0.5);
+}
+.cabinet-label {
+  background: var(--cabinet-label);
+  color: var(--cabinet-label-ink);
+}
+
+/* The machines on a map (Bijvullen, 21-10-2026). Leaflet's own layers count
+   inside the map only, never above the top bar or a dialog. */
+.machine-map {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+  background: var(--muted);
+  font-family: inherit;
+}
+.machine-map .leaflet-control-attribution {
+  font-size: 10px;
+}
+.dark .machine-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88);
+}
+.dark .machine-map .leaflet-control-zoom a,
+.dark .machine-map .leaflet-control-attribution,
+.dark .machine-map .leaflet-popup-content-wrapper,
+.dark .machine-map .leaflet-popup-tip {
+  background: var(--card);
+  color: var(--foreground);
+}
+.map-pin-wrap {
+  background: none;
+  border: 0;
+}
+/* A rounded label standing on its point, in the colour of how full it is. */
+.map-pin {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, calc(-100% - 7px));
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.1;
+  white-space: nowrap;
+  color: white;
+  --pin: var(--muted-foreground);
+  background: var(--pin);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+  font-variant-numeric: tabular-nums;
+}
+.map-pin small {
+  font-size: 10.5px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+.map-pin::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-bottom: 0;
+  border-top-color: var(--pin);
+}
+.map-pin-green {
+  --pin: var(--level-full-strong);
+}
+.map-pin-orange {
+  --pin: var(--level-half-strong);
+}
+.map-pin-red {
+  --pin: var(--level-low-strong);
+}
+.map-depot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--background);
+  background: var(--foreground);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+}
+.map-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 180px;
+  font-size: 13px;
+}
+.machine-map .map-popup p {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+.map-popup-row {
+  display: flex;
+  flex-direction: column;
+  color: inherit !important;
+  text-decoration: none;
+}
+.map-popup-row strong {
+  font-size: 14px;
+}
+.map-popup-row span,
+.machine-map .map-popup-nav {
+  font-weight: 600;
+  color: var(--gold-ink);
+}
+.map-popup-nav {
+  text-decoration: none;
 }

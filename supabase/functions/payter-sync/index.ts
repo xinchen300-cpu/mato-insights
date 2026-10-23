@@ -46,6 +46,29 @@ type PayterTerminal = {
 
 type SyncResult = { status: "success" | "error"; transactionsSynced: number; error?: string };
 
+/**
+ * One MyPayter login. A business's own sits in payter_credentials, one per business; since 22-10-2026 a business
+ * can add more (Mato Vending has a second account with two machines), each a row of payter_extra_logins with its
+ * own watermark and token. Both are read and written the same way, by table and key.
+ */
+type Login = {
+  orgId: string;
+  table: "payter_credentials" | "payter_extra_logins";
+  key: "org_id" | "id";
+  id: string;
+  /** The account code of a further login, to tell its failures apart; null for the business's own. */
+  domain: string | null;
+};
+
+const ownLogin = (orgId: string): Login => ({ orgId, table: "payter_credentials", key: "org_id", id: orgId, domain: null });
+const extraLogin = (row: { id: string; org_id: string; domain: string }): Login => ({
+  orgId: row.org_id,
+  table: "payter_extra_logins",
+  key: "id",
+  id: row.id,
+  domain: row.domain,
+});
+
 Deno.serve(async (req) => {
   // verify_jwt already guarantees the token is signed by this project, so its
   // role claim can be trusted; only the service role may trigger a sync.
@@ -82,23 +105,57 @@ Deno.serve(async (req) => {
   // On demand ("Sync now") always; from the schedule, in one run per 5 minutes.
   const withTerminals = typeof body?.orgId === "string" || Date.now() % TERMINALS_EVERY_MS < RUN_EVERY_MS;
 
+  // The businesses' own logins first, exactly as before; further logins after, so they never hold those up.
+  const logins = [...orgIds.map(ownLogin), ...(await extraLogins(supabase, typeof body?.orgId === "string" ? body.orgId : null))];
+
+  // The first result is the business's own login: "Sync now" reads that one.
   const results = [];
-  for (const orgId of orgIds) {
-    results.push({ orgId, ...(await syncOrganization(supabase, orgId, withTerminals)) });
+  for (const login of logins) {
+    results.push({ orgId: login.orgId, ...(login.domain ? { domain: login.domain } : {}), ...(await syncLogin(supabase, login, withTerminals)) });
   }
   return Response.json({ results });
 });
 
-/** Every terminal on the account, with what the operator needs to recognise it. */
+/** The further logins, of one business or of all; none when they cannot be read, so the own logins still run. */
+async function extraLogins(supabase: SupabaseClient, orgId: string | null): Promise<Login[]> {
+  let query = supabase.from("payter_extra_logins").select("id, org_id, domain").order("created_at");
+  if (orgId) query = query.eq("org_id", orgId);
+  const { data, error } = await query;
+  if (error) return [];
+  return (data ?? []).map((row) => extraLogin(row as { id: string; org_id: string; domain: string }));
+}
+
+/**
+ * Every terminal on the business's Payter accounts, its own login and any further one, each terminal once. An
+ * account that does not answer fails the whole list: an incomplete one would read as machines that left.
+ */
 async function listTerminals(supabase: SupabaseClient, orgId: string) {
+  const seen = new Map<string, ReturnType<typeof terminalRow>>();
+  for (const login of [ownLogin(orgId), ...(await extraLogins(supabase, orgId))]) {
+    for (const row of await listLoginTerminals(supabase, login)) if (!seen.has(row.serial)) seen.set(row.serial, row);
+  }
+  return [...seen.values()];
+}
+
+function terminalRow(t: PayterTerminal) {
+  return {
+    serial: t.serialNumber as string,
+    model: t.model?.name ?? null,
+    last_connected: isoDate(t.data?.["Last Connect Date"] ?? t.lastConnected),
+    site: (t.data?.["Site Reference"] as string | undefined) ?? null,
+  };
+}
+
+/** Every terminal on one account, with what the operator needs to recognise it. */
+async function listLoginTerminals(supabase: SupabaseClient, login: Login) {
   const { data: credRow } = await supabase
-    .from("payter_credentials")
+    .from(login.table)
     .select("cached_token, token_expires_at")
-    .eq("org_id", orgId)
+    .eq(login.key, login.id)
     .single();
   if (!credRow) throw new Error("No Payter credentials configured");
 
-  const tokenId = await getToken(supabase, orgId, credRow);
+  const tokenId = await getToken(supabase, login, credRow);
   const res = await fetch(`${PAYTER_API_BASE}/Data`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `CURO-TOKEN token="${tokenId}"` },
@@ -115,28 +172,22 @@ async function listTerminals(supabase: SupabaseClient, orgId: string) {
   if (!res.ok) throw new Error(`Payter terminal request failed (${res.status})`);
 
   const terminals: PayterTerminal[] = (await res.json()).documents ?? [];
-  return terminals
-    .filter((t) => t.serialNumber)
-    .map((t) => ({
-      serial: t.serialNumber as string,
-      model: t.model?.name ?? null,
-      last_connected: isoDate(t.data?.["Last Connect Date"] ?? t.lastConnected),
-      site: (t.data?.["Site Reference"] as string | undefined) ?? null,
-    }));
+  return terminals.filter((t) => t.serialNumber).map(terminalRow);
 }
 
-async function syncOrganization(supabase: SupabaseClient, orgId: string, withTerminals: boolean): Promise<SyncResult> {
+async function syncLogin(supabase: SupabaseClient, login: Login, withTerminals: boolean): Promise<SyncResult> {
+  const { orgId } = login;
   let transactionsSynced = 0;
 
   try {
     const { data: credRow, error: credError } = await supabase
-      .from("payter_credentials")
+      .from(login.table)
       .select("last_watermark, cached_token, token_expires_at")
-      .eq("org_id", orgId)
+      .eq(login.key, login.id)
       .single();
     if (credError || !credRow) throw new Error("No Payter credentials configured");
 
-    const tokenId = await getToken(supabase, orgId, credRow);
+    const tokenId = await getToken(supabase, login, credRow);
 
     const { data: excludedRows } = await supabase
       .from("machines")
@@ -191,20 +242,20 @@ async function syncOrganization(supabase: SupabaseClient, orgId: string, withTer
       }
       // Saved per page so an interrupted run loses at most one page of progress.
       await supabase
-        .from("payter_credentials")
+        .from(login.table)
         .update({ last_watermark: watermark })
-        .eq("org_id", orgId);
+        .eq(login.key, login.id);
 
       if (++pages >= MAX_PAGES_PER_RUN) break;
     }
 
     await supabase
-      .from("payter_credentials")
+      .from(login.table)
       .update({ last_synced_at: new Date().toISOString() })
-      .eq("org_id", orgId);
+      .eq(login.key, login.id);
 
     // Status is a nice-to-have: a failure here never fails the sales sync.
-    if (withTerminals) await syncTerminals(supabase, orgId, tokenId).catch(() => {});
+    if (withTerminals) await syncTerminals(supabase, login, tokenId).catch(() => {});
 
     // A run every 15 seconds would otherwise flood the log with empty entries.
     if (transactionsSynced > 0) {
@@ -217,7 +268,17 @@ async function syncOrganization(supabase: SupabaseClient, orgId: string, withTer
     }
     return { status: "success", transactionsSynced };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const thrown = err instanceof Error ? err.message : String(err);
+    // Payter can drop a session long before it says it expires (all of them at 01:00 on 23-10-2026, 14 hours without
+    // sales). A refused session is forgotten, so the next run logs in again instead of retrying it until it expires.
+    if (/\(401\)/.test(thrown)) {
+      await supabase
+        .from(login.table)
+        .update({ cached_token: null, token_expires_at: null })
+        .eq(login.key, login.id);
+    }
+    // A further login's failure carries its account code, so Settings can show it on that account's row.
+    const message = login.domain ? `${login.domain}: ${thrown}` : thrown;
     await supabase.from("sync_logs").insert({
       org_id: orgId,
       status: "error",
@@ -231,7 +292,7 @@ async function syncOrganization(supabase: SupabaseClient, orgId: string, withTer
 
 async function getToken(
   supabase: SupabaseClient,
-  orgId: string,
+  login: Login,
   credRow: { cached_token: string | null; token_expires_at: string | null },
 ): Promise<string> {
   const expiresAt = credRow.token_expires_at ? new Date(credRow.token_expires_at).getTime() : 0;
@@ -239,9 +300,10 @@ async function getToken(
     return credRow.cached_token;
   }
 
-  const { data: secret, error } = await supabase.rpc("get_payter_credentials", {
-    target_org: orgId,
-  });
+  const { data: secret, error } =
+    login.table === "payter_credentials"
+      ? await supabase.rpc("get_payter_credentials", { target_org: login.orgId })
+      : await supabase.rpc("get_payter_extra_login", { login_id: login.id });
   if (error || !secret) throw new Error("Could not decrypt stored Payter credentials");
 
   const res = await fetch(`${PAYTER_API_BASE}/Auth`, {
@@ -253,12 +315,12 @@ async function getToken(
   const auth = await res.json();
 
   await supabase
-    .from("payter_credentials")
+    .from(login.table)
     .update({
       cached_token: auth.tokenId,
       token_expires_at: new Date(Date.now() + auth.expiresIn * 1000).toISOString(),
     })
-    .eq("org_id", orgId);
+    .eq(login.key, login.id);
   return auth.tokenId as string;
 }
 
@@ -316,7 +378,8 @@ async function* fetchTransactions(
 // update, settings not yet applied). Payter holds a standing connection and
 // reconnects it nightly, so the pair of connect/disconnect dates tells whether
 // a terminal is up right now.
-async function syncTerminals(supabase: SupabaseClient, orgId: string, tokenId: string) {
+async function syncTerminals(supabase: SupabaseClient, login: Login, tokenId: string) {
+  const { orgId } = login;
   const res = await fetch(`${PAYTER_API_BASE}/Data`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `CURO-TOKEN token="${tokenId}"` },
@@ -346,6 +409,12 @@ async function syncTerminals(supabase: SupabaseClient, orgId: string, tokenId: s
       })
       .eq("org_id", orgId)
       .eq("payter_serial_number", terminal.serialNumber);
+  }
+
+  // Which terminals a further login carries: a terminal claimed later rewinds this login, not the business's own.
+  if (login.table === "payter_extra_logins") {
+    const serials = terminals.map((t) => t.serialNumber).filter((s): s is string => Boolean(s));
+    await supabase.from(login.table).update({ serials }).eq(login.key, login.id);
   }
 }
 

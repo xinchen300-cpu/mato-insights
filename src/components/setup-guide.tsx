@@ -141,7 +141,7 @@ export function SetupGuide({ setup, m }: { setup: SetupState; m: Messages }) {
                   step.done
                     ? "bg-positive/12 text-positive"
                     : i === next
-                      ? "bg-primary/12 text-[#8a6117]"
+                      ? "bg-primary/12 text-gold-ink"
                       : "bg-surface text-muted-foreground/70",
                 )}
               >

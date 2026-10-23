@@ -57,7 +57,7 @@ export function ExpiryPicker({
             ? cn("bg-negative/10 text-negative hover:bg-negative/15", open && "ring-1 ring-inset ring-negative/40")
             : open
               ? "bg-foreground text-background"
-              : "bg-surface text-foreground hover:bg-[#e6e6e9]",
+              : "bg-surface text-foreground hover:bg-hover",
         )}
       >
         <CalendarDays className="size-3.5" />

@@ -15,7 +15,6 @@ import {
   Plus,
   Timer,
   TriangleAlert,
-  Undo2,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -36,7 +35,7 @@ const STEPS: { key: Step; icon: LucideIcon | typeof MachineIcon; who: "you" | "f
   { key: "pick", icon: PackageOpen, who: "filler" },
   { key: "start", icon: Play, who: "filler" },
   { key: "stop", icon: MachineIcon, who: "filler" },
-  { key: "back", icon: Undo2, who: "filler" },
+  // No "Terugbrengen" step since 19-10-2026: the round closes with one tap.
   { key: "finish", icon: Flag, who: "filler" },
 ];
 const PLAY_MS = 3600;
@@ -240,7 +239,7 @@ const stepKey = (step: Step) =>
     step
   ];
 
-/** The six steps in a row, joined by a line that fills in as the round goes, with the machine step branching into what happens there. */
+/** The steps in a row, joined by a line that fills in as the round goes, with the machine step branching into what happens there. */
 function RoundMap({
   active,
   playing,
@@ -308,7 +307,7 @@ function RoundMap({
               <span
                 className={cn(
                   "rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                  step.who === "you" ? "bg-primary/12 text-[#8a6117]" : "bg-surface text-muted-foreground",
+                  step.who === "you" ? "bg-primary/12 text-gold-ink" : "bg-surface text-muted-foreground",
                 )}
               >
                 {step.who === "you" ? t.you : t.filler}
@@ -321,7 +320,7 @@ function RoundMap({
                     key={`${leaf}-${i}`}
                     className={cn(
                       "w-fit max-w-full truncate rounded-full px-2.5 py-1 text-[11.5px] font-medium animate-in fade-in zoom-in-95",
-                      i >= leaves.length - settings.checks.length ? "bg-primary/12 text-[#8a6117]" : "bg-surface text-muted-foreground",
+                      i >= leaves.length - settings.checks.length ? "bg-primary/12 text-gold-ink" : "bg-surface text-muted-foreground",
                     )}
                   >
                     {leaf}
@@ -397,9 +396,9 @@ function FillerScreen({ step, settings, names }: { step: Step; settings: RoundSe
   const [first, second, third] = names.machines;
   const message = settings.message && (
     <div className="flex gap-2 rounded-xl bg-primary/10 px-2.5 py-2">
-      <MessageSquareText className="mt-0.5 size-3.5 shrink-0 text-[#8a6117]" />
+      <MessageSquareText className="mt-0.5 size-3.5 shrink-0 text-gold-ink" />
       <div className="min-w-0">
-        <p className="text-[10.5px] font-semibold text-[#8a6117]">{r.messageTitle}</p>
+        <p className="text-[10.5px] font-semibold text-gold-ink">{r.messageTitle}</p>
         <p className="line-clamp-3 text-[11.5px] leading-snug">{settings.message}</p>
       </div>
     </div>
@@ -408,7 +407,7 @@ function FillerScreen({ step, settings, names }: { step: Step; settings: RoundSe
   if (step === "plan") {
     return (
       <>
-        <VendlyWordmark className="h-4 w-auto text-[#2a2520]" />
+        <VendlyWordmark className="h-4 w-auto text-brand-ink" />
         <p className="text-[17px] font-bold tracking-[-0.02em]">{t.demoReady}</p>
         {[first, second, third].map((name, i) => (
           <div key={name} className="flex items-center gap-2 rounded-xl bg-card px-2.5 py-2 ring-1 ring-border">

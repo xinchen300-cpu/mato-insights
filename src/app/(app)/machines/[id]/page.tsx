@@ -5,6 +5,7 @@ import { KpiHero } from "@/components/kpi";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { OWNER_TONES, OwnerLegend, StockLegend, type FrontSlot } from "@/components/machine/front-view";
 import { SlotProducts } from "@/components/machine/slot-products";
+import { StockAdjust } from "@/components/machine/stock-adjust";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { DISPLAY_TIME_ZONE, fmt, plural, weekdayIndex } from "@/i18n/format";
@@ -20,17 +21,23 @@ import {
   getPaymentFeed,
   getPaymentHealth,
   getProducts,
+  getOpenRounds,
   getRefillHistory,
   getSlotShelfLife,
   getStatsReport,
+  getCamerasOf,
 } from "@/lib/data";
 import { toFrontRows } from "@/lib/layout";
 import { mediaUrl } from "@/lib/media";
-import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
+import { denyFiller, hasPersonalSettings, isOperator, requireOrgId } from "@/lib/org";
+import { filledOnOpenRound } from "@/lib/refill-start";
 import { compareMoneySince } from "@/lib/stats";
 import { fillLevel, levelColor } from "@/lib/stock";
+import { camerasEnabled } from "@/lib/unifi";
 import { cn } from "@/lib/utils";
 import { assignProduct, createProductForMachine } from "../actions";
+import { MachineCamera } from "./machine-camera";
+import { MachineCameraForm } from "./machine-camera-form";
 import { MachineDetailsForm } from "./machine-details-form";
 import { MachinePhotoForm } from "./machine-photo-form";
 import { MachineStatus, TerminalPanel } from "./terminal-panel";
@@ -58,7 +65,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   if (!machine) notFound();
 
   const since = new Date(Date.now() - PAYMENT_WINDOW_DAYS * 86_400_000);
-  const [slots, businesses, history, health, payments, month, products, shelfLife, editLayout, rents] = await Promise.all([
+  const [slots, businesses, history, health, payments, month, products, shelfLife, editLayout, rents, openRounds] = await Promise.all([
     getMachineStock(orgId, [id]),
     getBusinesses(orgId),
     getRefillHistory(orgId, id),
@@ -70,7 +77,11 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
     getSlotShelfLife(orgId, id),
     canEditLayout(machine),
     rentsToBusinesses(orgId),
+    // Rounds are the operator's: a shop has none to wait for.
+    isOperator().then((operator) => (operator ? getOpenRounds(orgId) : [])),
   ]);
+  // Filled on a round still open: the count below is from before it, until that round is completed (21-10-2026).
+  const filledOnRound = filledOnOpenRound(openRounds).has(id);
   // A shared machine shows this month per business, so the two add up to the figure above.
   const split = machine.shared_business_id ? await getMachineSalesSplit(orgId, id, new Date(month.cur_start)) : [];
 
@@ -107,6 +118,11 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
   // A shared machine: every slot belongs to one of its two businesses.
   const shared = Boolean(machine.shared_business_id);
   const operator = await isOperator();
+  // The owner fills and counts on the filler's page, with its big minus and plus (Xin, 20-10-2026); a shop keeps its own form.
+  const refillHref = operator ? `/refill/machines/${id}?from=machine` : `/machines/${id}/refill`;
+  // The UniFi camera aimed at it, where this organisation has one: the operator's alone (lib/unifi.ts).
+  const cameraReady = operator && camerasEnabled(orgId);
+  const cameras = cameraReady ? await getCamerasOf(orgId, id) : [];
   // On a shared fridge a shop picks products for its own slots only.
   const ownSlots = shared ? await getOwnSelections(orgId, id) : null;
   const ownerIds = [machine.business_id, machine.shared_business_id].filter((id): id is string => Boolean(id));
@@ -162,7 +178,7 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
         actions={
           // One action up here; correcting and the layout sit under the slots they change.
           hasLayout && tracksStock ? (
-            <Link href={`/machines/${id}/refill`} className={buttonVariants()}>
+            <Link href={refillHref} className={buttonVariants()}>
               <ClipboardList />
               {m.machines.refill}
             </Link>
@@ -208,6 +224,14 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
             </ul>
           )}
         </section>
+
+        {cameras.length > 0 && (
+          <MachineCamera
+            machineId={id}
+            machineName={machine.name}
+            cameras={cameras.map((camera, i) => ({ id: camera.cameraId, name: camera.name ?? `${m.machines.cameraUnnamed} ${i + 1}` }))}
+          />
+        )}
 
         {!tracksStock ? (
           <p className="rounded-2xl bg-surface px-5 py-4 text-[14px] text-muted-foreground sm:px-6">
@@ -255,44 +279,68 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
                 {m.machines.stockUnknown}
               </p>
             )}
+            {filledOnRound && <p className="mt-3 text-[14px] font-medium text-muted-foreground">{m.refill.filledOnRound}</p>}
 
-            <div className="mt-7 sm:mt-8">
-              <SlotProducts
-                rows={toFrontRows(slots, shared ? toneOf : undefined).map((row) => row.map(decorate))}
-                products={products}
-                editable={ownSlots}
-                onAssign={assignProduct.bind(null, id)}
-                onCreate={createProductForMachine.bind(null, id)}
-              />
-            </div>
-            <div className="mt-4 flex flex-col gap-2">
-              {shared && <OwnerLegend owners={owners} />}
-              <StockLegend
-                labels={{
-                  full: m.machines.legendFull,
-                  half: m.machines.legendHalf,
-                  low: m.machines.legendLow,
-                  empty: m.machines.legendEmpty,
-                  unknown: anyUncounted ? m.machines.legendUnknown : undefined,
-                }}
-              />
-            </div>
-            <div className="mt-6 flex flex-wrap gap-2">
-              <Link href={`/machines/${id}/refill?mode=correction`} className={buttonVariants({ variant: "secondary" })}>
-                <Pencil />
-                {m.machines.correct}
-              </Link>
-              {editLayout && (
+            {(() => {
+              // The slots with their products, and the legend under them.
+              const picture = (
+                <>
+                  <div className="mt-7 sm:mt-8">
+                    <SlotProducts
+                      rows={toFrontRows(slots, shared ? toneOf : undefined).map((row) => row.map(decorate))}
+                      products={products}
+                      editable={ownSlots}
+                      onAssign={assignProduct.bind(null, id)}
+                      onCreate={createProductForMachine.bind(null, id)}
+                    />
+                  </div>
+                  <div className="mt-4 flex flex-col gap-2">
+                    {shared && <OwnerLegend owners={owners} />}
+                    <StockLegend
+                      labels={{
+                        full: m.machines.legendFull,
+                        half: m.machines.legendHalf,
+                        low: m.machines.legendLow,
+                        empty: m.machines.legendEmpty,
+                        unknown: anyUncounted ? m.machines.legendUnknown : undefined,
+                      }}
+                    />
+                  </div>
+                </>
+              );
+              const layoutLink = editLayout && (
                 <Link href={`/machines/${id}/layout`} className={buttonVariants({ variant: "secondary" })}>
                   <LayoutGrid />
                   {m.machines.editLayout}
                 </Link>
-              )}
-            </div>
+              );
+              // The owner adjusts the counts right here, with the big minus and plus (Xin, 21-10-2026:
+              // "meteen aanpassen zonder dat je wordt verwezen naar bijvullen"); a shop keeps its own form.
+              return operator ? (
+                <div className="mt-7 sm:mt-8">
+                  <StockAdjust
+                    machineId={id}
+                    slots={slots.filter((slot) => slot.product_id)}
+                    embedded={{ idle: picture, label: m.machines.correct, actions: layoutLink }}
+                  />
+                </div>
+              ) : (
+                <>
+                  {picture}
+                  <div className="mt-6 flex flex-wrap gap-2">
+                    <Link href={`/machines/${id}/refill?mode=correction`} className={buttonVariants({ variant: "secondary" })}>
+                      <Pencil />
+                      {m.machines.correct}
+                    </Link>
+                    {layoutLink}
+                  </div>
+                </>
+              );
+            })()}
           </section>
         )}
 
-        <TerminalPanel machine={machine} health={health.get(id)} payments={payments} m={m} f={f} />
+        <TerminalPanel machine={machine} health={health.get(id)} payments={payments} cameras={cameras} m={m} f={f} />
 
         {tracksStock && recentHistory.length > 0 && (
           <Section title={m.machines.history}>
@@ -338,7 +386,14 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
             </summary>
             <div className="flex flex-col gap-8 border-t border-border px-5 pb-6 pt-5 sm:px-6">
               <MachinePhotoForm machineId={machine.id} photoPath={machine.photo_path} />
-              <MachineDetailsForm machine={machine} businesses={operator ? businesses : []} operator={operator} rentsToBusinesses={rents} />
+              {cameraReady && <MachineCameraForm machineId={machine.id} linked={cameras} />}
+              <MachineDetailsForm
+                machine={machine}
+                businesses={operator ? businesses : []}
+                operator={operator}
+                rentsToBusinesses={rents}
+                models={await hasPersonalSettings()}
+              />
             </div>
           </details>
         )}

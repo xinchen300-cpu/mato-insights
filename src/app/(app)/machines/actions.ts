@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cleanAddress } from "@/lib/round-settings";
 import { isOperator, requireOperator, requireOrgId } from "@/lib/org";
 import {
   getMachine,
@@ -12,7 +13,9 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { displayName } from "@/lib/people";
+import { asMachineModel } from "@/lib/machine-models";
 import { MACHINE_TYPES, SLOT_SIZES, type LayoutRowSpec, type MachineType, type Product, type SlotSize } from "@/lib/types";
+import { camerasEnabled, listCameras, type UnifiCamera } from "@/lib/unifi";
 import { imageFrom, removeImage, uploadImage } from "@/lib/upload";
 import { createProduct } from "../products/actions";
 
@@ -49,6 +52,12 @@ export async function updateMachineDetails(
     sharedBusinessId?: string | null;
     dataSince: string | null;
   kmRoundTrip: number | null;
+    /** Filled by hand, outside Vendly; left out by a form from before the switch, and then kept. */
+    refillManual?: boolean;
+    /** Where it stands, for navigating there; left out by a form from before the field, and then kept. */
+    address?: string;
+    /** Which MATO model (src/lib/machine-models.ts); left out where the form does not ask it, and then kept. */
+    model?: string | null;
   },
 ) {
   const orgId = await requireOrgId();
@@ -58,6 +67,7 @@ export async function updateMachineDetails(
   const name = input.name.trim().slice(0, 80);
   if (!name) throw new Error("Name is required");
   if (input.type && !MACHINE_TYPES.includes(input.type)) throw new Error("Invalid type");
+  if (input.model && !asMachineModel(input.model)) throw new Error("Invalid model");
 
   // A shop may rename its own machine and nothing else. Who it belongs to, its
   // kind, the day its figures start and the drive there are the operator's,
@@ -106,11 +116,71 @@ export async function updateMachineDetails(
       ...(assigns ? { business_id: businessId, shared_business_id: sharedBusinessId } : {}),
       data_since: input.dataSince,
       km_round_trip: input.kmRoundTrip,
+      ...(input.refillManual !== undefined ? { refill_manual: input.refillManual === true } : {}),
+      ...(input.address !== undefined ? { address: cleanAddress(input.address) } : {}),
+      ...(input.model !== undefined ? { model: asMachineModel(input.model) } : {}),
     })
     .eq("id", machineId)
     .eq("org_id", orgId);
   if (error) throw new Error(error.message);
 
+  revalidatePath("/", "layout");
+}
+
+/** The cameras on the operator's UniFi, to pick the one aimed at a machine. */
+export async function listMachineCameras(): Promise<UnifiCamera[]> {
+  const orgId = await requireOrgId();
+  await requireOperator();
+  if (!camerasEnabled(orgId)) throw new Error("Not found");
+  return listCameras();
+}
+
+/**
+ * The cameras aimed at this machine, in this order, or none (21-10-2026: a
+ * machine can have several). Each must really be on this UniFi, never a
+ * made-up id; one already linked that UniFi no longer lists may stay.
+ */
+export async function setMachineCameras(machineId: string, picks: { consoleId: string; cameraId: string }[]) {
+  const orgId = await requireOrgId();
+  await requireOperator();
+  await requireMachineAccess(orgId, machineId);
+  if (!camerasEnabled(orgId)) throw new Error("Not found");
+  const admin = createAdminClient();
+  const [available, current] = await Promise.all([
+    picks.length ? listCameras() : Promise.resolve([]),
+    admin.from("machine_cameras").select("console_id, camera_id, name, full_hd").eq("machine_id", machineId),
+  ]);
+  if (current.error) throw new Error(current.error.message);
+  const unique = [...new Map(picks.map((pick) => [pick.cameraId, pick])).values()].slice(0, 8);
+  const rows = unique.map((pick, position) => {
+    const found = available.find((c) => c.consoleId === pick.consoleId && c.id === pick.cameraId);
+    const kept = (current.data ?? []).find((c) => c.console_id === pick.consoleId && c.camera_id === pick.cameraId);
+    if (!found && !kept) throw new Error("Not found");
+    // Full HD from what UniFi says the camera can do; a camera that already refused one stays refused.
+    const keptFullHd = (kept?.full_hd as boolean | null | undefined) ?? null;
+    const fullHd = keptFullHd === false ? false : (found?.fullHd ?? keptFullHd);
+    return {
+      machine_id: machineId,
+      console_id: pick.consoleId,
+      camera_id: pick.cameraId,
+      name: found?.name ?? (kept?.name as string | null) ?? null,
+      position,
+      full_hd: fullHd,
+    };
+  });
+  const { error: clearError } = await admin.from("machine_cameras").delete().eq("machine_id", machineId);
+  if (clearError) throw new Error(clearError.message);
+  if (rows.length) {
+    const { error } = await admin.from("machine_cameras").insert(rows);
+    if (error) throw new Error(error.message);
+  }
+  // The first camera also in the columns of the first version, so they never point at a camera taken away.
+  const { error } = await admin
+    .from("machines")
+    .update({ unifi_console_id: rows[0]?.console_id ?? null, unifi_camera_id: rows[0]?.camera_id ?? null })
+    .eq("id", machineId)
+    .eq("org_id", orgId);
+  if (error) throw new Error(error.message);
   revalidatePath("/", "layout");
 }
 
@@ -257,7 +327,8 @@ export async function recordStock(
     displayName((await (await createClient()).auth.getUser()).data.user) ||
     "";
 
-  const { error } = await createAdminClient().rpc("record_stock", {
+  // Outside a round: measured against the stock the person saw, which leaves out a round still under way (21-10-2026).
+  const { error } = await createAdminClient().rpc("record_stock_settled", {
     target_org: orgId,
     target_machine: machineId,
     event_type: type,

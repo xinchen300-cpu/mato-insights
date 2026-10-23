@@ -8,7 +8,7 @@ export default async function NotFound() {
   const { m } = await getI18n();
   return (
     <main className="mx-auto flex min-h-svh max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
-      <VendlyWordmark className="h-7 w-auto text-[#2a2520]" />
+      <VendlyWordmark className="h-7 w-auto text-brand-ink" />
       <h1 className="mt-6 text-[24px] font-semibold tracking-[-0.02em]">{m.errors.notFoundTitle}</h1>
       <p className="text-[15px] text-muted-foreground">{m.errors.notFoundHint}</p>
       <Link href="/" className={buttonVariants({ className: "mt-2" })}>

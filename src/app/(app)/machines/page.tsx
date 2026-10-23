@@ -1,16 +1,28 @@
 import Link from "next/link";
-import { Store } from "lucide-react";
+import { Package, Store } from "lucide-react";
 import { StatusBadge } from "@/components/machine/status-badge";
 import { PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getBusinesses, getLastSales, getMachines, getMachineStock, getRoundSettings, rentsToBusinesses } from "@/lib/data";
+import {
+  getBusinesses,
+  getLastRefills,
+  getLastSales,
+  getMachines,
+  getMachineStock,
+  getOpenRounds,
+  getRoundSettings,
+  getStatsReport,
+  rentsToBusinesses,
+} from "@/lib/data";
+import { filledOnOpenRound } from "@/lib/refill-start";
+import { refilledText } from "@/lib/refilled";
 import { isFiller, isOperator, requireOrgId, requireRefillAccess } from "@/lib/org";
 import { orderByRoute } from "@/lib/round-settings";
 import { MachineOrder } from "@/components/machine/machine-order";
-import { bandBg, fillLevel, machineFill, needsAttention } from "@/lib/stock";
+import { bandBg, filledByVendly, fillLevel, machineFill, needsAttention, slotsFilledByVendly } from "@/lib/stock";
 import { terminalStatus } from "@/lib/terminal-status";
 import { MachinePhoto } from "@/components/machine/machine-photo";
 import { MachineGrid, gridMachines } from "@/components/filler/machine-grid";
@@ -27,8 +39,17 @@ export async function generateMetadata() {
  */
 async function FillerMachines({ orgId }: { orgId: string }) {
   const { m } = await getI18n();
-  const [fleet, slots, settings] = await Promise.all([getMachines(orgId), getMachineStock(orgId), getRoundSettings(orgId)]);
-  const grid = gridMachines(fleet, slots, settings.route, { withoutLayout: true });
+  const [everyMachine, everySlot, settings, rounds] = await Promise.all([
+    getMachines(orgId),
+    getMachineStock(orgId),
+    getRoundSettings(orgId),
+    getOpenRounds(orgId),
+  ]);
+  // A machine filled by hand is not the filler's to fill here.
+  const grid = gridMachines(filledByVendly(everyMachine), slotsFilledByVendly(everySlot, everyMachine), settings.route, {
+    withoutLayout: true,
+    onRound: filledOnOpenRound(rounds),
+  });
   return (
     <>
       <PageHeader title={m.machines.title} />
@@ -49,14 +70,20 @@ export default async function MachinesPage() {
   const orgId = await requireOrgId();
   // The operator's machines follow the route, the same order as the filler's tiles and the rounds.
   const operator = await isOperator();
-  const [machines, stock, lastSales, businesses, rents, route] = await Promise.all([
+  const [machines, stock, lastSales, businesses, rents, route, today, refills, rounds] = await Promise.all([
     getMachines(orgId),
     getMachineStock(orgId),
     getLastSales(orgId),
     getBusinesses(orgId),
     rentsToBusinesses(orgId),
     operator ? getRoundSettings(orgId).then((settings) => settings.route) : Promise.resolve(null),
+    getStatsReport(orgId, { period: "today" }),
+    getLastRefills(orgId),
+    operator ? getOpenRounds(orgId) : Promise.resolve([]),
   ]);
+  // Filled on a round still open: how full it is counts once that round is completed (21-10-2026).
+  const onRound = filledOnOpenRound(rounds);
+  const todayOf = new Map(today.by_machine.map((row) => [row.machine_id, row.revenue]));
 
   const statusLabel = (mc: (typeof machines)[number]) => {
     const status = terminalStatus(mc.last_connected_at, mc.last_disconnected_at);
@@ -99,13 +126,20 @@ export default async function MachinesPage() {
       <PageHeader
         title={m.machines.title}
         actions={
-          // Businesses are an automatenshop's: a zaak runs its own machines.
-          rents ? (
-            <Link href="/businesses" className={buttonVariants({ variant: "outline" })}>
-              <Store />
-              {m.nav.businesses}
+          <>
+            {/* Products left the menu (Xin, 20-10-2026: a slot's product is set in the layout); prices and photos stay here. */}
+            <Link href="/products" className={buttonVariants({ variant: "outline" })}>
+              <Package />
+              {m.nav.products}
             </Link>
-          ) : undefined
+            {/* Businesses are an automatenshop's: a zaak runs its own machines. */}
+            {rents && (
+              <Link href="/businesses" className={buttonVariants({ variant: "outline" })}>
+                <Store />
+                {m.nav.businesses}
+              </Link>
+            )}
+          </>
         }
       />
 
@@ -120,19 +154,30 @@ export default async function MachinesPage() {
               const s = summary.get(mc.id);
               const lastSale = lastSales.get(mc.id);
               const status = terminalStatus(mc.last_connected_at, mc.last_disconnected_at);
-              const tracked = Boolean(s && s.slots > 0 && mc.type !== "other");
+              // Filled by hand, a machine's stock is never brought up to date: no percentage, no warning.
+              const tracksStock = mc.type !== "other" && !mc.refill_manual;
+              const tracked = Boolean(s && s.slots > 0 && tracksStock);
               const fill = tracked && s ? machineFill(s.stock, s.capacity, s.counted) : null;
               // One line under the name: red when slots run low, grey for what is
-              // missing, otherwise the last sale.
-              const tracksStock = mc.type !== "other";
+              // missing, otherwise today's money and when it was filled (or last sold).
               const line =
-                tracksStock && s && s.low > 0
+                tracksStock && onRound.has(mc.id)
+                  ? { text: m.refill.filledOnRoundShort, alert: false }
+                  : tracksStock && s && s.low > 0
                   ? { text: plural(s.low, m.overview.slotsLowOne, m.overview.slotsLow), alert: true }
                   : tracksStock && (!s || s.slots === 0)
                     ? { text: m.machines.noLayout, alert: false }
                     : tracksStock && s && !s.counted
                       ? { text: m.machines.stockUnknown, alert: false }
-                      : { text: `${m.machines.lastSale}: ${lastSale ? f.relative(lastSale) : m.machines.noSales}`, alert: false };
+                      : {
+                          text: [
+                            fmt(m.overview.todayRevenue, { amount: f.euro(todayOf.get(mc.id) ?? 0) }),
+                            refills.get(mc.id)
+                              ? refilledText(refills.get(mc.id)!.at, m.overview, f)
+                              : `${m.machines.lastSale}: ${lastSale ? f.relative(lastSale) : m.machines.noSales}`,
+                          ].join(" · "),
+                          alert: false,
+                        };
               const place =
                 (ownerNames.get(mc.id) ?? []).filter((name) => name !== mc.name).join(" · ") ||
                 (mc.type ? m.machines.types[mc.type] : null);

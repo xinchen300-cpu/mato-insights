@@ -13,6 +13,8 @@ import { cleanRoundSettings, legKey, mergeRoute, orderByRoute, type RoundSetting
 
 export async function createRefillSheet(
   machineIds: string[],
+  /** The operator fills it themselves, as a filler does (Xin, 20-10-2026): straight into the round. */
+  options: { fill?: boolean } = {},
 ): Promise<{ empty: true } | { locked: true } | void> {
   // A run carries every slot of every machine on it, including a co-tenant's
   // on a shared machine: planning one is the operator's or a filler's job,
@@ -23,8 +25,13 @@ export async function createRefillSheet(
   if (machineIds.length === 0) return { empty: true };
   // The list comes from a checkbox on a page, so it comes from the client:
   // asking for a machine that is not yours must not put it on your sheet.
-  const own = new Set((await getMachines(orgId)).map((machine) => machine.id));
+  const machines = await getMachines(orgId);
+  const own = new Set(machines.map((machine) => machine.id));
   if (machineIds.some((machineId) => !own.has(machineId))) throw new Error("Not found");
+  // A machine filled by hand never goes on a round, whatever a page sent (one opened before it was set so).
+  const byHand = new Set(machines.filter((machine) => machine.refill_manual).map((machine) => machine.id));
+  const asked = machineIds.filter((machineId) => !byHand.has(machineId));
+  if (asked.length === 0) return { empty: true };
   const admin = createAdminClient();
 
   // The route: the owner puts the machines in order while making the round,
@@ -32,10 +39,10 @@ export async function createRefillSheet(
   const operator = await isOperator();
   const { data: org } = await admin.from("organizations").select("refill_settings").eq("id", orgId).maybeSingle();
   const settings = cleanRoundSettings(org?.refill_settings);
-  const chosen = [...new Set(machineIds)];
+  const chosen = [...new Set(asked)];
   const order = operator ? chosen : orderByRoute(chosen, settings.route);
 
-  const lines = await getRefillPlan(orgId, machineIds);
+  const lines = await getRefillPlan(orgId, asked);
   if (lines.length === 0) return { empty: true };
   // A machine with nothing to fill is not visited: nobody drives to a full machine.
   const planned = new Set(lines.map((line) => line.machine_id));
@@ -51,6 +58,8 @@ export async function createRefillSheet(
       lines,
       // Filled step by step, machine by machine (/vullen).
       flow_version: 2,
+      // Whose round it is, so they find it back to carry on (20-10-2026).
+      created_by: (await getSessionUser())?.id ?? null,
     })
     .select("id")
     .single();
@@ -69,8 +78,8 @@ export async function createRefillSheet(
   }
 
   revalidatePath("/refill");
-  // The operator lands on the round to hand it out; a filler starts filling.
-  redirect((await isFiller()) ? `/vullen/${sheet.id}` : `/refill/${sheet.id}`);
+  // A filler, or the operator filling it themselves, starts filling; otherwise the operator lands on the round to hand it out.
+  redirect((await isFiller()) || options?.fill === true ? `/vullen/${sheet.id}` : `/refill/${sheet.id}`);
 }
 
 export async function saveSheetNotes(sheetId: string, notes: string) {
@@ -133,16 +142,43 @@ export async function cancelRound(sheetId: string): Promise<"cancelled" | "start
   return "cancelled";
 }
 
+/**
+ * "Rondes verwijderen" on Bijvullen (Xin, 19-10-2026): open rounds go, by the
+ * filler as much as the operator, also once machines were done in them. What
+ * went into those machines stays counted (the stock keeps, it only loses its
+ * link to the round); the round itself, its plan and its timings, goes. A
+ * finished round is history and stays.
+ */
+export async function deleteOpenRounds(sheetIds: string[]): Promise<number> {
+  const orgId = await requireRefillAccess();
+  const ids = [...new Set(Array.isArray(sheetIds) ? sheetIds : [])]
+    .filter((id): id is string => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id))
+    .slice(0, 50);
+  if (ids.length === 0) return 0;
+  // Their shortages go with them (on delete cascade).
+  const { data, error } = await createAdminClient()
+    .from("refill_sheets")
+    .delete()
+    .eq("org_id", orgId)
+    .is("completed_at", null)
+    .in("id", ids)
+    .select("id");
+  if (error) throw new Error(error.message);
+  revalidatePath("/refill");
+  revalidatePath("/");
+  return data?.length ?? 0;
+}
+
 /** How rounds go for this organisation's fillers, from the Werkwijze page. */
 export async function saveRoundSettings(input: RoundSettings): Promise<RoundSettings> {
   const orgId = await requireOrgId();
   await requireOperator();
   const admin = createAdminClient();
-  // The route and its distances are set on the Route tab and when a round is
-  // made, never here: what is stored stays.
+  // The route, its distances, drive times and the start address are set on the
+  // Route tab and when a round is made, never here: what is stored stays.
   const { data: stored } = await admin.from("organizations").select("refill_settings").eq("id", orgId).maybeSingle();
   const kept = cleanRoundSettings(stored?.refill_settings);
-  const settings = { ...cleanRoundSettings(input), route: kept.route, legs: kept.legs };
+  const settings = { ...cleanRoundSettings(input), route: kept.route, legs: kept.legs, drive: kept.drive, depotAddress: kept.depotAddress };
   const { error } = await admin
     .from("organizations")
     .update({ refill_settings: settings })
@@ -207,7 +243,8 @@ export async function correctStock(machineId: string, entries: { selection: stri
       : [];
   });
   if (clean.length === 0) return;
-  const { error } = await createAdminClient().rpc("record_stock", {
+  // Measured against the stock the person saw, which leaves out a round still under way (21-10-2026).
+  const { error } = await createAdminClient().rpc("record_stock_settled", {
     target_org: orgId,
     target_machine: machineId,
     event_type: "correction",
@@ -217,6 +254,40 @@ export async function correctStock(machineId: string, entries: { selection: stri
   });
   if (error) throw new Error(error.message);
   revalidatePath("/", "layout");
+}
+
+/**
+ * "Automaat hervuld" under a machine's own vullijst (Xin, 22-10-2026): every slot
+ * ticked as taken along is now full. Saved as a refill, not a correction, so it
+ * counts as a fill (Bijvullingen, the kitchen's fridge, a new expiry batch).
+ * What "full" is comes from the machine, never from the phone; a slot already
+ * full, or without a product, is left alone. Returns how many slots it filled.
+ */
+export async function refillFromList(machineId: string, selections: string[]): Promise<number> {
+  const orgId = await requireRefillAccess();
+  if (!/^[0-9a-f-]{36}$/i.test(machineId) || !Array.isArray(selections)) throw new Error("Not found");
+  // Empty for a machine of another organisation, or one without a layout.
+  const slots = new Map(
+    (await getMachineStock(orgId, [machineId])).filter((slot) => slot.product_id).map((slot) => [slot.selection_number, slot]),
+  );
+  if (slots.size === 0) throw new Error("Not found");
+  const entries = [...new Set(selections.map(String))].flatMap((selection) => {
+    const slot = slots.get(selection);
+    return slot && (slot.stock ?? 0) < slot.capacity ? [{ selection, level_after: slot.capacity, expires_on: null }] : [];
+  });
+  if (entries.length === 0) return 0;
+  // Measured against the stock the person saw, as Voorraad aanpassen is.
+  const { error } = await createAdminClient().rpc("record_stock_settled", {
+    target_org: orgId,
+    target_machine: machineId,
+    event_type: "refill",
+    entries,
+    filler_name: (displayName(await getSessionUser()) ?? "").slice(0, 80),
+    check_state: {},
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/", "layout");
+  return entries.length;
 }
 
 /**

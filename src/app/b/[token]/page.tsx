@@ -1,6 +1,6 @@
 import { CalendarClock, CalendarX, Package, PackageCheck } from "lucide-react";
 import { VendlyWordmark } from "@/components/brand/vendly-mark";
-import { RevenueChart } from "@/components/charts/revenue-chart";
+import { RevenueChart } from "@/components/charts/lazy";
 import { KpiHero, MiniStat } from "@/components/kpi";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { EmptyState, PageHeader, Section } from "@/components/page-header";
@@ -22,7 +22,7 @@ const PERIODS: Period[] = ["month", "week", "today", "last30"];
 export async function generateMetadata({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const business = await getBusinessByToken(token);
-  return { title: business?.name ?? "Vendly", robots: { index: false, follow: false } };
+  return { title: business?.name ?? "MATO Info", robots: { index: false, follow: false } };
 }
 
 // A customer's own page: only the sales of its own products, nothing of the

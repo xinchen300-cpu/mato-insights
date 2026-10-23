@@ -17,6 +17,7 @@ import {
 } from "@/components/auth-frame";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n/client";
 import { isLeakedPassword } from "@/lib/pwned";
@@ -147,10 +148,9 @@ export function NewPasswordForm() {
       <form action={submit} className={authForm}>
         <div className={authField}>
           <Label htmlFor="password">{m.auth.password}</Label>
-          <Input
+          <PasswordInput
             id="password"
             name="password"
-            type="password"
             required
             minLength={8}
             autoComplete="new-password"

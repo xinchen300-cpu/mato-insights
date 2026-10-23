@@ -142,7 +142,7 @@ ok("money: too few stays too few", compareMoneySince(10, 8, 50, 20, null, "2026-
 
 // ── A filler's own figures (src/lib/filler-stats.ts) and the time rules in stats.ts ──
 import { compareTimes, isRecord, MIN_ROUNDS } from "../src/lib/stats.ts";
-import { fillerStats, levelFor, progressFrame, roundEta, roundResult, roundReward, summarizeRound, type MyRound } from "../src/lib/filler-stats.ts";
+import { fillerStats, lastMonths, levelFor, monthDays, progressFrame, roundEta, roundResult, roundReward, roundsByMonth, summarizeRound, type MyRound } from "../src/lib/filler-stats.ts";
 import { isDeepStrictEqual } from "node:util";
 
 ok("times: fewer than MIN_ROUNDS earlier rounds is no comparison", MIN_ROUNDS === 3 && compareTimes(30, [60, 62]) === "tooFew");
@@ -318,3 +318,299 @@ import { lineTake } from "../src/lib/refill-flow.ts";
 ok("take: what the slot lacks", lineTake({ capacity: 6, to_add: 2 }) === 2);
 ok("take: never more than fits, never below none", lineTake({ capacity: 4, to_add: 7 }) === 4 && lineTake({ capacity: 4, to_add: -1 }) === 0);
 
+
+// ── Month by month on the filler's Verkoop page ──
+const BXL = "Europe/Brussels";
+ok("months: the last three, newest first", isDeepStrictEqual(lastMonths(3, BXL, new Date("2026-10-19T10:00:00Z")), ["2026-10", "2026-09", "2026-08"]));
+ok("months: across the new year", isDeepStrictEqual(lastMonths(3, BXL, new Date("2026-01-05T10:00:00Z")), ["2026-01", "2025-12", "2025-11"]));
+ok("months: the month where the business stands, not in UTC", lastMonths(1, BXL, new Date("2026-10-31T23:30:00Z"))[0] === "2026-11");
+ok("months: first and last day", isDeepStrictEqual(monthDays("2026-02"), { from: "2026-02-01", to: "2026-02-28" }) && monthDays("2028-02").to === "2028-02-29" && monthDays("2026-10").to === "2026-10-31");
+{
+  const september = { ...R("old", 1, 60), readyAt: "2026-09-30T08:00:00Z", completedAt: "2026-09-30T09:00:00Z" };
+  const rounds = [R("m1", 5, 60), R("m2", 7, 50, { filled: 5 }), R("m3", 7, 40), R("m4", 9, 13 * 60), september];
+  const [oct, sep] = roundsByMonth(rounds, ["2026-10", "2026-09"], BXL);
+  ok("by month: each round in the month it ended", oct.rounds.length === 4 && sep.rounds.length === 1);
+  ok("by month: newest first", oct.rounds[0].id === "m4" && oct.rounds[3].id === "m1");
+  ok("by month: machines and pieces add up", oct.visits === 8 && oct.items === 40 + 20 + 40 + 40);
+  ok("by month: a clock left running adds no time", oct.minutes === 60 + 50 + 40);
+  ok("by month: the busiest day sums its rounds", oct.busiest?.day === "2026-10-07" && oct.busiest.items === 60);
+  const [tie] = roundsByMonth([R("t1", 12, 60), R("t2", 3, 60)], ["2026-10"], BXL);
+  ok("by month: on a tie the first day", tie.busiest?.day === "2026-10-03" && tie.busiest.items === 40);
+  const [empty] = roundsByMonth([], ["2026-08"], BXL);
+  ok("by month: an empty month has no busiest day", empty.rounds.length === 0 && empty.busiest === null && empty.minutes === 0);
+}
+
+// ── The production list (src/lib/production.ts) ──
+import { hourShares, localTime, nextFill, productionPlan, salesBetween, type WeekdaySales } from "../src/lib/production.ts";
+{
+  // Monday 19 October 2026, Belgian summer time (UTC+2).
+  const at = (iso: string) => new Date(iso);
+  ok("production: the round after an evening is tomorrow morning", nextFill(at("2026-10-19T15:00:00Z")).toISOString() === "2026-10-20T07:00:00.000Z");
+  ok("production: cooking at 3 at night still makes 9 the same morning", nextFill(at("2026-10-20T01:00:00Z")).toISOString() === "2026-10-20T07:00:00.000Z");
+  ok("production: at 8 in the morning the next one is tomorrow", nextFill(at("2026-10-20T06:00:00Z")).toISOString() === "2026-10-21T07:00:00.000Z");
+  ok("production: winter time keeps 9 o'clock", localTime(nextFill(at("2026-10-26T15:00:00Z"))).hour === 9);
+  const flat = hourShares([]);
+  const perDay24 = [0, 24, 24, 24, 24, 24, 24, 24];
+  ok("production: flat hours, 24 a day is one an hour", Math.abs(salesBetween(perDay24, flat, at("2026-10-19T15:00:00Z"), at("2026-10-20T07:00:00Z")) - 16) < 1e-9);
+  const shares = hourShares([{ hour: 12, units: 3 }, { hour: 18, units: 1 }]);
+  ok("production: the hours follow the sales", shares[12] === 0.75 && shares[18] === 0.25 && shares[3] === 0);
+
+  // Two followed slots of one dish, 0.75 a day each (6 on every weekday over eight weeks).
+  const now = at("2026-10-19T15:00:00Z");
+  const sales = (machineId: string, selection: string): WeekdaySales[] =>
+    [1, 2, 3, 4, 5, 6, 7].map((weekday) => ({ machineId, selection, weekday, units: 6, firstSale: "2026-08-01T10:00:00Z" }));
+  const base = {
+    now,
+    dishes: [{ id: "bami", name: "Bami", photoPath: null, batchMin: 5 }],
+    manual: [] as string[],
+    slots: [
+      { machineId: "m1", selection: "1", productId: "bami", capacity: 2, stock: 1, countedAt: "2026-10-19T07:00:00Z" },
+      { machineId: "m1", selection: "3", productId: "bami", capacity: 2, stock: 1, countedAt: "2026-10-19T07:00:00Z" },
+    ],
+    sales: [...sales("m1", "1"), ...sales("m1", "3")],
+    hourUnits: [],
+    fridge: [{ productId: "bami", inFridge: 1, madeToday: 0 }],
+    trends: [],
+    trendPrevStart: "2026-08-24T00:00:00Z",
+  };
+  const plan = productionPlan(base).lines[0];
+  // Until 9 tomorrow (16 h of 24, flat): 0.5 a slot. Each slot then holds 0.5 and needs 1.5.
+  ok("production: what the round will need", plan.need === 3 && plan.emptyNow === 2 && plan.sells === 1);
+  ok("production: short after the fridge, made as at least a batch", plan.inFridge === 1 && plan.make === 5);
+  ok("production: a fridge that covers it makes nothing", productionPlan({ ...base, fridge: [{ productId: "bami", inFridge: 4, madeToday: 0 }] }).lines[0].make === 0);
+  ok("production: a fridge never counted makes nothing blind, but says what is needed", (() => {
+    const line = productionPlan({ ...base, fridge: [] }).lines[0];
+    return line.inFridge === null && line.make === 0 && line.need === 3;
+  })());
+  const manual = productionPlan({ ...base, manual: ["m1"] }).lines[0];
+  ok("production: a machine filled by hand needs a day's sales", manual.need === 2 && manual.emptyNow === 0);
+  const stale = productionPlan({ ...base, slots: base.slots.map((s) => ({ ...s, countedAt: "2026-10-14T07:00:00Z" })) }).lines[0];
+  ok("production: stock not counted for days is not trusted", stale.need === 2);
+  const trend = (units: number, prevUnits: number, firstSale: string | null) =>
+    productionPlan({ ...base, trends: [{ productId: "bami", units, prevUnits, firstSale }] }).lines[0].trend;
+  ok("production: a trend only when it is real", trend(60, 30, null) === null && trend(100, 40, null) === "up" && trend(40, 100, null) === "down");
+  ok("production: a dish new since the earlier weeks has no trend", trend(100, 40, "2026-09-01T00:00:00Z") === null);
+}
+
+// ── Revenue per machine on the owner's overview (src/lib/overview.ts) ──
+import { PERIODS, revenueByMachine, withoutOrgName } from "../src/lib/overview.ts";
+{
+  ok("overview: periods are a real list (not a client stand-in)", Array.isArray(PERIODS) && PERIODS.join() === "today,week,month");
+  ok("overview: the owner's own name drops off a machine's name", withoutOrgName("Koekelare Chens Garden", "Chens Garden") === "Koekelare");
+  ok("overview: a name that is only the org's name stays", withoutOrgName("Chens Garden", "Chens Garden") === "Chens Garden" && withoutOrgName("NATHALIE_SNOEP", "Chens Garden") === "NATHALIE_SNOEP");
+  const row = (id: string, revenue: number, units: number) => ({ machine_id: id, machine_name: id, business_name: null, first_sale: "2026-01-01T00:00:00Z", revenue, units, prev_revenue: revenue, prev_units: units });
+  const report = (rows: ReturnType<typeof row>[]) => ({
+    period: "today", timezone: "Europe/Brussels", cur_start: "", cur_end: "", prev_start: "2026-09-01T00:00:00Z", prev_end: "", first_sale: "2026-01-01T00:00:00Z",
+    totals: { revenue: rows.reduce((s, r) => s + r.revenue, 0), units: rows.reduce((s, r) => s + r.units, 0), prev_revenue: rows.reduce((s, r) => s + r.revenue, 0), prev_units: rows.reduce((s, r) => s + r.units, 0) },
+    by_day: [], by_hour: [], by_weekday: [], by_machine: rows, by_product: [],
+  }) as never;
+  const machine = (id: string, extra: Record<string, unknown> = {}) => ({ id, name: `${id} Chens Garden`, type: "lift", payter_serial_number: "APO1", photo_path: null, last_connected_at: null, last_disconnected_at: null, refill_manual: false, ...extra }) as never;
+  const built = revenueByMachine({
+    reports: { today: report([row("a", 40, 4)]), week: report([row("a", 200, 20), row("b", 90, 9)]), month: report([row("a", 800, 80), row("b", 400, 40)]) },
+    machines: [machine("a"), machine("b", { payter_serial_number: null }), machine("c", { refill_manual: true })],
+    stock: [{ machine_id: "a", selection_number: "1", product_id: "p", capacity: 10, stock: 5 }, { machine_id: "c", selection_number: "1", product_id: "p", capacity: 10, stock: 10 }] as never,
+    refills: new Map([["a", { at: "2026-10-19T07:00:00Z", by: "Alus", pieces: 9 }]]),
+    orgName: "Chens Garden",
+    newSince: () => undefined,
+  });
+  const of = (id: string) => built.machines.find((mc) => mc.id === id)!;
+  ok("overview: each machine has today, week and month", of("a").figures.today.revenue === 40 && of("a").figures.week.revenue === 200 && of("b").figures.month.revenue === 400);
+  ok("overview: a machine without sales in a period has 0, not missing", of("b").figures.today.revenue === 0 && of("c").figures.week.units === 0);
+  ok("overview: the total is all machines together", built.totals.week.revenue === 290 && built.totals.month.units === 120);
+  ok("overview: how full from counted slots; none for one filled by hand", of("a").fill?.percent === 50 && of("c").fill === null);
+  ok("overview: late sales without our terminal; last fill kept", of("b").late && !of("a").late && of("a").lastRefill?.pieces === 9 && of("b").lastRefill === null);
+  ok("overview: names without the org's own name", of("a").name === "a");
+}
+
+// ── "Vul route beginnen" for the owner too (src/lib/refill-start.ts) ──
+import { filledOnOpenRound, ownRound, startable } from "../src/lib/refill-start.ts";
+{
+  const mc = (id: string, refill_manual = false) => ({ id, refill_manual });
+  const slots = [
+    { machine_id: "a", product_id: "p" },
+    { machine_id: "b", product_id: "p" },
+    { machine_id: "c", product_id: null },
+    { machine_id: "d", product_id: "p" },
+    { machine_id: "e", product_id: "p" },
+  ];
+  const open = [{ machines: [{ id: "e", done: false, skipped: false }, { id: "a", done: true, skipped: true }, { id: "f", done: true, skipped: false }] }];
+  const start = startable([mc("a"), mc("b"), mc("c"), mc("d", true), mc("e"), mc("f")], [...slots, { machine_id: "f", product_id: "p" }], open, ["b", "a"]);
+  ok("start: machines with a product, in the route's order, the rest after", start.ids.join() === "b,a");
+  ok("start: none filled by hand, none without a product", !start.ids.includes("d") && !start.ids.includes("c"));
+  ok("start: one still on an open round is left off; one it skipped is not", start.busy.has("e") && !start.ids.includes("e") && start.ids.includes("a"));
+  // Filled, but the round is not completed: it counts as filled only then (21-10-2026), so no second round.
+  ok("start: one filled on a round still open waits for that round", start.busy.has("f") && !start.ids.includes("f"));
+  ok("open round: filled ones wait, skipped and unvisited ones do not", [...filledOnOpenRound(open)].join() === "f");
+
+  // Newest first, as getOpenRounds gives them.
+  const round = (id: string, mine: boolean, readyAt: string | null = null) => ({ id, mine, readyAt });
+  ok("own round: the one under way before a newer unstarted one", ownRound([round("new", true), round("out", true, "2026-10-20T08:00:00Z")])?.id === "out");
+  ok("own round: else the newest of one's own", ownRound([round("x", false, "2026-10-20T08:00:00Z"), round("b", true), round("a", true)])?.id === "b");
+  ok("own round: someone else's is never it", ownRound([round("x", false, "2026-10-20T08:00:00Z")]) === null);
+}
+
+// ── "Terugzetten naar …%": what a round's stops changed (src/lib/refill-flow.ts) ──
+import { stopChanges } from "../src/lib/refill-flow.ts";
+{
+  const ev = (selection: string, delta: number, at: string, note: string | null = null) => ({
+    machine_id: "m",
+    selection_number: selection,
+    delta,
+    note,
+    occurred_at: `2026-10-20T${at}:00Z`,
+  });
+  const changed = stopChanges([
+    ev("11", 4, "08:00"),
+    ev("11", -1, "08:00", "expired"),
+    ev("12", 3, "08:00"),
+    ev("12", -3, "08:10", "reopened"),
+    ev("12", 2, "08:20"),
+    ev("13", 5, "08:00"),
+    ev("13", -5, "08:10", "reopened"),
+  ]);
+  ok("revert: every event of the stop counts, a removal too", changed["m:11"] === 3);
+  ok("revert: only what came after the last reopening", changed["m:12"] === 2);
+  ok("revert: a slot put back is nothing to put back again", (changed["m:13"] ?? 0) === 0);
+}
+
+// Camera photos (22-10-2026): one photo shared per camera, Live slower as the console's minute fills,
+// and UniFi's "wait" read the way it is written.
+{
+  const { CONSOLE_BUDGET, LIVE_EVERY_MS, SHARE_MS, liveInterval, msToNextMinute, retryAfterMs, sharing } = await import("../src/lib/camera-pace.ts");
+  ok("live: a quiet minute keeps every 3 s", liveInterval(0) === LIVE_EVERY_MS && liveInterval(CONSOLE_BUDGET / 2 - 1) === LIVE_EVERY_MS);
+  ok("live: slower as the minute fills, never faster", liveInterval(CONSOLE_BUDGET / 2) > LIVE_EVERY_MS && liveInterval(CONSOLE_BUDGET) >= liveInterval(CONSOLE_BUDGET / 2));
+  ok("live: below UniFi's 100, with room for the client sites", CONSOLE_BUDGET < 100);
+  ok("next minute: from the middle of a minute", msToNextMinute(Date.UTC(2026, 9, 22, 12, 0, 45)) === 15_000);
+  ok("next minute: on the minute is a whole one", msToNextMinute(Date.UTC(2026, 9, 22, 12, 1, 0)) === 60_000);
+  const now = Date.UTC(2026, 9, 22, 12, 0, 0);
+  ok("retry-after: seconds", retryAfterMs("7", now) === 7_000);
+  ok("retry-after: an HTTP date", retryAfterMs(new Date(now + 20_000).toUTCString(), now) === 20_000);
+  ok("retry-after: nothing or nonsense waits 10 s", retryAfterMs(null, now) === 10_000 && retryAfterMs("soon", now) === 10_000 && retryAfterMs("0", now) === 10_000);
+  ok("retry-after: never more than a minute", retryAfterMs("3600", now) === 60_000);
+
+  let clock = 0;
+  let fetched = 0;
+  let failNext = false;
+  const shared = sharing(
+    (camera: string) => camera,
+    async (camera: string) => {
+      fetched += 1;
+      if (failNext) {
+        failNext = false;
+        throw new Error("no photo");
+      }
+      return `${camera}#${fetched}`;
+    },
+    () => clock,
+  );
+  const first = await shared("cam1");
+  clock = SHARE_MS - 1;
+  const second = await shared("cam1");
+  ok("share: a second viewer within 2.5 s gets the same photo", second.value === first.value && second.shared && !first.shared && fetched === 1);
+  const other = await shared("cam2");
+  ok("share: another camera is its own photo", other.value === "cam2#2" && !other.shared);
+  clock = SHARE_MS;
+  const later = await shared("cam1");
+  ok("share: Live every 3 s always gets a new photo", later.value === "cam1#3" && !later.shared);
+  clock = 10 * SHARE_MS;
+  failNext = true;
+  const failed = await shared("cam1").then(() => "photo", () => "failed");
+  const retried = await shared("cam1");
+  ok("share: a failure is never handed on", failed === "failed" && !retried.shared && retried.value === "cam1#5");
+  const [a, b] = await Promise.all([shared("cam3"), shared("cam3")]);
+  ok("share: two asking at the same moment cost one photo", a.value === b.value && fetched === 6);
+}
+
+// Visitors (22-10-2026): Protect's person detections read safely, and only honest figures said about them.
+{
+  const { eventsQuery, parseProtectEvents, EVENTS_PAGE } = await import("../src/lib/protect-events.ts");
+  const { buying, cameraCheck, hourProfile, visitDays, visitsVerdict, SEEN_FLOOR } = await import("../src/lib/visitors.ts");
+  const { standoutHours, shareInterval } = await import("../src/lib/stats.ts");
+
+  const now = Date.UTC(2026, 9, 22, 12, 0, 0);
+  // Shaped like uiprotect's sample events (Protect's private /events list).
+  const sample = [
+    { id: "a1", type: "smartDetectZone", start: now - 120_000, end: now - 60_000, score: 95, smartDetectTypes: ["person"], camera: "cam1", thumbnail: "e-a1", heatmap: "e-a1", metadata: {} },
+    { id: "a2", type: "smartDetectLine", start: now - 50_000, end: null, score: 70.4, smartDetectTypes: ["person"], camera: { id: "cam1" } },
+    { id: "a3", type: "motion", start: now - 40_000, end: now - 30_000, camera: "cam1" },
+    { id: "a4", type: "smartDetectZone", start: Math.floor((now - 20_000) / 1000), end: null, smartDetectTypes: ["person"], camera: "cam1" },
+    { id: "a5", type: "smartDetectLoiterZone", start: now - 10_000, end: now - 20_000, smartDetectTypes: ["person"], camera: "cam2" },
+    { id: "a6", type: "smartDetectZone", start: now - 5_000, end: now, smartDetectTypes: ["person"] },
+  ];
+  const parsed = parseProtectEvents(sample, now);
+  ok("protect: zone, line and loiter kept; motion, seconds and no camera dropped", parsed.events.map((e) => `${e.eventId}:${e.kind}`).join() === "a1:zone,a2:line,a5:loiter");
+  ok("protect: every item counted, to know a page was full", parsed.received === 6);
+  ok("protect: times as ISO, an end before its start is no end", parsed.events[0].startedAt === new Date(now - 120_000).toISOString() && parsed.events[2].endedAt === null);
+  ok("protect: a camera given as an object, a score rounded", parsed.events[1].cameraId === "cam1" && parsed.events[1].score === 70);
+  ok("protect: nothing of a picture is kept", !JSON.stringify(parsed.events).includes("thumbnail") && !JSON.stringify(parsed.events).includes("e-a1"));
+  ok("protect: newest start read, to carry on from", parsed.lastStart === now - 5_000);
+  ok("protect: a wrapped list and nonsense", parseProtectEvents({ data: sample.slice(0, 1) }, now).events.length === 1 && parseProtectEvents("nope", now).received === 0);
+  const query = new URLSearchParams(eventsQuery(now - 3_600_000, now, 500));
+  ok("protect: query in milliseconds, oldest first, every type named, people only",
+    query.get("start") === String(now - 3_600_000) && query.get("orderDirection") === "ASC" &&
+    query.getAll("types").join() === "smartDetectZone,smartDetectLine,smartDetectLoiterZone" &&
+    query.get("smartDetectTypes") === "person" && query.get("offset") === "500" && query.get("limit") === String(EVENTS_PAGE));
+
+  const flat = Array.from({ length: 24 }, () => 10);
+  ok("hours: an even day has no busiest or quietest hour", standoutHours(flat, 28).busiest === null && standoutHours(flat, 28).quietest === null);
+  // Three months at a busy camera: 100 visits in most hours, 400 at six in the evening, nobody at three at night.
+  const evening = Array.from({ length: 24 }, (_, hour) => (hour === 18 ? 400 : hour === 3 ? 0 : 100));
+  ok("hours: a real evening peak and an empty night are named", standoutHours(evening, 91).busiest === 18 && standoutHours(evening, 91).quietest === 3);
+  ok("hours: under a week nothing is named", standoutHours(evening, 6).busiest === null);
+  // Four weeks at a quiet camera (about 20 a day): the evening peak is real, an empty night hour is not proof yet.
+  const quiet = Array.from({ length: 24 }, (_, hour) => (hour === 18 ? 120 : hour === 3 ? 2 : 20));
+  ok("hours: at a quiet camera the night is not named yet, four times wider than chance", standoutHours(quiet, 28).busiest === 18 && standoutHours(quiet, 28).quietest === null);
+  const range = shareInterval(20, 40);
+  ok("share: 20 of 40 is a wide range, four times wider than chance", range.low < 0.25 && range.high > 0.75);
+
+  const report = { cur_start: "2026-10-15T22:00:00Z", cur_end: "2026-10-22T12:00:00Z", prev_start: "2026-10-09T08:00:00Z", timezone: "Europe/Brussels", demo: false };
+  const camera = {
+    camera_id: "cam1", visits: 100, prev_visits: 60, refilling: 3, first_event: "2026-09-01T10:00:00Z", last_event: "2026-10-22T11:00:00Z", events_24h: 14,
+    lines: 0, prev_lines: 0, loiters: 0,
+    by_day: [{ day: "2026-10-16", visits: 40 }, { day: "2026-10-22", visits: 60 }],
+    by_hour: [{ hour: 18, visits: 70 }, { hour: 12, visits: 30 }],
+    by_weekday: [{ weekday: 5, visits: 40 }, { weekday: 4, visits: 60 }],
+    duration: { n: 90, p25: 20, p50: 45, p75: 80 },
+    sales: { total: 50, seen: 48, bought: 40, attributed: 52 },
+  };
+  const days = visitDays(camera, { ...report, cameras: [camera] });
+  ok("visitors: every day of the 7, a quiet one as 0", days.length === 7 && days[0].day === "2026-10-16" && days[1].visits === 0 && days[6].visits === 60);
+  const profile = hourProfile(camera, { ...report, cameras: [camera] });
+  ok("visitors: an hour is an average per day", Math.abs(profile.perDay[18].visits - 10) < 1e-9);
+  ok("visitors: compared like sales", visitsVerdict({ ...camera, visits: 200, prev_visits: 100 }, report) === "up" && visitsVerdict(camera, report) === "noise" && visitsVerdict({ ...camera, first_event: "2026-10-12T00:00:00Z" }, report) === "new");
+  const bought = buying(camera);
+  ok("buying: 40 of 100 bought, 60 looked and left, 1.3 items each", bought.state === "ok" && bought.share === 0.4 && bought.lookedOnly === 60 && Math.abs(bought.perBuyer - 1.3) < 1e-9);
+  ok("buying: a camera that missed sales says so", buying({ ...camera, sales: { total: 50, seen: Math.floor(50 * SEEN_FLOOR) - 1, bought: 40, attributed: 40 } }).state === "missed");
+  ok("buying: too few, and no sales (a demo)", buying({ ...camera, visits: 20 }).state === "tooFew" && buying({ ...camera, sales: null }).state === "none");
+  ok("check: detection off, nobody today, fine", cameraCheck(["vehicle"], camera) === "detectionOff" && cameraCheck(["person"], { events_24h: 0 }) === "nothingToday" && cameraCheck(null, camera) === "fine");
+}
+
+// Instellingen → Meldingen (23-10-2026): what is stored is only what the sender understands.
+import { channelsInUse, cleanPrefs, normalizeEmail, NOTIFY_DEFAULTS } from "../src/lib/notify-prefs.ts";
+{
+  ok("email: trimmed and lower case, nonsense refused", normalizeEmail(" Xin@Example.BE ") === "xin@example.be" && normalizeEmail("") === null && normalizeEmail("xin@") === false);
+  const base = { ...NOTIFY_DEFAULTS, email: "a@b.be" };
+  const clean = cleanPrefs({ ...base, topics: { daily: ["push", "email", "fax"], sales: "email", errors: ["email"] } });
+  ok("prefs: unknown channels (push too) and topics dropped", clean.ok && clean.prefs.topics.daily.join() === "email" && clean.prefs.topics.sales.length === 0 && clean.prefs.topics.weekly.length === 0);
+  // Xin, 23-10-2026: "i dont wnat to activate sms". A phone that still sends it gets it dropped, no number asked.
+  const smsOnly = cleanPrefs({ ...base, phone: "", topics: { errors: ["sms"] } });
+  ok("prefs: sms is dropped, never asks for a number", smsOnly.ok && smsOnly.prefs.topics.errors.length === 0 && !("phone" in smsOnly.prefs));
+  const mailOnly = cleanPrefs({ ...base, email: "", topics: { daily: ["email"] } });
+  ok("prefs: mail needs an address", !mailOnly.ok && mailOnly.reason === "emailMissing");
+  const odd = cleanPrefs({ ...base, dailyHour: 25, lowPercent: 33, quiet: true });
+  ok("prefs: hour and limit fall back, no quiet hours kept", odd.ok && odd.prefs.dailyHour === 20 && odd.prefs.lowPercent === 25 && !("quiet" in odd.prefs));
+  ok("prefs: channels in use", channelsInUse({ daily: ["email"], weekly: [], sales: [], errors: [], low_stock: [] }).join() === "email");
+  ok("prefs: nothing usable is still a valid, quiet choice", cleanPrefs(null).ok);
+}
+
+// Profiel → Mijn automaten (24-10-2026): a model key is ours or "not set", and every picture of a model is really there.
+import { existsSync } from "node:fs";
+import { MACHINE_MODELS, MODEL_FEATURES, MODEL_SHEETS, asMachineModel } from "../src/lib/machine-models.ts";
+{
+  ok("models: a known key stays, anything else is not set", asMachineModel("mato-b1") === "mato-b1" && asMachineModel("mato-x9") === null && asMachineModel(null) === null);
+  const pictures = MACHINE_MODELS.flatMap((key) => {
+    const sheet = MODEL_SHEETS[key];
+    return [sheet.image, sheet.capacityImage, ...MODEL_FEATURES.map((feature) => sheet.features[feature])];
+  });
+  ok("models: every picture is in public/", pictures.every((path) => existsSync(new URL(`../public${path}`, import.meta.url))));
+}

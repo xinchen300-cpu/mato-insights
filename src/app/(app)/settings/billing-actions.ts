@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getI18n } from "@/i18n/server";
 import { getBilling, linkedMachineCount, paymentsEnabled } from "@/lib/billing";
 import { cancelSubscription as cancelMollieSubscription } from "@/lib/mollie";
-import { requireOperator, requireOrgId } from "@/lib/org";
+import { hasPersonalSettings, requireOperator, requireOrgId } from "@/lib/org";
 import { planById, planFits, priceInclVat } from "@/lib/plans";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -93,5 +93,7 @@ export async function resumeSubscription(): Promise<void> {
 export async function addPaymentDetails(): Promise<{ checkoutUrl: string | null }> {
   const { orgId } = await requireSubscriber();
   if (!paymentsEnabled()) return { checkoutUrl: null };
-  return { checkoutUrl: await startMandateCheckout(orgId, "/settings?betaald=1#abonnement") };
+  // Abonnement is in Profiel where one's own settings are on (24-10-2026).
+  const back = (await hasPersonalSettings()) ? "/profile" : "/settings";
+  return { checkoutUrl: await startMandateCheckout(orgId, `${back}?betaald=1#abonnement`) };
 }

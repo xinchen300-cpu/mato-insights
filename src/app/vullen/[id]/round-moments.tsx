@@ -11,7 +11,7 @@ import type { RouteTimes } from "@/lib/data";
 import { progressFrame, roundEta, type RoundReward } from "@/lib/filler-stats";
 import { MIN_ROUNDS } from "@/lib/stats";
 import { cn } from "@/lib/utils";
-import { ghost, primary } from "./styles";
+import { primary } from "./styles";
 
 // The moments of a round that should feel like something: how far along it is,
 // a machine done, and the end. Each one states a fact (done, left, a time) and
@@ -267,10 +267,7 @@ export function RoundDone({
       )}
 
       <div className="mt-auto flex flex-col gap-1.5 pt-8">
-        <Link href="/refill/me" className={primary}>
-          {t.seeStats}
-        </Link>
-        <Link href="/refill" className={ghost}>
+        <Link href="/refill" className={primary}>
           {t.toStart}
         </Link>
       </div>

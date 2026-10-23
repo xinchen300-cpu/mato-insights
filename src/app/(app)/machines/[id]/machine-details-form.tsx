@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n/client";
 import { cn } from "@/lib/utils";
+import { MACHINE_MODELS, MODEL_SHEETS, asMachineModel } from "@/lib/machine-models";
 import { MACHINE_TYPES, type Business, type Machine, type MachineType } from "@/lib/types";
 import { updateMachineDetails } from "../actions";
 
@@ -22,6 +23,7 @@ export function MachineDetailsForm({
   businesses,
   operator,
   rentsToBusinesses,
+  models = false,
 }: {
   machine: Machine;
   businesses: Business[];
@@ -29,15 +31,20 @@ export function MachineDetailsForm({
   operator: boolean;
   /** An automatenshop says which business a machine is for; a zaak's machines are simply its own. */
   rentsToBusinesses: boolean;
+  /** Which MATO model it is, for Profiel → Mijn automaten (24-10-2026); only where one's own settings are on. */
+  models?: boolean;
 }) {
   const { m } = useI18n();
   const router = useRouter();
   const [name, setName] = useState(machine.name);
   const [type, setType] = useState<MachineType | "">(machine.type ?? "");
+  const [model, setModel] = useState<string>(asMachineModel(machine.model) ?? "");
   const [businessId, setBusinessId] = useState(machine.business_id ?? "");
   const [sharedBusinessId, setSharedBusinessId] = useState(machine.shared_business_id ?? "");
   const [dataSince, setDataSince] = useState(machine.data_since ?? "");
   const [km, setKm] = useState(machine.km_round_trip === null ? "" : String(machine.km_round_trip));
+  const [byHand, setByHand] = useState(machine.refill_manual);
+  const [address, setAddress] = useState(machine.address ?? "");
   const [newBusiness, setNewBusiness] = useState("");
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [isPending, startTransition] = useTransition();
@@ -53,6 +60,8 @@ export function MachineDetailsForm({
         await updateMachineDetails(machine.id, {
           name,
           type: type || null,
+          // Sent only where it is asked, so nothing stored is wiped elsewhere.
+          ...(models ? { model: model || null } : {}),
           // A zaak sends nothing about businesses, so nothing stored is wiped.
           ...(rentsToBusinesses
             ? {
@@ -63,6 +72,8 @@ export function MachineDetailsForm({
             : {}),
           dataSince: dataSince || null,
           kmRoundTrip: km.trim() === "" ? null : Number(km.replace(",", ".")),
+          refillManual: byHand,
+          address,
         });
         setStatus("saved");
         if (businessId === NEW_BUSINESS) setBusinessId("");
@@ -165,6 +176,30 @@ export function MachineDetailsForm({
           ))}
         </select>
       </div>
+      {models && (
+        <div className="grid gap-2 sm:col-span-2">
+          <Label htmlFor="machine-model">{m.machineModels.modelLabel}</Label>
+          <select
+            id="machine-model"
+            value={model}
+            onChange={(e) => {
+              const picked = asMachineModel(e.target.value);
+              setModel(picked ?? "");
+              // A model says what kind of machine it is, when that is not set yet.
+              if (picked && !type) setType(MODEL_SHEETS[picked].type);
+            }}
+            className={selectClass}
+          >
+            <option value="">{m.machineModels.modelNone}</option>
+            {MACHINE_MODELS.map((key) => (
+              <option key={key} value={key}>
+                {MODEL_SHEETS[key].name} · {m.machineModels[key].kind}
+              </option>
+            ))}
+          </select>
+          <p className={hintClass}>{m.machineModels.modelHint}</p>
+        </div>
+      )}
       <div className="grid gap-2 sm:col-span-2">
         <Label htmlFor="machine-data-since">{m.machines.dataSince}</Label>
         <Input
@@ -177,6 +212,17 @@ export function MachineDetailsForm({
         <p className={hintClass}>{m.machines.dataSinceHint}</p>
       </div>
 
+      <div className="grid gap-2 sm:col-span-2">
+        <Label htmlFor="machine-address">{m.machines.address}</Label>
+        <Input
+          id="machine-address"
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          autoComplete="street-address"
+          placeholder={m.machines.addressPlaceholder}
+        />
+        <p className={hintClass}>{m.machines.addressHint}</p>
+      </div>
       <div className="grid gap-2">
         <Label htmlFor="machine-km">{m.machines.kmRoundTrip}</Label>
         <Input
@@ -188,6 +234,27 @@ export function MachineDetailsForm({
         />
         <p className={hintClass}>{m.machines.kmRoundTripHint}</p>
       </div>
+      {/* Filled by hand, outside Vendly (Xin, 19-10-2026): out of the refill work, still in the sales. */}
+      <button
+        type="button"
+        role="switch"
+        aria-checked={byHand}
+        onClick={() => setByHand((on) => !on)}
+        className="flex min-h-14 w-full items-center gap-3 py-2 text-left sm:col-span-2"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium">{m.machines.refillManual}</span>
+          <span className={cn("block", hintClass)}>{m.machines.refillManualHint}</span>
+        </span>
+        <span className={cn("relative h-7 w-12 shrink-0 rounded-full transition-colors duration-200", byHand ? "bg-positive" : "bg-border")}>
+          <span
+            className={cn(
+              "absolute top-0.5 size-6 rounded-full bg-white shadow-sm transition-transform duration-200",
+              byHand ? "translate-x-[22px]" : "translate-x-0.5",
+            )}
+          />
+        </span>
+      </button>
       {saveRow}
     </div>
   );

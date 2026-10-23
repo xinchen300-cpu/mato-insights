@@ -55,7 +55,7 @@ export function PersonPhoto({
   const face = (
     <span
       className={cn(
-        "relative grid size-14 shrink-0 place-items-center overflow-hidden rounded-full bg-primary/12 text-[19px] font-semibold text-[#8a6117]",
+        "relative grid size-14 shrink-0 place-items-center overflow-hidden rounded-full bg-primary/12 text-[19px] font-semibold text-gold-ink",
         busy && "opacity-60",
         className,
       )}

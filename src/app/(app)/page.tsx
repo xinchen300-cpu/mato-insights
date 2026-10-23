@@ -1,51 +1,43 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarClock, CircleDashed, ClipboardList, Link2, PackageOpen, TriangleAlert, WifiOff, type LucideIcon } from "lucide-react";
-import { RevenueChart } from "@/components/charts/revenue-chart";
-import { Delta } from "@/components/delta";
-import { KpiHero, MiniStat } from "@/components/kpi";
-import { Avatar, ListRow, RowList } from "@/components/list-row";
-import { InsightsList } from "@/components/insights-list";
-import { SetupGuide, nextSetupStep } from "@/components/setup-guide";
-import { EmptyState, PageHeader, Section } from "@/components/page-header";
+import { ChefHat, ListChecks } from "lucide-react";
+import { MachineRevenue } from "@/components/overview/machine-revenue";
+import { OverviewCamera } from "@/components/overview/overview-camera";
+import { revenueByMachine } from "@/lib/overview";
+import { filledOnOpenRound, ownRound, startable } from "@/lib/refill-start";
+import { StartRound } from "./refill/list/start-round";
+import { SetupGuide } from "@/components/setup-guide";
+import { EmptyState, PageHeader } from "@/components/page-header";
 import { LiveRounds } from "@/components/refill/live-rounds";
+import { NextRound } from "@/components/refill/next-round";
 import { buttonVariants } from "@/components/ui/button";
-import { DISPLAY_TIME_ZONE, fmt, plural } from "@/i18n/format";
+import { cn } from "@/lib/utils";
+import { DISPLAY_TIME_ZONE, fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import {
-  getExpiryAlerts,
-  getLastSales,
+  getLastRefills,
   getLiveSales,
+  getMachineCameras,
   getLastSyncedAt,
   getOpenRounds,
   getMachines,
   getMachineStock,
   getStatsReport,
-  getUnassigned,
+  getRoundSettings,
   getSetupState,
+  hasProducerDishes,
   type OpenRound,
 } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { buildInsights } from "@/lib/insights";
-import { compareMoneySince, compareSince, fillDays, lastFullWeeks } from "@/lib/stats";
-import { terminalStatus } from "@/lib/terminal-status";
+import { lastFullWeeks } from "@/lib/stats";
 import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
-import { fillLevel, needsAttention } from "@/lib/stock";
-import { MachineIcon } from "@/components/machine/machine-icon";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { LiveSales } from "@/components/live-sales";
-import { isRecent } from "@/lib/unassigned";
 
 
-// Urgency of a to-do row, worst first: a dead terminal outranks a stale label.
-type Tone = "negative" | "warning" | "muted";
-const toneAvatar: Record<Tone, "negative" | "warning" | "neutral"> = {
-  negative: "negative",
-  warning: "warning",
-  muted: "neutral",
-};
-const LOW_ROWS = 3;
+/** "Meer zien" under Net verkocht opens this many. */
+const LIVE_ROWS = 40;
 /** Payter is asked every 15 seconds; only data this old is worth a word on the page. */
 const STALE_MS = 15 * 60_000;
 const isStale = (syncedAt: string | null) => syncedAt !== null && Date.now() - Date.parse(syncedAt) > STALE_MS;
@@ -83,43 +75,54 @@ export default async function OverviewPage() {
 
   // Everything on the page is asked for at once, each loader with its own
   // checks, and the onboarding question below runs alongside instead of first.
-  // Weekday patterns only from whole weeks, and enough of them (see lib/stats).
   const patternWeeks = 8;
   const loads = Promise.all([
     operator ? getOpenRounds(orgId) : Promise.resolve<OpenRound[]>([]),
     getStatsReport(orgId, { period: "today" }),
     getStatsReport(orgId, { period: "week" }),
     getStatsReport(orgId, { period: "month" }),
-    getStatsReport(orgId, { period: "custom", ...lastFullWeeks(patternWeeks, DISPLAY_TIME_ZONE) }),
     getMachines(orgId),
     getMachineStock(orgId),
-    getUnassigned(orgId),
-    getExpiryAlerts(orgId),
-    getLastSales(orgId),
     getLastSyncedAt(orgId),
-    getSetupState(orgId),
-    getLiveSales(orgId),
+    getLiveSales(orgId, { limit: LIVE_ROWS }),
+    getLastRefills(orgId),
+    hasProducerDishes(orgId),
+    operator ? getRoundSettings(orgId) : Promise.resolve(null),
+    // The cameras by machine, so each sale in Net verkocht opens its recording (empty for anyone but the operator).
+    getMachineCameras(orgId),
   ]);
   // A redirect below leaves it unawaited: a failure in it must not go unhandled.
   loads.catch(() => undefined);
 
   // Wie nog nooit door de rondleiding is, hoort niet op een leeg dashboard te
   // landen. Eén keer, en daarna nooit meer. Wat al geladen werd, vervalt dan.
+  let orgName: string | null = null;
   if (operator) {
     const { data: org } = await createAdminClient()
       .from("organizations")
-      .select("onboarded_at")
+      .select("onboarded_at, name")
       .eq("id", orgId)
       .maybeSingle();
     if (org && !org.onboarded_at) redirect("/welkom");
+    orgName = (org?.name as string | null) ?? null;
   }
 
-  const [openRounds, today, week, month, weeks, machines, stock, unassigned, expiring, lastSales, syncedAt, setup, recentSales] =
+  const [openRounds, today, week, month, machines, stock, syncedAt, recentSales, refills, kitchen, roundSettings, cameras] =
     await loads;
   // Only the rounds actually out (started), and only for the operator.
   const liveRounds = openRounds.filter((round) => round.readyAt);
 
-  if (month.totals.units === 0 && weeks.totals.units === 0) {
+  // Nothing this month: then the last whole weeks say whether anything sold lately, and the setup what to do next.
+  // Asked only then (22-10-2026): two heavy questions less on every visit, the database is shared by every page.
+  const [weeks, setup] =
+    month.totals.units === 0
+      ? await Promise.all([
+          getStatsReport(orgId, { period: "custom", ...lastFullWeeks(patternWeeks, DISPLAY_TIME_ZONE) }),
+          getSetupState(orgId),
+        ])
+      : [null, null];
+
+  if (weeks && setup && weeks.totals.units === 0) {
     return (
       <>
         <AutoRefresh />
@@ -144,144 +147,43 @@ export default async function OverviewPage() {
     );
   }
 
-  const insights = buildInsights(
-    month,
-    weeks,
-    patternWeeks,
-    machines.map((mc) => ({ id: mc.id, name: mc.name, lastSale: lastSales.get(mc.id) ?? null })),
-  );
-  // A machine gone quiet is something to go and check, so it is a to-do; the
-  // rest is good to know and sits at the foot of the page.
-  const quiet = insights.flatMap((i) => (i.kind === "quietMachine" ? [i] : []));
-  const goodToKnow = insights.filter((i) => i.kind !== "quietMachine").slice(0, 3);
-
-  const lowByMachine = new Map<string, number>();
-  for (const slot of stock) {
-    if (!slot.product_id) continue;
-    if (needsAttention(fillLevel(slot.stock, slot.capacity))) {
-      lowByMachine.set(slot.machine_id, (lowByMachine.get(slot.machine_id) ?? 0) + 1);
-    }
-  }
-
-  // One number and the machine worst off; the list lives on its own page.
-  const expiringUnits = expiring.reduce((sum, a) => sum + a.qty_expired + a.qty_expiring_24h, 0);
-  const worstMachine = [...expiring].sort(
-    (a, b) => b.qty_expired - a.qty_expired || b.qty_expiring_24h - a.qty_expiring_24h,
-  )[0];
-
-  const offline = machines.filter(
-    (mc) => terminalStatus(mc.last_connected_at, mc.last_disconnected_at) === "offline",
-  );
-
-  const recentUnassigned = unassigned.filter((g) => isRecent(g));
-
-  // Everything that asks for a decision today, gathered in one place instead of
-  // three separate banners further down the page.
-  const machineName = new Map(machines.map((mc) => [mc.id, mc.name]));
-  const lowSorted = [...lowByMachine.entries()].sort((a, b) => b[1] - a[1]);
-  const setupStep = operator && !setup.done ? nextSetupStep(setup, m) : null;
-  const todos: { key: string; icon: LucideIcon; tone: Tone; text: string; href: string }[] = [
-    ...offline.map((mc) => ({
-      key: `offline-${mc.id}`,
-      icon: WifiOff,
-      tone: "negative" as const,
-      text: fmt(m.overview.todoOffline, { machine: mc.name, when: f.relative(mc.last_disconnected_at!) }),
-      href: `/machines/${mc.id}`,
-    })),
-    // A machine that is offline sells nothing anyway: once is enough, as offline.
-    ...quiet.filter((q) => !offline.some((mc) => mc.id === q.machineId)).map((q) => ({
-      key: `quiet-${q.machineId}`,
-      icon: TriangleAlert,
-      tone: "warning" as const,
-      text: fmt(m.overview.todoQuiet, { machine: q.machine, days: q.days }),
-      href: `/machines/${q.machineId}`,
-    })),
-    ...(expiringUnits > 0 && worstMachine
-      ? [
-          {
-            key: "expiry",
-            icon: CalendarClock,
-            tone: "warning" as const,
-            text: fmt(m.expiry.banner, { count: expiringUnits, machine: worstMachine.machine_name }),
-            href: "/expiry",
-          },
-        ]
-      : []),
-    ...lowSorted.slice(0, LOW_ROWS).map(([id, count]) => ({
-      key: `low-${id}`,
-      icon: PackageOpen,
-      tone: "warning" as const,
-      text: `${machineName.get(id) ?? ""} · ${plural(count, m.overview.slotsLowOne, m.overview.slotsLow)}`,
-      href: `/machines/${id}`,
-    })),
-    ...(lowSorted.length > LOW_ROWS
-      ? [
-          {
-            key: "low-more",
-            icon: PackageOpen,
-            tone: "muted" as const,
-            text: fmt(m.overview.todoMoreLow, { count: lowSorted.length - LOW_ROWS }),
-            href: "/machines",
-          },
-        ]
-      : []),
-    ...(setupStep
-      ? [
-          {
-            key: "setup",
-            icon: CircleDashed,
-            tone: "muted" as const,
-            text: setupStep.short,
-            href: setupStep.href,
-          },
-        ]
-      : []),
-    ...(recentUnassigned.length > 0
-      ? [
-          {
-            key: "unassigned",
-            icon: Link2,
-            tone: "muted" as const,
-            text: plural(recentUnassigned.length, m.overview.unassignedOne, m.overview.unassigned),
-            href: "/unassigned",
-          },
-        ]
-      : []),
-  ];
-
-  const chartData = fillDays(month).map((d) => ({
-    key: d.day,
-    label: f.dayMonth(`${d.day}T12:00:00Z`),
-    revenue: d.revenue,
-  }));
-
   // Only a sync that stalled gets a word under the title.
   const stale = isStale(syncedAt);
   // Something that only began selling after the earlier period started gets
   // "new since …" instead of a percentage against a half-empty period.
   const newSince = (firstSale: string | null) =>
     firstSale ? fmt(m.stats.newSince, { date: f.dayMonth(firstSale) }) : undefined;
-  const compareOf = (report: typeof month, label?: string) => ({
-    current: report.totals.revenue,
-    previous: report.totals.prev_revenue,
-    label,
-    // Money shown, pieces tested: a mix shift is "about the same", not a real change.
-    verdict: compareMoneySince(
-      report.totals.units,
-      report.totals.prev_units,
-      report.totals.revenue,
-      report.totals.prev_revenue,
-      report.first_sale,
-      report.prev_start,
-    ),
-    notes: { tooFew: m.stats.tooFewToCompare, noise: m.stats.withinNoise, same: m.stats.aboutSame, new: newSince(report.first_sale) },
+  // Every machine with its money for today, this week and this month (Xin,
+  // 19-10-2026: per machine rather than one total), how full it is and when it
+  // was last filled; all of them together is one line above.
+  const revenue = revenueByMachine({
+    reports: { today, week, month },
+    machines,
+    stock,
+    refills,
+    onRound: filledOnOpenRound(openRounds),
+    orgName,
+    newSince,
   });
+  // What "Vul route beginnen" puts on a round, as on the filler's home.
+  const roundStart = startable(machines, stock, openRounds, roundSettings?.route ?? []);
+  // Their own open round holds its machines, so the start button alone would
+  // vanish while it is open: the round to carry on with takes its place.
+  const own = ownRound(openRounds);
+  // The machines with a camera, in the order of the money above, for the camera under Net verkocht.
+  const cameraMachines = revenue.machines
+    .filter((mc) => cameras[mc.id]?.length)
+    .map((mc) => ({
+      id: mc.id,
+      name: mc.name,
+      cameras: cameras[mc.id].map((camera, i) => ({ id: camera.cameraId, name: camera.name ?? `${m.machines.cameraUnnamed} ${i + 1}` })),
+    }));
 
   return (
     <>
-      {/* New sales arrive within a minute; the page shows them without a reload. */}
-      {/* One timer for the page: quicker while a round is out, so the filler is seen moving on. */}
-      <AutoRefresh every={liveRounds.length ? 20_000 : 30_000} />
+      {/* Only while a round is out, so the filler is seen moving on; new sales come in by themselves
+          (LiveSales), and a page reloading itself every half minute made everything feel slow. */}
+      {liveRounds.length > 0 && <AutoRefresh every={20_000} />}
       <PageHeader
         title={m.overview.title}
         subtitle={
@@ -291,94 +193,49 @@ export default async function OverviewPage() {
         }
       />
 
-      {/* Like Bijvullen: what you look for first. What needs doing, the money,
-          what just sold, then each machine. One thing per block. */}
-      <div className="flex flex-col gap-10">
+      {/* The day's buttons, then the money machine by machine and what just sold. One thing per block
+          (Xin, 19-10-2026); the month's chart went (20-10-2026), "Vandaag te doen" and "Goed om te
+          weten" went too (21-10-2026, Xin: "delete vandaag te doen … goed om te weten mag ook weg"). */}
+      <div className="flex flex-col gap-8">
         {/* A round that is out right now comes first: who, how long, where. */}
-        {liveRounds.length > 0 && <LiveRounds rounds={liveRounds} refresh={false} />}
-        {/* What needs doing today first, above the money (UX review, 17-10-2026). */}
-        {todos.length > 0 && (
-          <Section
-            title={m.overview.todo}
-            actions={
-              // Machines running low are what a round is for: /refill/new ticks them already.
-              operator && lowSorted.length > 0 ? (
-                <Link href="/refill/new" className={buttonVariants({ variant: "outline" })}>
-                  <ClipboardList />
-                  {m.refill.newRound}
-                </Link>
-              ) : undefined
-            }
-          >
-            <RowList>
-              {todos.map((t) => (
-                <li key={t.key}>
-                  <ListRow
-                    href={t.href}
-                    leading={
-                      <Avatar tone={toneAvatar[t.tone]}>
-                        <t.icon />
-                      </Avatar>
-                    }
-                    title={<span className="whitespace-normal font-medium">{t.text}</span>}
-                    chevron
-                  />
-                </li>
-              ))}
-            </RowList>
-          </Section>
+        {liveRounds.some((round) => round.id !== own?.id) && (
+          <LiveRounds rounds={liveRounds.filter((round) => round.id !== own?.id)} refresh={false} />
         )}
-        {/* The balance, as a bank would show it: one figure, two smaller ones, the curve. */}
-        <section className="surface-card px-5 pb-4 pt-6 sm:px-8 sm:pb-6 sm:pt-8">
-          <KpiHero
-            label={m.overview.month}
-            value={f.euro(month.totals.revenue)}
-            compare={compareOf(month, m.periods.compareMonth)}
-            detail={plural(month.totals.units, m.common.salesOne, m.common.salesOther)}
-            f={f}
-          />
-          <div className="mt-7 grid grid-cols-2 gap-x-6 gap-y-6">
-            <MiniStat label={m.overview.today} value={f.euro(today.totals.revenue)} compare={compareOf(today)} f={f} />
-            <MiniStat label={m.overview.week} value={f.euro(week.totals.revenue)} compare={compareOf(week)} f={f} />
+        {/* The owner's day in a few taps: the filler's start button (Xin, 20-10-2026), the kitchen's order, what each machine needs. */}
+        {operator && (
+          <div className="flex flex-col gap-3">
+            {own ? (
+              <NextRound round={own} m={m} />
+            ) : roundStart.ids.length > 0 ? (
+              <StartRound fill label={m.refill.beginFilling} machineIds={roundStart.ids} />
+            ) : roundStart.busy.size > 0 ? (
+              // Someone else's round holds every machine: say so, rather than nothing.
+              <Link href="/refill" className="px-1 text-[14.5px] text-muted-foreground underline-offset-4 hover:underline">
+                {m.refill.allOnRound}
+              </Link>
+            ) : null}
+          <nav aria-label={m.overview.quick} className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            {kitchen && (
+              <Link href="/refill/kitchen" className={cn(buttonVariants({ size: "lg", variant: "outline" }), "shrink-0")}>
+                <ChefHat />
+                {m.kitchen.title}
+              </Link>
+            )}
+            <Link href="/refill/list" className={cn(buttonVariants({ size: "lg", variant: "outline" }), "shrink-0")}>
+              <ListChecks />
+              {m.nav.fillList}
+            </Link>
+          </nav>
           </div>
-          <div className="-mx-2 mt-7 sm:-mx-3">
-            <RevenueChart data={chartData} height={220} />
-          </div>
-        </section>
+        )}
 
+        <MachineRevenue machines={revenue.machines} totals={revenue.totals} />
 
-        {/* What just sold, sliding in as it happens. */}
-        <LiveSales initial={recentSales} />
+        {/* What just sold, sliding in as it happens; "Meer zien" opens the day's list. */}
+        <LiveSales initial={recentSales} cameras={cameras} />
 
-        <Section title={m.overview.byMachine}>
-          <RowList>
-            {month.by_machine.map((row) => (
-              <li key={row.machine_id}>
-                <ListRow
-                  href={`/machines/${row.machine_id}`}
-                  leading={<Avatar><MachineIcon /></Avatar>}
-                  title={row.machine_name}
-                  subtitle={<span className="tabular">{plural(row.units, m.common.salesOne, m.common.salesOther)}</span>}
-                  value={f.euro(row.revenue)}
-                  valueSub={
-                    <Delta
-                      current={row.revenue}
-                      previous={row.prev_revenue}
-                      f={f}
-                      verdict={compareSince(row.units, row.prev_units, row.first_sale, month.prev_start)}
-                      noiseLabel={m.stats.withinNoise}
-                      sameLabel={m.stats.aboutSame}
-                      newLabel={newSince(row.first_sale)}
-                      className="text-[13px]"
-                    />
-                  }
-                />
-              </li>
-            ))}
-          </RowList>
-        </Section>
-
-        <InsightsList insights={goodToKnow} m={m} f={f} />
+        {/* What the camera sees now, without going to the machine (Xin, 21-10-2026). */}
+        {cameraMachines.length > 0 && <OverviewCamera machines={cameraMachines} />}
       </div>
     </>
   );
