@@ -16,6 +16,39 @@ function subscribe(changed: () => void) {
 }
 const isDark = () => document.documentElement.classList.contains("dark");
 
+export type ThemeChoice = "light" | "dark" | "system";
+export const THEME_EVENT = "mato:theme";
+
+/** What this browser keeps: a choice of its own, or none and the phone decides. */
+export function readThemeChoice(): ThemeChoice {
+  try {
+    const stored = localStorage.getItem(THEME_KEY);
+    return stored === "light" || stored === "dark" ? stored : "system";
+  } catch {
+    return "system";
+  }
+}
+
+/**
+ * Light, dark, or back to following the phone (Instellingen, 23-10-2026). With no choice kept, the layout's script
+ * follows the phone again, also when it switches at night.
+ */
+export function setThemeChoice(choice: ThemeChoice) {
+  try {
+    if (choice === "system") localStorage.removeItem(THEME_KEY);
+    else localStorage.setItem(THEME_KEY, choice);
+  } catch {
+    // A private window without storage still switches, just not next time.
+  }
+  const dark = choice === "dark" || (choice === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.classList.toggle("dark", dark);
+  for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
+    meta.setAttribute("content", dark ? THEME_COLOR.dark : THEME_COLOR.light);
+  }
+  // "Automatic" on a light phone changes no class: whoever shows the choice is told here.
+  dispatchEvent(new Event(THEME_EVENT));
+}
+
 /**
  * Light or dark (Xin, 21-10-2026: "een dark version theme"). Until someone taps it, the app follows the
  * phone's own setting; a tap picks one and keeps it in this browser.
@@ -25,16 +58,7 @@ export function ThemeToggle({ variant = "icon" }: { variant?: "icon" | "row" }) 
   const dark = useSyncExternalStore(subscribe, isDark, () => false);
 
   function toggle() {
-    const next = !dark;
-    document.documentElement.classList.toggle("dark", next);
-    for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
-      meta.setAttribute("content", next ? THEME_COLOR.dark : THEME_COLOR.light);
-    }
-    try {
-      localStorage.setItem(THEME_KEY, next ? "dark" : "light");
-    } catch {
-      // A private window without storage still switches, just not next time.
-    }
+    setThemeChoice(dark ? "light" : "dark");
   }
 
   const label = dark ? m.nav.lightTheme : m.nav.darkTheme;

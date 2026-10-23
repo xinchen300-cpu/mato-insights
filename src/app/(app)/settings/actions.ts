@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { featureAllowed } from "@/lib/billing";
 import { checkPayterLogin, payterTerminalSerials } from "@/lib/payter-login";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { denyFillerAccess, getCurrentBusinessId, getCurrentOrgId, requireOperator } from "@/lib/org";
+import { denyFillerAccess, getCurrentBusinessId, getCurrentOrgId, getSessionUser, requireOperator, requireSignedIn } from "@/lib/org";
+import { saveNotificationSettings, sendTestNotification } from "@/lib/data";
+import { getI18n } from "@/i18n/server";
+import type { CleanPrefs } from "@/lib/notify-prefs";
 
 async function requireOrgId() {
   const orgId = await getCurrentOrgId();
@@ -162,6 +165,8 @@ export async function rememberDevice(sub: { endpoint: string; p256dh: string; au
   await denyFillerAccess();
   const businessId = await getCurrentBusinessId();
   if (!sub.endpoint || !sub.p256dh || !sub.auth) return;
+  // Whose phone it is, so their own choices in Meldingen apply to it (23-10-2026).
+  const user = await getSessionUser();
 
   await createAdminClient()
     .from("push_subscriptions")
@@ -170,6 +175,7 @@ export async function rememberDevice(sub: { endpoint: string; p256dh: string; au
         endpoint: sub.endpoint,
         org_id: orgId,
         business_id: businessId,
+        user_id: user?.id ?? null,
         p256dh: sub.p256dh,
         auth: sub.auth,
         label: sub.label,
@@ -198,4 +204,24 @@ export async function saveRentsToBusinesses(rents: boolean): Promise<void> {
     .eq("id", orgId);
   if (error) throw new Error(error.message);
   revalidatePath("/", "layout");
+}
+
+/** Meldingen: one's own choices of what to hear about and how (23-10-2026). */
+export async function saveNotifications(input: unknown): Promise<{ ok: true } | Extract<CleanPrefs, { ok: false }>> {
+  await requireSignedIn();
+  await denyFillerAccess();
+  const { locale } = await getI18n();
+  const result = await saveNotificationSettings(input, locale);
+  if (!result.ok) return result;
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+/** "Stuur een test": one message now, on the channels chosen. */
+export async function testNotifications() {
+  await requireSignedIn();
+  await denyFillerAccess();
+  const result = await sendTestNotification();
+  revalidatePath("/settings");
+  return result;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Bell, BellOff } from "lucide-react";
 import { Avatar } from "@/components/list-row";
 import { Button } from "@/components/ui/button";
@@ -19,8 +20,9 @@ function toBytes(base64: string) {
  * Turns this browser into a device Vendly may reach. Nothing is sent from
  * here; it only hands over the address the browser vends.
  */
-export function NotifyToggle({ publicKey }: { publicKey: string }) {
+export function NotifyToggle({ publicKey, known }: { publicKey: string; known: number }) {
   const { m } = useI18n();
+  const router = useRouter();
   const [state, setState] = useState<"unknown" | "off" | "on" | "blocked" | "unsupported" | "ios">("unknown");
   const [isPending, startTransition] = useTransition();
 
@@ -36,8 +38,20 @@ export function NotifyToggle({ publicKey }: { publicKey: string }) {
     navigator.serviceWorker
       .register("/sw.js")
       .then((reg) => reg.pushManager.getSubscription())
-      .then((sub) => setState(sub ? "on" : "off"))
+      .then((sub) => {
+        setState(sub ? "on" : "off");
+        // A device switched on before it was known whose it is (23-10-2026): tied to this person now, so their own
+        // choices in Meldingen reach it.
+        if (sub && known === 0) {
+          const json = sub.toJSON();
+          void rememberDevice({ endpoint: sub.endpoint, p256dh: json.keys?.p256dh ?? "", auth: json.keys?.auth ?? "", label: navigator.userAgent.slice(0, 80) })
+            .then(() => router.refresh())
+            .catch(() => undefined);
+        }
+      })
       .catch(() => setState("unsupported"));
+    // Once, on arrival: the count only says whether this person had a device yet.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function turnOn() {
@@ -59,6 +73,7 @@ export function NotifyToggle({ publicKey }: { publicKey: string }) {
           label: navigator.userAgent.slice(0, 80),
         });
         setState("on");
+        router.refresh();
       } catch {
         setState("off");
       }
@@ -75,6 +90,7 @@ export function NotifyToggle({ publicKey }: { publicKey: string }) {
           await sub.unsubscribe();
         }
         setState("off");
+        router.refresh();
       } catch {
         setState("on");
       }

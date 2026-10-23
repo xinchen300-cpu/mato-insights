@@ -584,3 +584,22 @@ import { stopChanges } from "../src/lib/refill-flow.ts";
   ok("buying: too few, and no sales (a demo)", buying({ ...camera, visits: 20 }).state === "tooFew" && buying({ ...camera, sales: null }).state === "none");
   ok("check: detection off, nobody today, fine", cameraCheck(["vehicle"], camera) === "detectionOff" && cameraCheck(["person"], { events_24h: 0 }) === "nothingToday" && cameraCheck(null, camera) === "fine");
 }
+
+// Instellingen → Meldingen (23-10-2026): what is stored is only what the sender understands.
+import { channelsInUse, cleanPrefs, normalizeEmail, normalizePhone, NOTIFY_DEFAULTS } from "../src/lib/notify-prefs.ts";
+{
+  ok("phone: a Belgian mobile as typed", normalizePhone("0470 12 34 56") === "+32470123456" && normalizePhone("0032 470/12.34.56") === "+32470123456");
+  ok("phone: international stays, empty is none, nonsense is refused", normalizePhone("+31 6 12345678") === "+31612345678" && normalizePhone("  ") === null && normalizePhone("12ab") === false);
+  ok("email: trimmed and lower case, nonsense refused", normalizeEmail(" Xin@Example.BE ") === "xin@example.be" && normalizeEmail("") === null && normalizeEmail("xin@") === false);
+  const base = { ...NOTIFY_DEFAULTS, email: "a@b.be", phone: "" };
+  const clean = cleanPrefs({ ...base, topics: { daily: ["push", "email", "fax"], sales: "push", errors: ["push"] } });
+  ok("prefs: unknown channels and topics dropped, order kept", clean.ok && clean.prefs.topics.daily.join() === "push,email" && clean.prefs.topics.sales.length === 0 && clean.prefs.topics.weekly.length === 0);
+  const smsOnly = cleanPrefs({ ...base, topics: { errors: ["sms"] } });
+  ok("prefs: sms needs a number", !smsOnly.ok && smsOnly.reason === "phoneMissing");
+  const mailOnly = cleanPrefs({ ...base, email: "", topics: { daily: ["email"] } });
+  ok("prefs: mail needs an address", !mailOnly.ok && mailOnly.reason === "emailMissing");
+  const odd = cleanPrefs({ ...base, dailyHour: 25, quietFrom: -1, quietTo: 6.5, lowPercent: 33, quiet: "yes" });
+  ok("prefs: hours and limit fall back, quiet only when true", odd.ok && odd.prefs.dailyHour === 20 && odd.prefs.quietFrom === 22 && odd.prefs.quietTo === 7 && odd.prefs.lowPercent === 25 && odd.prefs.quiet === false);
+  ok("prefs: channels in use", channelsInUse({ daily: ["push"], weekly: ["email"], sales: [], errors: ["push"], low_stock: [] }).join() === "push,email");
+  ok("prefs: nothing usable is still a valid, quiet choice", cleanPrefs(null).ok);
+}

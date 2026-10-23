@@ -1,11 +1,14 @@
 import { headers } from "next/headers";
-import { CalendarClock, ChevronDown, CircleAlert, Clock, KeyRound, LayoutTemplate, Nfc, PlugZap, Plus, Store, Trash2, Users } from "lucide-react";
+import { CalendarClock, ChevronDown, CircleAlert, Clock, KeyRound, LayoutTemplate, LockKeyhole, Nfc, PlugZap, Plus, Store, Trash2, Users } from "lucide-react";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { PageHeader, Section } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getBusinesses, getLayoutTemplates, getMachines, getShelfLifePresets, getTeam } from "@/lib/data";
+import { getBusinesses, getLayoutTemplates, getMachines, getNotificationSettings, getShelfLifePresets, getTeam } from "@/lib/data";
+import { FillerAvatar } from "@/components/filler/avatar";
+import { cleanLook } from "@/lib/avatar";
+import { displayName } from "@/lib/people";
 import { mediaUrl } from "@/lib/media";
 import { billingAllows, getBilling, paymentsEnabled } from "@/lib/billing";
 import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
@@ -14,12 +17,13 @@ import { createClient } from "@/lib/supabase/server";
 import { PayterForm, RemovePayterAccount } from "./payter-form";
 import { deleteTemplate } from "./actions";
 import { CostForm } from "./cost-form";
-import { NotifyToggle } from "./notify-toggle";
+import { Appearance } from "./appearance";
+import { NotificationSettings } from "./notification-settings";
+import { PasswordForm } from "./password-form";
 import { ShelfLifePresets } from "./shelf-life-presets";
 import { SubscriptionPanel } from "./subscription-panel";
 import { TeamPanel } from "./team-panel";
 import { AccountKind } from "./account-kind";
-import { LanguageToggle } from "@/components/shell/language-toggle";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -38,7 +42,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   // and who is in the team (the operator's to see and change). The vendor has
   // no subscription; it is read alongside and simply not shown. Of the syncs
   // only the last failure matters: Payter is asked every 15 seconds anyway.
-  const [{ data: org }, { data: credentials }, { data: errors }, templates, businesses, machines, presets, ownBilling, team, { data: extraLogins }] =
+  const [{ data: org }, { data: credentials }, { data: errors }, templates, businesses, machines, presets, ownBilling, team, { data: extraLogins }, notifications] =
     orgId
       ? await Promise.all([
           admin
@@ -63,8 +67,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           operator ? getTeam(orgId) : Promise.resolve(null),
           // Further Payter accounts of this business (22-10-2026), each synced on its own.
           admin.from("payter_extra_logins").select("id, domain, serials, last_synced_at").eq("org_id", orgId).order("created_at"),
+          // One's own notifications (23-10-2026): what to hear about, and how.
+          getNotificationSettings(),
         ])
-      : [{ data: null }, { data: null }, { data: null }, [], [], [], [], null, null, { data: null }];
+      : [{ data: null }, { data: null }, { data: null }, [], [], [], [], null, null, { data: null }, null];
   const vendor = org;
 
   const ownTemplates = templates.filter((t) => t.org_id);
@@ -93,6 +99,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const {
     data: { user },
   } = await (await createClient()).auth.getUser();
+  const look = user ? cleanLook(user.user_metadata?.avatar) : null;
   const requestHeaders = await headers();
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
   const signupUrl = `${requestHeaders.get("x-forwarded-proto") ?? "https"}://${host}/signup`;
@@ -104,10 +111,38 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
   return (
     <div className="max-w-2xl">
-      <PageHeader title={m.settings.title} actions={<LanguageToggle />} />
+      <PageHeader title={m.settings.title} />
 
-      {/* What you need most often first, what you rarely change last. */}
+      {/* What you need most often first, what you rarely change last: one's own settings, then the business's. */}
       <div className="flex flex-col gap-9 sm:gap-10">
+        {user && (
+          <RowList>
+            <li>
+              <ListRow
+                href="/profile"
+                leading={
+                  <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-primary/12 text-[14px] font-bold uppercase">
+                    {look ? <FillerAvatar look={look} className="size-full" /> : initial(displayName(user) ?? "?")}
+                  </span>
+                }
+                title={displayName(user) ?? user.email ?? ""}
+                subtitle={m.prefs.profileHint}
+                chevron
+              />
+            </li>
+          </RowList>
+        )}
+
+        <Section title={m.prefs.display}>
+          <Appearance />
+        </Section>
+
+        {notifications && (
+          <Section title={m.prefs.notifications} hint={m.prefs.notificationsHint}>
+            <NotificationSettings settings={notifications} shop={!operator} pushKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY} />
+          </Section>
+        )}
+
         {billing && (
           <SubscriptionPanel
             planId={billing.plan?.id ?? null}
@@ -232,16 +267,6 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             </div>
           </Section>
         )}
-
-        <Section title={m.settings.notifyTitle} hint={m.settings.notifyHint}>
-          <div className="surface-card p-2">
-            {process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ? (
-              <NotifyToggle publicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY} />
-            ) : (
-              <p className="px-3 py-3 text-[14px] text-muted-foreground">{m.settings.notifyUnsupported}</p>
-            )}
-          </div>
-        </Section>
 
         {/* The refill settings, each one row with its value; tap to change it. */}
         {operator && (
@@ -371,6 +396,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <AccountKind rents={rents} />
           </Section>
         )}
+
+        <Section title={m.prefs.account}>
+          <div className="surface-card flex flex-col p-2">
+            <Fold icon={<LockKeyhole />} title={m.prefs.password} value={m.prefs.passwordHint}>
+              <PasswordForm />
+            </Fold>
+          </div>
+        </Section>
       </div>
     </div>
   );
