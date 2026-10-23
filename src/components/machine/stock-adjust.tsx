@@ -12,7 +12,6 @@ import { useI18n } from "@/i18n/client";
 import { plural } from "@/i18n/format";
 import { haptic } from "@/lib/haptics";
 import { toFrontRows } from "@/lib/layout";
-import type { TerminalStatus } from "@/lib/terminal-status";
 import type { SlotStock } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { correctStock } from "@/app/(app)/refill/actions";
@@ -30,20 +29,18 @@ const TOAST_MS = 2000;
  * to the refill page (Xin, 21-10-2026): `embedded` gives that page's own picture
  * of the slots while not adjusting, the button's label and the buttons beside it.
  *
- * With `cabinet` the slots on the refill page stand in the machine itself (Xin, 23-10-2026: "that it makes you feel like
- * you are refilling an automaat"; for now only where it is switched on), its card reader lit by the terminal's status.
+ * With `cabinet` the slots on the refill page stand behind the machine's glass (Xin, 23-10-2026: "that it makes you feel
+ * like you are refilling an automaat"; for now only where it is switched on).
  */
 export function StockAdjust({
   machineId,
   slots,
   embedded,
-  terminal,
   cabinet = false,
 }: {
   machineId: string;
   slots: SlotStock[];
   embedded?: { idle: React.ReactNode; label: string; actions?: React.ReactNode };
-  terminal?: TerminalStatus;
   cabinet?: boolean;
 }) {
   const { m } = useI18n();
@@ -160,7 +157,7 @@ export function StockAdjust({
   const picture = (
     <>
       {cabinet && !embedded ? (
-        <CabinetView rows={rows} roomy={editing} renderSlotFooter={editing ? footer : undefined} terminal={terminal} />
+        <CabinetView rows={rows} roomy={editing} renderSlotFooter={editing ? footer : undefined} />
       ) : (
         <FrontView rows={rows} roomy={editing} renderSlotFooter={editing ? footer : undefined} />
       )}

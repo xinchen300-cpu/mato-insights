@@ -130,7 +130,7 @@ export default async function FillMachinePage({
             <p className="px-1 text-sm text-muted-foreground">{m.machines.noLayoutHint}</p>
           </Section>
         ) : (
-          <StockAdjust machineId={id} slots={stocked} terminal={status} cabinet={cabinet} />
+          <StockAdjust machineId={id} slots={stocked} cabinet={cabinet} />
         )}
 
         {/* The layout itself, simply: a product per slot, the numbers, how many slots a row has (Xin, 17-10-2026). */}

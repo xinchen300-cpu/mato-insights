@@ -219,7 +219,6 @@ export const nl: Messages = {
     legendLow: "Bijna leeg",
     legendEmpty: "Leeg",
     legendUnknown: "Niet geteld",
-    cabinetPull: "TREKKEN",
     shelfDays: "{n} d",
     shelfToday: "vandaag",
     shelfTomorrow: "morgen",

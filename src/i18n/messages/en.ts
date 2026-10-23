@@ -219,7 +219,6 @@ export const en = {
     legendLow: "Low",
     legendEmpty: "Empty",
     legendUnknown: "Not counted",
-    cabinetPull: "PULL",
     shelfDays: "{n} d",
     shelfToday: "today",
     shelfTomorrow: "tomorrow",
