@@ -1484,7 +1484,6 @@ export const fr: Messages = {
     notificationsHint: "Ce dont vous voulez être informé, et comment. Votre choix, rien que pour vous.",
     where: "Où",
     pushHere: "Notifications push",
-    devicesNone: "Aucun appareil ne reçoit encore vos notifications push.",
     devicesOne: "1 appareil reçoit vos notifications push.",
     devices: "{n} appareils reçoivent vos notifications push.",
     email: "E-mail",
