@@ -79,7 +79,7 @@ export default async function MachineModelPage({ params }: { params: Promise<{ i
               <p className="text-[17px] font-semibold tracking-[-0.01em]">{t.unknownTitle}</p>
               <p className="text-[14px] leading-relaxed text-muted-foreground">{operator ? t.unknownBody : t.unknownBodyShop}</p>
               {operator && (
-                <Link href={`/machines/${machine.id}`} className={buttonVariants({ variant: "outline", className: "mt-2 self-start" })}>
+                <Link href={`/machines/${machine.id}`} className={buttonVariants({ variant: "secondary", className: "mt-2 self-start" })}>
                   {t.toSettings}
                 </Link>
               )}
@@ -239,7 +239,7 @@ export default async function MachineModelPage({ params }: { params: Promise<{ i
             <p className="text-[15px] font-semibold tracking-[-0.01em]">{t.questions}</p>
             <p className="mt-0.5 text-[13.5px] leading-snug text-muted-foreground">{t.questionsBody}</p>
           </div>
-          <a href="mailto:info@matoautomaat.be" className={buttonVariants({ variant: "outline", className: "self-start sm:self-center" })}>
+          <a href="mailto:info@matoautomaat.be" className={buttonVariants({ variant: "secondary", className: "self-start sm:self-center" })}>
             info@matoautomaat.be
           </a>
         </div>
