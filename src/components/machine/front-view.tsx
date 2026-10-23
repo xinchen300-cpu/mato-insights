@@ -23,7 +23,8 @@ export type FrontSlot = {
 // Distinct from the green/red stock levels, so ownership never reads as stock.
 export const OWNER_TONES = ["var(--chart-1)", "var(--foreground)", "var(--chart-5)", "var(--chart-2)"];
 
-const grow: Record<SlotSize, number> = { small: 1, ice: 0.8, large: 1.35, wide: 2 };
+/** How much room a slot takes beside the others in its row; the cabinet on the refill page uses the same. */
+export const SLOT_GROW: Record<SlotSize, number> = { small: 1, ice: 0.8, large: 1.35, wide: 2 };
 
 // The machine seen from the front: rows top to bottom, slots left to right.
 // Shared by the machine page, the layout builder and the refill screens.
@@ -64,7 +65,7 @@ export function FrontView({
                   lockedKeys?.includes(slot.key) && "opacity-60",
                   selectedKey === slot.key && "outline-2 outline-offset-1 outline-primary",
                 );
-                const style = { flexGrow: grow[slot.size], flexBasis: 0 };
+                const style = { flexGrow: SLOT_GROW[slot.size], flexBasis: 0 };
                 const content = (
                   <>
                     {slot.ownerTone && <div className="h-[3px]" style={{ background: slot.ownerTone }} />}

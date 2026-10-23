@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CircleCheck, Minus, PackagePlus, Plus, SlidersHorizontal } from "lucide-react";
+import { CabinetView } from "@/components/machine/cabinet";
 import { FrontView, StockLegend, type FrontSlot } from "@/components/machine/front-view";
 import { SavedCheck } from "@/components/saved-check";
 import { Section } from "@/components/page-header";
@@ -11,6 +12,7 @@ import { useI18n } from "@/i18n/client";
 import { plural } from "@/i18n/format";
 import { haptic } from "@/lib/haptics";
 import { toFrontRows } from "@/lib/layout";
+import type { TerminalStatus } from "@/lib/terminal-status";
 import type { SlotStock } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { correctStock } from "@/app/(app)/refill/actions";
@@ -27,15 +29,20 @@ const TOAST_MS = 2000;
  * On the machine's own page the owner adjusts right there, without being sent
  * to the refill page (Xin, 21-10-2026): `embedded` gives that page's own picture
  * of the slots while not adjusting, the button's label and the buttons beside it.
+ *
+ * On the refill page the slots stand in the machine itself (Xin, 23-10-2026: "that it makes you feel like you are
+ * refilling an automaat"), its card reader lit by the terminal's own status.
  */
 export function StockAdjust({
   machineId,
   slots,
   embedded,
+  terminal,
 }: {
   machineId: string;
   slots: SlotStock[];
   embedded?: { idle: React.ReactNode; label: string; actions?: React.ReactNode };
+  terminal?: TerminalStatus;
 }) {
   const { m } = useI18n();
   const router = useRouter();
@@ -150,7 +157,11 @@ export function StockAdjust({
 
   const picture = (
     <>
-      <FrontView rows={rows} roomy={editing} renderSlotFooter={editing ? footer : undefined} />
+      {embedded ? (
+        <FrontView rows={rows} roomy={editing} renderSlotFooter={editing ? footer : undefined} />
+      ) : (
+        <CabinetView rows={rows} roomy={editing} renderSlotFooter={editing ? footer : undefined} terminal={terminal} />
+      )}
       <StockLegend
         labels={{
           full: m.machines.legendFull,
