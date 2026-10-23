@@ -1632,6 +1632,18 @@ export const nl: Messages = {
       },
     },
   },
+  help: {
+    title: "Hulp en contact",
+    hint: "Een vraag, een automaat die niet doet wat hij moet, of iets in deze app? Je komt rechtstreeks bij MATO terecht.",
+    mail: "Mail ons",
+    mailSubject: "Vraag van {org}",
+    mailBody: "Account: {email}",
+    call: "Bel ons",
+    visit: "Kom langs",
+    visitValue: "IJzerlaan 13, 8600 Diksmuide",
+    website: "Contactformulier",
+    websiteValue: "matoautomaat.be/contact",
+  },
   prefs: {
     profileHint: "Naam, foto en account",
     display: "Weergave",

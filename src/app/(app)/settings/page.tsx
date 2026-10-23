@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { CalendarClock, ChevronDown, CircleAlert, Clock, KeyRound, LayoutTemplate, LockKeyhole, Nfc, PlugZap, Plus, Store, Trash2, Users } from "lucide-react";
+import { CalendarClock, ChevronDown, CircleAlert, Clock, Globe, KeyRound, LayoutTemplate, LockKeyhole, Mail, MapPin, Nfc, Phone, PlugZap, Plus, Store, Trash2, Users } from "lucide-react";
 import { Avatar, ListRow, RowList, initial } from "@/components/list-row";
 import { PageHeader, Section } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,8 @@ import { cleanLook } from "@/lib/avatar";
 import { displayName } from "@/lib/people";
 import { mediaUrl } from "@/lib/media";
 import { billingAllows, getBilling, paymentsEnabled } from "@/lib/billing";
+import { MATO_CONTACT_URL, MATO_EMAIL, MATO_MAP_URL, mailToMato } from "@/lib/contact";
+import { SUPPORT_PHONE } from "@/lib/plans";
 import { denyFiller, getCurrentOrgId, isOperator } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -50,7 +52,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       ? await Promise.all([
           admin
             .from("organizations")
-            .select("is_vendor, is_demo, cost_per_hour, cost_per_km, first_charge_on, rents_to_businesses")
+            .select("name, is_vendor, is_demo, cost_per_hour, cost_per_km, first_charge_on, rents_to_businesses")
             .eq("id", orgId)
             .maybeSingle(),
           admin.from("payter_credentials").select("last_synced_at").eq("org_id", orgId).maybeSingle(),
@@ -431,8 +433,54 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             </div>
           </Section>
         )}
+
+        {/* Help and contact (Xin, 24-10-2026: "hulp of contact … dat ze bij mato terechtkomen"): straight to MATO. */}
+        {personal && (
+          <Section title={m.help.title} hint={m.help.hint}>
+            <RowList>
+              <ContactRow
+                href={mailToMato(fmt(m.help.mailSubject, { org: (org?.name as string | null) ?? "" }), fmt(m.help.mailBody, { email: user?.email ?? "" }))}
+                icon={<Mail />}
+                title={m.help.mail}
+                subtitle={MATO_EMAIL}
+              />
+              {SUPPORT_PHONE && (
+                <ContactRow href={`tel:${SUPPORT_PHONE.replace(/\s/g, "")}`} icon={<Phone />} title={m.help.call} subtitle={SUPPORT_PHONE} />
+              )}
+              <ContactRow href={MATO_MAP_URL} external icon={<MapPin />} title={m.help.visit} subtitle={m.help.visitValue} />
+              <ContactRow href={MATO_CONTACT_URL} external icon={<Globe />} title={m.help.website} subtitle={m.help.websiteValue} />
+            </RowList>
+          </Section>
+        )}
       </div>
     </div>
+  );
+}
+
+/** A way to reach MATO, as a row: mail and phone open their app, a web page opens beside MATO Info. */
+function ContactRow({
+  href,
+  icon,
+  title,
+  subtitle,
+  external = false,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  external?: boolean;
+}) {
+  return (
+    <li>
+      <a
+        href={href}
+        {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
+        className="hover-surface block rounded-xl transition-transform duration-150 active:scale-[0.99]"
+      >
+        <ListRow leading={<Avatar>{icon}</Avatar>} title={title} subtitle={subtitle} chevron />
+      </a>
+    </li>
   );
 }
 

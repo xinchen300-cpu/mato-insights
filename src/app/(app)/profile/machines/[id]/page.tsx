@@ -7,6 +7,7 @@ import { PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { fmt } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
+import { MATO_EMAIL } from "@/lib/contact";
 import { getMachineAbout } from "@/lib/data";
 import { MODEL_FEATURES, MODEL_SHEETS, asMachineModel } from "@/lib/machine-models";
 import { denyFiller, hasPersonalSettings, isOperator } from "@/lib/org";
@@ -239,8 +240,8 @@ export default async function MachineModelPage({ params }: { params: Promise<{ i
             <p className="text-[15px] font-semibold tracking-[-0.01em]">{t.questions}</p>
             <p className="mt-0.5 text-[13.5px] leading-snug text-muted-foreground">{t.questionsBody}</p>
           </div>
-          <a href="mailto:info@matoautomaat.be" className={buttonVariants({ variant: "secondary", className: "self-start sm:self-center" })}>
-            info@matoautomaat.be
+          <a href={`mailto:${MATO_EMAIL}`} className={buttonVariants({ variant: "secondary", className: "self-start sm:self-center" })}>
+            {MATO_EMAIL}
           </a>
         </div>
       </div>
