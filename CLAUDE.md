@@ -40,7 +40,7 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   overzicht zonder meldingen, de camera onder Net verkocht, de statistieken per maand en automaat, en een ronde die
   pas telt als hij af is, het groene vinkje na Voorraad aanpassen en het donkere thema, zie hieronder); sinds de avond van 21-10
   @ 2da6284 ook de export voor de boekhouding, Alles samen op de vullijst, Profiel, de kaart en de eigen merknaam (zie
-  "Export, vullijst, profiel en kaart"); sinds 22-10 @ a448514 de vullijst per automaat met Automaat hervuld en Terug; sinds de middag van 22-10 @ d0008cf het snellere laden op de gsm (zie "Snelheid op de gsm"); sinds 22-10 @ 0394c8a het volledig scherm van de camera dat het hele scherm vult (zonder de cameratak `cloud/camera-photo-speed`, die nog niet live is); sinds 22-10 @ 607fe6d de app-cache v4 (zie "De app-cache"); sinds 22-10 @ 0fb11a6 meer Payter-accounts per organisatie (zie "Payter"); sinds 22-10 @ 25ffe19 de Payter-hulpteksten zonder "vak met het huisje". Sinds 23-10 @ de6af25 de automaat op de vulpagina, alleen voor de MATO Sales Test Account (zie "De automaat op de vulpagina"). Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
+  "Export, vullijst, profiel en kaart"); sinds 22-10 @ a448514 de vullijst per automaat met Automaat hervuld en Terug; sinds de middag van 22-10 @ d0008cf het snellere laden op de gsm (zie "Snelheid op de gsm"); sinds 22-10 @ 0394c8a het volledig scherm van de camera dat het hele scherm vult (zonder de cameratak `cloud/camera-photo-speed`, die nog niet live is); sinds 22-10 @ 607fe6d de app-cache v4 (zie "De app-cache"); sinds 22-10 @ 0fb11a6 meer Payter-accounts per organisatie (zie "Payter"); sinds 22-10 @ 25ffe19 de Payter-hulpteksten zonder "vak met het huisje". Sinds 23-10 @ 1e69266 de code voor de automaat op de vulpagina, nergens aangezet (zie "De automaat op de vulpagina"). Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
 
@@ -527,7 +527,7 @@ ronde". **Terug** (Xin: "er moet ook een knop zijn met terug") naast Automaat he
 vinkjes (ook na herladen; onder de knop dan "x van y stuks aangevinkt"). Getest op Brugge Station van het demo-account:
 87 % → 90 %, 4 vakken, 10 stuks.
 
-## De automaat op de vulpagina (23-10-2026, live alleen voor de MATO Sales Test Account)
+## De automaat op de vulpagina (23-10-2026, uitgezet: nergens meer aan)
 Xin, met een foto van een zwarte MATO-automaat: "in stead of a blank refill layout … a layout like this automaat, that it makes
 you feel like you are refilling an automaat". Op `/refill/machines/[id]` (Alus via Automaten, de uitbater via Bijvullen) staat
 Voorraad per vak dan in **`CabinetView`** (`src/components/machine/cabinet.tsx`, via `StockAdjust cabinet` zonder `embedded`;
@@ -541,6 +541,9 @@ schermpje, toetsen, kaartlezer) en de lade TREKKEN; het glas krijgt de hele bree
 **Alleen waar `organizations.refill_cabinet` aan staat** (toevoegend, standaard uit; Xin: "put it live for mato test
 account"): nu enkel de MATO Sales Test Account, niet de andere demo's (Bakkerij De Graanschuur, Lotus Garden), niet Chens of
 Alus. `hasRefillCabinet` in data.ts. Voor iedereen = die kolom aanzetten, of de voorwaarde weghalen.
+**Diezelfde dag weer uit** (Xin: "I dont like it, you can put back to previous white version"): `refill_cabinet` staat
+voor geen enkele organisatie nog aan, dus iedereen ziet weer de witte `FrontView`. De code bleef (live @ 1e69266) en doet niets
+zolang de kolom uit staat.
 
 ## Snelheid op de gsm (22-10-2026)
 Xin: "the mobile version is slow and not responsive". Gemeten op live (demo-account, gsm 4× trager, 4G): elke pagina laadde
