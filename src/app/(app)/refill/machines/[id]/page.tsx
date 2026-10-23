@@ -7,7 +7,7 @@ import { PageHeader, Section } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
-import { getDishes, getLastSales, getMachines, getMachineStock, getOpenRounds, getRefillPlan } from "@/lib/data";
+import { getDishes, getLastSales, getMachines, getMachineStock, getOpenRounds, getRefillPlan, hasRefillCabinet } from "@/lib/data";
 import { requireRefillAccess } from "@/lib/org";
 import { lineTake } from "@/lib/refill-flow";
 import { filledOnOpenRound, heldByOpenRound } from "@/lib/refill-start";
@@ -42,7 +42,7 @@ export default async function FillMachinePage({
   const fromMachine = from === "machine";
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const { m, f } = await getI18n();
-  const [machines, slots, lastSales, open, dishes, plan] = await Promise.all([
+  const [machines, slots, lastSales, open, dishes, plan, cabinet] = await Promise.all([
     getMachines(orgId),
     getMachineStock(orgId, [id]),
     getLastSales(orgId),
@@ -51,6 +51,8 @@ export default async function FillMachinePage({
     getDishes(orgId, id).catch(() => null),
     // What it misses, as the vullijst and a round count it.
     getRefillPlan(orgId, [id]),
+    // The slots in the machine itself, where that is switched on (23-10-2026).
+    hasRefillCabinet(orgId),
   ]);
   const machine = machines.find((candidate) => candidate.id === id);
   if (!machine) notFound();
@@ -128,7 +130,7 @@ export default async function FillMachinePage({
             <p className="px-1 text-sm text-muted-foreground">{m.machines.noLayoutHint}</p>
           </Section>
         ) : (
-          <StockAdjust machineId={id} slots={stocked} terminal={status} />
+          <StockAdjust machineId={id} slots={stocked} terminal={status} cabinet={cabinet} />
         )}
 
         {/* The layout itself, simply: a product per slot, the numbers, how many slots a row has (Xin, 17-10-2026). */}

@@ -1184,6 +1184,17 @@ export async function getAccountFacts(orgId: string): Promise<{ orgName: string 
   return { orgName: (org.data?.name as string | null) ?? null, isDemo: Boolean(org.data?.is_demo), teamSize: members?.count ?? null };
 }
 
+/**
+ * Whether the refill page shows the slots in the machine itself (23-10-2026): only where it is switched on
+ * (`organizations.refill_cabinet`, Xin: the MATO Sales Test Account). False when it cannot be read, so the page never
+ * breaks on it.
+ */
+export async function hasRefillCabinet(orgId: string): Promise<boolean> {
+  if ((await getScope()).orgId !== orgId) return false;
+  const { data } = await createAdminClient().from("organizations").select("refill_cabinet").eq("id", orgId).maybeSingle();
+  return data?.refill_cabinet === true;
+}
+
 /** `adjusted`: stock added through Voorraad aanpassen rather than on a round (21-10-2026). */
 export type RefillVisit = { machineId: string; at: string; pieces: number; by: string | null; adjusted: boolean };
 

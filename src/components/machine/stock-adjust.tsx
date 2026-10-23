@@ -30,19 +30,21 @@ const TOAST_MS = 2000;
  * to the refill page (Xin, 21-10-2026): `embedded` gives that page's own picture
  * of the slots while not adjusting, the button's label and the buttons beside it.
  *
- * On the refill page the slots stand in the machine itself (Xin, 23-10-2026: "that it makes you feel like you are
- * refilling an automaat"), its card reader lit by the terminal's own status.
+ * With `cabinet` the slots on the refill page stand in the machine itself (Xin, 23-10-2026: "that it makes you feel like
+ * you are refilling an automaat"; for now only where it is switched on), its card reader lit by the terminal's status.
  */
 export function StockAdjust({
   machineId,
   slots,
   embedded,
   terminal,
+  cabinet = false,
 }: {
   machineId: string;
   slots: SlotStock[];
   embedded?: { idle: React.ReactNode; label: string; actions?: React.ReactNode };
   terminal?: TerminalStatus;
+  cabinet?: boolean;
 }) {
   const { m } = useI18n();
   const router = useRouter();
@@ -157,10 +159,10 @@ export function StockAdjust({
 
   const picture = (
     <>
-      {embedded ? (
-        <FrontView rows={rows} roomy={editing} renderSlotFooter={editing ? footer : undefined} />
-      ) : (
+      {cabinet && !embedded ? (
         <CabinetView rows={rows} roomy={editing} renderSlotFooter={editing ? footer : undefined} terminal={terminal} />
+      ) : (
+        <FrontView rows={rows} roomy={editing} renderSlotFooter={editing ? footer : undefined} />
       )}
       <StockLegend
         labels={{
