@@ -1204,8 +1204,6 @@ export type NotificationSettings = {
   /** Whether this person saved choices of their own; before that the defaults are what they get. */
   chosen: boolean;
   loginEmail: string | null;
-  /** Their devices that take push messages, in this organisation. */
-  devices: number;
   /** Which channels MATO Info can send on now: mail and sms need a provider's keys. */
   ready: Record<NotifyChannel, boolean>;
   recent: SentNotification[];
@@ -1213,7 +1211,6 @@ export type NotificationSettings = {
 
 /** The keys a channel needs before anything goes out on it (read by supabase/functions/vendly-alerts). */
 const CHANNEL_KEYS: Record<NotifyChannel, string[]> = {
-  push: ["vapid_public", "vapid_private"],
   email: ["resend_api_key", "mail_from"],
   sms: ["twilio_sid", "twilio_token", "twilio_from"],
 };
@@ -1238,7 +1235,7 @@ export async function getNotificationSettings(): Promise<NotificationSettings | 
   if (!orgId) throw new Error("Not found");
   if (!(await personalSettingsOn(orgId))) return null;
   const admin = createAdminClient();
-  const [{ data: row }, { data: recent }, { count }, { data: keys }] = await Promise.all([
+  const [{ data: row }, { data: recent }, { data: keys }] = await Promise.all([
     admin.from("notification_prefs").select("*").eq("user_id", user.id).eq("org_id", orgId).maybeSingle(),
     admin
       .from("notification_log")
@@ -1247,7 +1244,6 @@ export async function getNotificationSettings(): Promise<NotificationSettings | 
       .eq("org_id", orgId)
       .order("created_at", { ascending: false })
       .limit(5),
-    admin.from("push_subscriptions").select("endpoint", { count: "exact", head: true }).eq("user_id", user.id).eq("org_id", orgId),
     // Only whether a key is there; its value never leaves the database here.
     admin.from("app_keys").select("name").in("name", Object.values(CHANNEL_KEYS).flat()),
   ]);
@@ -1259,7 +1255,10 @@ export async function getNotificationSettings(): Promise<NotificationSettings | 
     ? {
         email: (row.email as string | null) ?? null,
         phone: (row.phone as string | null) ?? null,
-        topics: Object.fromEntries(NOTIFY_TOPICS.map((topic) => [topic, (row[topic] as NotifyChannel[] | null) ?? []])) as NotifyPrefs["topics"],
+        // Only the channels there are now: a push chosen before 23-10-2026 is no longer one.
+        topics: Object.fromEntries(
+          NOTIFY_TOPICS.map((topic) => [topic, NOTIFY_CHANNELS.filter((channel) => ((row[topic] as string[] | null) ?? []).includes(channel))]),
+        ) as NotifyPrefs["topics"],
         dailyHour: Number(row.daily_hour),
         lowPercent: Number(row.low_percent),
         quiet: Boolean(row.quiet),
@@ -1271,7 +1270,6 @@ export async function getNotificationSettings(): Promise<NotificationSettings | 
     prefs,
     chosen: Boolean(row),
     loginEmail: user.email ?? null,
-    devices: count ?? 0,
     ready,
     recent: (recent ?? []).map((r) => ({
       id: r.id as string,
@@ -1363,8 +1361,30 @@ export async function sendTestNotification(): Promise<{ ok: true; sent: SentNoti
   return { ok: true, sent };
 }
 
+/**
+ * "Bekijk de e-mail": the day's overview exactly as it would arrive by email, built by the same sender (vendly-alerts)
+ * from this person's own choices and figures; nothing is sent. Null when it cannot be made now.
+ */
+export async function getEmailPreview(): Promise<{ subject: string; html: string } | null> {
+  const user = await requireSignedIn();
+  await denyFillerAccess();
+  const { orgId } = await getScope();
+  if (!orgId || !(await personalSettingsOn(orgId))) throw new Error("Not found");
+  const { data: secret } = await createAdminClient().from("app_keys").select("value").eq("name", "notify_secret").maybeSingle();
+  if (!secret?.value) return null;
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/vendly-alerts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-notify-secret": secret.value as string },
+    body: JSON.stringify({ preview: { user_id: user.id, org_id: orgId } }),
+    cache: "no-store",
+  }).catch(() => null);
+  if (!response?.ok) return null;
+  const preview = (await response.json()) as { subject?: string; html?: string };
+  return preview.subject && preview.html ? { subject: preview.subject, html: preview.html } : null;
+}
+
 /** `adjusted`: stock added through Voorraad aanpassen rather than on a round (21-10-2026). */
-export type RefillVisit ={ machineId: string; at: string; pieces: number; by: string | null; adjusted: boolean };
+export type RefillVisit = { machineId: string; at: string; pieces: number; by: string | null; adjusted: boolean };
 
 /**
  * Every time a machine was filled between two moments: when, how many pieces

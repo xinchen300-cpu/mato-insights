@@ -1,17 +1,18 @@
 // Instellingen → Meldingen (23-10-2026, Xin: "put notifications on and send them on email or sms and also filter what
-// they notifications about such as one time per day a overview or every sale or if error"). Runs every minute
-// (pg_cron) and tells each person what they asked for, on the channels they chose per topic: push to their own
-// devices, e-mail (Resend: resend_api_key and mail_from in app_keys) and sms (Twilio: twilio_sid, twilio_token and
-// twilio_from). Without those keys a channel is skipped and the log says why: nothing pretends to be sent.
+// they notifications about such as one time per day a overview or every sale or if error"; the same day "remove push
+// but focus more on email"). Runs every minute (pg_cron) and tells each person what they asked for, on the channels
+// they chose per topic: email (Resend: resend_api_key and mail_from in app_keys) and sms (Twilio: twilio_sid,
+// twilio_token and twilio_from). Without those keys a channel is skipped and the log says why: nothing pretends to be
+// sent. An email is a full page (the day's money per machine, what sold most, what needs doing); an sms is one line.
 //
 // One problem is one message: a terminal offline, Payter failing and a machine almost empty each open an episode in
 // notification_log and close it when it is over (offline and Payter then say so). A message that reached nobody
-// (quiet hours) opens nothing, so it is told after them if the problem is still there. Sales during quiet hours are
-// skipped, never told in a heap the next morning.
+// (quiet hours, for sms) opens nothing, so it is told after them if the problem is still there. Sales during quiet
+// hours are skipped, never told in a heap the next morning.
 //
-// POST {"test": {"user_id", "org_id"}} sends one test message at once, for "Stuur een test" in Instellingen.
+// POST {"test": {"user_id", "org_id"}} sends the day's overview at once, as a test, for "Stuur een test" in Instellingen.
+// POST {"preview": {"user_id", "org_id"}} only returns that email ({subject, html}), for "Bekijk de e-mail".
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import webpush from "npm:web-push@3.6.7";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -26,8 +27,12 @@ const FRESH_MS = 24 * HOUR;
 const SYNC_DOWN_MS = 15 * MINUTE;
 /** A machine almost empty is told again only once it was filled past the limit plus this. */
 const LOW_MARGIN = 10;
+/** The sales an email lists one by one; more are counted. */
+const SALES_LISTED = 25;
+/** MATO gold, as `--primary` in the app. */
+const GOLD = "#b5862a";
 
-type Channel = "push" | "email" | "sms";
+type Channel = "email" | "sms";
 type Locale = "nl" | "fr" | "en";
 type Prefs = {
   user_id: string;
@@ -36,11 +41,11 @@ type Prefs = {
   locale: Locale;
   email: string | null;
   phone: string | null;
-  daily: Channel[];
-  weekly: Channel[];
-  sales: Channel[];
-  errors: Channel[];
-  low_stock: Channel[];
+  daily: string[];
+  weekly: string[];
+  sales: string[];
+  errors: string[];
+  low_stock: string[];
   daily_hour: number;
   low_percent: number;
   quiet: boolean;
@@ -50,7 +55,12 @@ type Prefs = {
   daily_sent_on: string | null;
   weekly_sent_on: string | null;
 };
-type Message = { kind: string; key?: string | null; title: string; body: string; url: string; tag: string };
+type Line = { name: string; units: number; revenue: number };
+/** What an email shows beyond its title and line: an overview, or the sales one by one. */
+type Detail =
+  | { type: "overview"; revenue: number; units: number; soFar: boolean; machines: Line[]; products: Line[]; todo: string[] | null }
+  | { type: "sales"; rows: { when: string; machine: string; product: string; amount: number }[]; more: number };
+type Message = { kind: string; key?: string | null; title: string; body: string; url: string; detail?: Detail };
 type Outcome = Partial<Record<Channel, string>>;
 type ScopeMachine = {
   machine_id: string;
@@ -89,9 +99,19 @@ const TEXT = {
     failedBody: "In het laatste uur. Kijk of de betaalterminal goed werkt.",
     lowTitle: (m: string) => `${m} is bijna leeg`,
     lowBody: (p: string, limit: string) => `Nog ${p} gevuld, onder je grens van ${limit}.`,
-    testTitle: "Testmelding",
-    testBody: (summary: string) => `Zo komen je meldingen binnen. ${summary}`,
-    why: "Je krijgt dit bericht omdat je het aanzette bij Instellingen → Meldingen.",
+    test: "Test",
+    why: "Je krijgt deze e-mail omdat je hem aanzette bij Instellingen → Meldingen.",
+    adjust: "Meldingen aanpassen",
+    open: (brand: string) => `Open ${brand}`,
+    perMachine: "Per automaat",
+    topProducts: "Meest verkocht",
+    todo: "Wat er te doen is",
+    allGood: "Niets dringends.",
+    soFar: "tot nu",
+    pieces: (n: number) => `${n} st.`,
+    lowItem: (m: string, p: string) => `${m} is nog ${p} gevuld`,
+    offlineItem: (m: string) => `${m}: betaalterminal offline`,
+    more: (n: number) => `en nog ${n}`,
   },
   fr: {
     sales: (n: number) => (n === 1 ? "1 vente" : `${n} ventes`),
@@ -119,9 +139,19 @@ const TEXT = {
     failedBody: "Au cours de la dernière heure. Vérifiez que le terminal de paiement fonctionne.",
     lowTitle: (m: string) => `${m} est presque vide`,
     lowBody: (p: string, limit: string) => `Encore ${p} rempli, sous votre seuil de ${limit}.`,
-    testTitle: "Notification de test",
-    testBody: (summary: string) => `Voici comment vos notifications arrivent. ${summary}`,
-    why: "Vous recevez ce message parce que vous l'avez activé dans Réglages → Notifications.",
+    test: "Test",
+    why: "Vous recevez cet e-mail parce que vous l'avez activé dans Réglages → Notifications.",
+    adjust: "Modifier les notifications",
+    open: (brand: string) => `Ouvrir ${brand}`,
+    perMachine: "Par distributeur",
+    topProducts: "Les plus vendus",
+    todo: "À faire",
+    allGood: "Rien d'urgent.",
+    soFar: "jusqu'à présent",
+    pieces: (n: number) => `${n} pc`,
+    lowItem: (m: string, p: string) => `${m} n'est plus rempli qu'à ${p}`,
+    offlineItem: (m: string) => `${m} : terminal de paiement hors ligne`,
+    more: (n: number) => `et ${n} de plus`,
   },
   en: {
     sales: (n: number) => (n === 1 ? "1 sale" : `${n} sales`),
@@ -148,11 +178,22 @@ const TEXT = {
     failedBody: "In the last hour. Check that the payment terminal works.",
     lowTitle: (m: string) => `${m} is almost empty`,
     lowBody: (p: string, limit: string) => `${p} full, below your limit of ${limit}.`,
-    testTitle: "Test notification",
-    testBody: (summary: string) => `This is how your notifications arrive. ${summary}`,
-    why: "You get this message because you turned it on in Settings → Notifications.",
+    test: "Test",
+    why: "You get this email because you turned it on in Settings → Notifications.",
+    adjust: "Change notifications",
+    open: (brand: string) => `Open ${brand}`,
+    perMachine: "Per machine",
+    topProducts: "Best sellers",
+    todo: "To do",
+    allGood: "Nothing urgent.",
+    soFar: "so far",
+    pieces: (n: number) => `${n} pcs`,
+    lowItem: (m: string, p: string) => `${m} is ${p} full`,
+    offlineItem: (m: string) => `${m}: payment terminal offline`,
+    more: (n: number) => `and ${n} more`,
   },
 };
+type Text = (typeof TEXT)["nl"];
 
 /** The day, hour, minute and weekday in Brussels. */
 function brussels(date: Date) {
@@ -214,6 +255,105 @@ function inQuiet(p: Prefs, hour: number): boolean {
   return p.quiet_from < p.quiet_to ? hour >= p.quiet_from && hour < p.quiet_to : hour >= p.quiet_from || hour < p.quiet_to;
 }
 
+/** Only the channels there are now: a push chosen before 23-10-2026 goes nowhere. */
+function channels(list: string[] | null): Channel[] {
+  return (["email", "sms"] as const).filter((channel) => (list ?? []).includes(channel));
+}
+
+const escape = (text: string) =>
+  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
+/**
+ * The email itself: a plain card that reads well in Gmail, Outlook and on a phone (tables and inline styles only, no
+ * pictures to load). The brand as the app shows it ("[mato]"), the title, then the overview or the sales, or the
+ * message, and one button into the app.
+ */
+function renderEmail(
+  msg: Message,
+  o: { brand: string; t: Text; locale: Locale; money: (n: number) => string; appUrl: string; subject: string },
+): string {
+  const { t } = o;
+  const font = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+  const muted = "#71717a";
+  const line = "#ececef";
+  const section = (title: string, inner: string) =>
+    `<tr><td style="padding:22px 28px 0"><p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${muted}">${escape(title)}</p>${inner}</td></tr>`;
+  const rows = (items: string[][], alignLast = true) =>
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:15px">${items
+      .map(
+        (cells) =>
+          `<tr>${cells
+            .map(
+              (cell, i) =>
+                `<td style="padding:9px 0;border-top:1px solid ${line};${i === 0 ? "" : "padding-left:12px;white-space:nowrap;"}${
+                  alignLast && i === cells.length - 1 && i > 0 ? "text-align:right;font-weight:600;" : i > 0 ? `color:${muted};` : ""
+                }">${cell}</td>`,
+            )
+            .join("")}</tr>`,
+      )
+      .join("")}</table>`;
+
+  let content = "";
+  const detail = msg.detail;
+  if (detail?.type === "overview") {
+    content += `<tr><td style="padding:14px 28px 0"><p style="margin:0;font-size:36px;font-weight:700;letter-spacing:-0.02em">${escape(
+      o.money(detail.revenue),
+    )}</p><p style="margin:4px 0 0;font-size:15px;color:${muted}">${escape(detail.units > 0 ? t.sales(detail.units) : detail.soFar ? t.noSalesYet : t.noSales)}${
+      detail.soFar && detail.units > 0 ? ` · ${escape(t.soFar)}` : ""
+    }</p></td></tr>`;
+    if (detail.machines.length) {
+      content += section(
+        t.perMachine,
+        rows(detail.machines.map((m) => [escape(m.name), escape(t.pieces(m.units)), escape(o.money(m.revenue))])),
+      );
+    }
+    if (detail.products.length) {
+      content += section(
+        t.topProducts,
+        rows(detail.products.map((p) => [escape(p.name), escape(t.pieces(p.units)), escape(o.money(p.revenue))])),
+      );
+    }
+    if (detail.todo) {
+      content += section(
+        t.todo,
+        detail.todo.length
+          ? `<ul style="margin:0;padding-left:18px;font-size:15px;line-height:1.6">${detail.todo.map((item) => `<li>${escape(item)}</li>`).join("")}</ul>`
+          : `<p style="margin:0;font-size:15px;color:#15803d">${escape(t.allGood)}</p>`,
+      );
+    }
+  } else if (detail?.type === "sales") {
+    content += `<tr><td style="padding:14px 28px 0">${rows(
+      detail.rows.map((r) => [
+        `<span style="color:${muted}">${escape(r.when)}</span>&nbsp; ${escape(r.machine)}<br><span style="color:${muted};font-size:14px">${escape(r.product)}</span>`,
+        escape(o.money(r.amount)),
+      ]),
+    )}${detail.more > 0 ? `<p style="margin:8px 0 0;font-size:14px;color:${muted}">${escape(t.more(detail.more))}</p>` : ""}</td></tr>`;
+  } else {
+    content += `<tr><td style="padding:12px 28px 0"><p style="margin:0;font-size:16px;line-height:1.55">${escape(msg.body)}</p></td></tr>`;
+  }
+
+  const link = `${o.appUrl}${msg.url}`;
+  return `<!doctype html><html lang="${o.locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><title>${escape(
+    o.subject,
+  )}</title></head><body style="margin:0;padding:0;background:#f4f4f5">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${escape(msg.body)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:18px;font-family:${font};color:#18181b">
+<tr><td style="padding:24px 28px 0;font-size:20px;font-weight:700;letter-spacing:-0.01em"><span style="color:${GOLD}">[</span>&nbsp;${escape(
+    o.brand.toLocaleLowerCase(INTL[o.locale]),
+  )}&nbsp;<span style="color:${GOLD}">]</span></td></tr>
+<tr><td style="padding:18px 28px 0"><h1 style="margin:0;font-size:22px;line-height:1.3;letter-spacing:-0.01em">${escape(msg.title)}</h1></td></tr>
+${content}
+<tr><td style="padding:26px 28px 28px"><a href="${escape(link)}" style="display:inline-block;background:#18181b;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 22px;border-radius:999px">${escape(
+    t.open(o.brand),
+  )}</a></td></tr>
+</table>
+<p style="max-width:560px;margin:16px auto 0;font-family:${font};font-size:12px;line-height:1.5;color:${muted}">${escape(t.why)} <a href="${escape(
+    `${o.appUrl}/settings`,
+  )}" style="color:${muted}">${escape(t.adjust)}</a></p>
+</td></tr></table></body></html>`;
+}
+
 Deno.serve(async (req) => {
   const db = createClient(SUPABASE_URL, SERVICE_ROLE);
   const { data: keys } = await db.from("app_keys").select("name, value");
@@ -225,9 +365,8 @@ Deno.serve(async (req) => {
 
   const input = (req.method === "POST" ? await req.json().catch(() => ({})) : {}) as {
     test?: { user_id?: string; org_id?: string };
+    preview?: { user_id?: string; org_id?: string };
   };
-  const pushReady = Boolean(key("vapid_private") && key("vapid_public"));
-  if (pushReady) webpush.setVapidDetails(key("vapid_subject"), key("vapid_public"), key("vapid_private"));
   const emailReady = Boolean(key("resend_api_key") && key("mail_from"));
   const smsReady = Boolean(key("twilio_sid") && key("twilio_token") && key("twilio_from"));
   const appUrl = (key("app_url") || "https://vendly-six-gold.vercel.app").replace(/\/$/, "");
@@ -236,89 +375,13 @@ Deno.serve(async (req) => {
   const nowMs = now.getTime();
   const local = brussels(now);
 
-  // Read once per run: who the person is with, and their devices.
+  // Read once per run: whom the person is with.
   async function context(prefs: Prefs[]) {
     const orgIds = [...new Set(prefs.map((p) => p.org_id))];
-    const [{ data: orgs }, { data: subs }] = await Promise.all([
-      db.from("organizations").select("id, name, brand_name").in("id", orgIds),
-      db
-        .from("push_subscriptions")
-        .select("endpoint, p256dh, auth, failures, user_id, org_id")
-        .in("org_id", orgIds)
-        .not("user_id", "is", null),
-    ]);
-    return { orgs: orgs ?? [], subs: subs ?? [] };
+    const { data: orgs } = await db.from("organizations").select("id, name, brand_name").in("id", orgIds);
+    return { orgs: orgs ?? [] };
   }
   type Context = Awaited<ReturnType<typeof context>>;
-
-  /** Sends one message on the chosen channels; says per channel how it went. */
-  async function deliver(ctx: Context, p: Prefs, channels: Channel[], msg: Message, quiet: boolean, brand: string) {
-    const outcome: Outcome = {};
-    for (const channel of new Set(channels)) {
-      if (channel === "push") {
-        if (quiet) outcome.push = "quiet";
-        else if (!pushReady) outcome.push = "no_provider";
-        else {
-          const devices = ctx.subs.filter((s) => s.user_id === p.user_id && s.org_id === p.org_id);
-          if (!devices.length) outcome.push = "no_device";
-          else {
-            let sent = 0;
-            for (const sub of devices) {
-              try {
-                await webpush.sendNotification(
-                  { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-                  JSON.stringify({ title: msg.title, body: msg.body, url: msg.url, tag: msg.tag }),
-                );
-                sent += 1;
-                await db.from("push_subscriptions").update({ last_sent_at: now.toISOString(), failures: 0 }).eq("endpoint", sub.endpoint);
-              } catch (error) {
-                // A browser that unsubscribed answers 404 or 410; that row is dead.
-                const status = (error as { statusCode?: number }).statusCode;
-                if (status === 404 || status === 410) await db.from("push_subscriptions").delete().eq("endpoint", sub.endpoint);
-                else await db.from("push_subscriptions").update({ failures: (sub.failures ?? 0) + 1 }).eq("endpoint", sub.endpoint);
-              }
-            }
-            outcome.push = sent > 0 ? "sent" : "failed";
-          }
-        }
-      } else if (channel === "email") {
-        // Mail waits in the inbox: quiet hours do not hold it back.
-        if (!p.email) outcome.email = "no_address";
-        else if (!emailReady) outcome.email = "no_provider";
-        else {
-          const t = TEXT[p.locale] ?? TEXT.nl;
-          const response = await fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${key("resend_api_key")}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              from: key("mail_from"),
-              to: [p.email],
-              subject: msg.title,
-              text: [msg.body, "", `${appUrl}${msg.url}`, "", t.why].join("\n"),
-            }),
-          }).catch(() => null);
-          outcome.email = response?.ok ? "sent" : "failed";
-        }
-      } else if (channel === "sms") {
-        if (quiet) outcome.sms = "quiet";
-        else if (!p.phone) outcome.sms = "no_number";
-        else if (!smsReady) outcome.sms = "no_provider";
-        else {
-          const sid = key("twilio_sid");
-          const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
-            method: "POST",
-            headers: {
-              Authorization: `Basic ${btoa(`${sid}:${key("twilio_token")}`)}`,
-              "Content-Type": "application/x-www-form-urlencoded",
-            },
-            body: new URLSearchParams({ To: p.phone, From: key("twilio_from"), Body: `${brand}: ${msg.title}. ${msg.body}`.slice(0, 320) }),
-          }).catch(() => null);
-          outcome.sms = response?.ok ? "sent" : "failed";
-        }
-      }
-    }
-    return { outcome, delivered: Object.values(outcome).includes("sent") };
-  }
 
   async function log(p: Prefs, msg: Message, outcome: Outcome, open: boolean) {
     await db.from("notification_log").insert({
@@ -338,11 +401,12 @@ Deno.serve(async (req) => {
   function person(ctx: Context, p: Prefs) {
     const org = ctx.orgs.find((o) => o.id === p.org_id);
     const brand = (org?.brand_name as string | null) || (p.business_id ? "MATO Info" : "Vendly");
-    const t = TEXT[p.locale] ?? TEXT.nl;
-    const intl = INTL[p.locale] ?? INTL.nl;
+    const locale: Locale = p.locale in TEXT ? p.locale : "nl";
+    const t = TEXT[locale];
+    const intl = INTL[locale];
     const short = (name: string) => withoutOrgName(name, (org?.name as string | null) ?? null);
     const money = (value: number) => new Intl.NumberFormat(intl, { style: "currency", currency: "EUR" }).format(value);
-    const pct = (n: number) => (p.locale === "fr" ? `${n} %` : `${n}%`);
+    const pct = (n: number) => (locale === "fr" ? `${n} %` : `${n}%`);
     const clock = (iso: string) =>
       new Intl.DateTimeFormat(intl, { timeZone: ZONE, hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
     const dayName = (date: Date) =>
@@ -363,8 +427,53 @@ Deno.serve(async (req) => {
       return (data ?? []) as { machine_id: string; machine_name: string; percent: number }[];
     };
 
+    /** Sends one message on the chosen channels; says per channel how it went. */
+    async function deliver(chosen: Channel[], msg: Message, quiet: boolean, subject = msg.title) {
+      const outcome: Outcome = {};
+      for (const channel of new Set(chosen)) {
+        if (channel === "email") {
+          // Mail waits in the inbox: quiet hours do not hold it back.
+          if (!p.email) outcome.email = "no_address";
+          else if (!emailReady) outcome.email = "no_provider";
+          else {
+            const from = key("mail_from").includes("<") ? key("mail_from") : `"${brand.replace(/"/g, "")}" <${key("mail_from")}>`;
+            const response = await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${key("resend_api_key")}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                from,
+                to: [p.email],
+                subject,
+                html: renderEmail(msg, { brand, t, locale, money, appUrl, subject }),
+                text: [msg.body, "", `${appUrl}${msg.url}`, "", t.why].join("\n"),
+                headers: { "List-Unsubscribe": `<${appUrl}/settings>` },
+              }),
+            }).catch(() => null);
+            outcome.email = response?.ok ? "sent" : "failed";
+          }
+        } else if (channel === "sms") {
+          if (quiet) outcome.sms = "quiet";
+          else if (!p.phone) outcome.sms = "no_number";
+          else if (!smsReady) outcome.sms = "no_provider";
+          else {
+            const sid = key("twilio_sid");
+            const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+              method: "POST",
+              headers: {
+                Authorization: `Basic ${btoa(`${sid}:${key("twilio_token")}`)}`,
+                "Content-Type": "application/x-www-form-urlencoded",
+              },
+              body: new URLSearchParams({ To: p.phone, From: key("twilio_from"), Body: `${brand}: ${subject}. ${msg.body}`.slice(0, 320) }),
+            }).catch(() => null);
+            outcome.sms = response?.ok ? "sent" : "failed";
+          }
+        }
+      }
+      return { outcome, delivered: Object.values(outcome).includes("sent") };
+    }
+
     /** The day so far (an evening hour) or yesterday (a morning hour), or last week, with what needs doing. */
-    async function overview(span: "day" | "week" | "test"): Promise<Message> {
+    async function overview(span: "day" | "week"): Promise<Message> {
       let from: Date;
       let to: Date;
       let title: string;
@@ -373,7 +482,7 @@ Deno.serve(async (req) => {
         from = midnight(addDays(local.day, -7));
         to = midnight(local.day);
         title = `${t.lastWeek} · ${dayName(from)} – ${dayName(new Date(to.getTime() - HOUR))}`;
-      } else if (span === "day" && p.daily_hour < 12) {
+      } else if (p.daily_hour < 12) {
         from = midnight(addDays(local.day, -1));
         to = midnight(local.day);
         title = `${t.yesterday} · ${dayName(from)}`;
@@ -383,49 +492,55 @@ Deno.serve(async (req) => {
         soFar = true;
         title = `${t.today} · ${dayName(now)}`;
       }
-      const { data } = await db.rpc("alert_period_summary", {
+      const { data } = await db.rpc("alert_period_detail", {
         p_org: p.org_id,
         p_business: p.business_id,
         p_from: from.toISOString(),
         p_to: to.toISOString(),
       });
-      const sum = ((Array.isArray(data) ? data[0] : data) ?? { revenue: 0, units: 0 }) as {
-        revenue: number;
-        units: number;
-        best_machine: string | null;
-        best_revenue: number | null;
-      };
+      const found = (data ?? { machines: [], products: [] }) as { machines: Line[]; products: Line[] };
+      const perMachine = found.machines.map((m) => ({ name: short(m.name), units: Number(m.units), revenue: Number(m.revenue) }));
+      const products = found.products.map((m) => ({ name: m.name, units: Number(m.units), revenue: Number(m.revenue) }));
+      const revenue = perMachine.reduce((sum, m) => sum + m.revenue, 0);
+      const units = perMachine.reduce((sum, m) => sum + m.units, 0);
+
+      // The line an sms carries, and the hidden first line of the email.
       const parts: string[] = [];
-      if (sum.units > 0) {
-        parts.push(`${money(Number(sum.revenue))} · ${t.sales(sum.units)}`);
-        if (sum.best_machine && (await machines()).length > 1) parts.push(t.best(short(sum.best_machine), money(Number(sum.best_revenue))));
+      if (units > 0) {
+        parts.push(`${money(revenue)} · ${t.sales(units)}`);
+        if (perMachine.length > 1 && perMachine[0].revenue > 0) parts.push(t.best(perMachine[0].name, money(perMachine[0].revenue)));
       } else parts.push(soFar ? t.noSalesYet : t.noSales);
-      if (span !== "week") {
-        const low = (await fills()).filter((f) => f.percent < p.low_percent).length;
-        if (low > 0) parts.push(t.low(low, pct(p.low_percent)));
-        const offline = (await machines()).filter((m) => terminal(m, nowMs) === "offline").length;
-        if (offline > 0) parts.push(t.offlineCount(offline));
+
+      // What needs doing, only on the day's overview: it is the state now, not of last week.
+      let todo: string[] | null = null;
+      if (span === "day") {
+        const low = (await fills()).filter((f) => f.percent < p.low_percent).sort((a, b) => a.percent - b.percent);
+        const offline = (await machines()).filter((m) => terminal(m, nowMs) === "offline");
         const { data: digest } = await db.rpc("evening_digest", { target_org: p.org_id, target_business: p.business_id });
         const expired = Number(((Array.isArray(digest) ? digest[0] : digest) as { expired?: number } | null)?.expired ?? 0);
+        todo = [
+          ...low.map((f) => t.lowItem(short(f.machine_name), pct(f.percent))),
+          ...offline.map((m) => t.offlineItem(short(m.machine_name))),
+          ...(expired > 0 ? [t.expired(expired)] : []),
+        ];
+        if (low.length) parts.push(t.low(low.length, pct(p.low_percent)));
+        if (offline.length) parts.push(t.offlineCount(offline.length));
         if (expired > 0) parts.push(t.expired(expired));
-      }
-      if (span === "test") {
-        return { kind: "test", title: t.testTitle, body: t.testBody(`${t.today}: ${parts.join(" · ")}`), url: "/settings", tag: "test" };
       }
       return {
         kind: span === "week" ? "weekly" : "daily",
         title,
         body: parts.join(" · "),
         url: span === "week" ? "/statistics" : "/",
-        tag: span === "week" ? "weekly" : "daily",
+        detail: { type: "overview", revenue, units, soFar, machines: perMachine, products, todo },
       };
     }
 
     async function run() {
       const quiet = inQuiet(p, local.hour);
       const results: Record<string, unknown>[] = [];
-      const send = async (channels: Channel[], msg: Message, options: { quiet: boolean; open?: boolean; always?: boolean }) => {
-        const { outcome, delivered } = await deliver(ctx, p, channels, msg, options.quiet, brand);
+      const send = async (chosen: Channel[], msg: Message, options: { quiet: boolean; open?: boolean; always?: boolean }) => {
+        const { outcome, delivered } = await deliver(chosen, msg, options.quiet);
         if (delivered || options.always) await log(p, msg, outcome, Boolean(options.open));
         results.push({ kind: msg.kind, title: msg.title, outcome });
         return delivered;
@@ -441,21 +556,28 @@ Deno.serve(async (req) => {
       const open = (openRows ?? []) as Episode[];
       const episode = (kind: string, key: string) => open.find((e) => e.kind === kind && e.key === key);
       const resolve = (e: Episode) => db.from("notification_log").update({ resolved_at: now.toISOString() }).eq("id", e.id);
+      const topic = {
+        daily: channels(p.daily),
+        weekly: channels(p.weekly),
+        sales: channels(p.sales),
+        errors: channels(p.errors),
+        low: channels(p.low_stock),
+      };
 
       // 1. The day's overview at the hour they chose (quiet hours do not apply: they picked it), once a day.
-      if (p.daily.length && local.hour === p.daily_hour && p.daily_sent_on !== local.day) {
+      if (topic.daily.length && local.hour === p.daily_hour && p.daily_sent_on !== local.day) {
         await update({ daily_sent_on: local.day });
-        await send(p.daily, await overview("day"), { quiet: false, always: true });
+        await send(topic.daily, await overview("day"), { quiet: false, always: true });
       }
 
       // 2. Last week, on Monday at the same hour.
-      if (p.weekly.length && local.weekday === "Mon" && local.hour === p.daily_hour && p.weekly_sent_on !== local.day) {
+      if (topic.weekly.length && local.weekday === "Mon" && local.hour === p.daily_hour && p.weekly_sent_on !== local.day) {
         await update({ weekly_sent_on: local.day });
-        await send(p.weekly, await overview("week"), { quiet: false, always: true });
+        await send(topic.weekly, await overview("week"), { quiet: false, always: true });
       }
 
       // 3. Every sale, as it arrives: one message per run, however many came in.
-      if (p.sales.length) {
+      if (topic.sales.length) {
         if (!p.sales_seen_at) await update({ sales_seen_at: now.toISOString() });
         else {
           const { data } = await db.rpc("alert_new_sales", { p_org: p.org_id, p_business: p.business_id, p_after: p.sales_seen_at });
@@ -470,62 +592,72 @@ Deno.serve(async (req) => {
           }[];
           if (rows.length) {
             await update({ sales_seen_at: rows[rows.length - 1].created_at });
-            let msg: Message;
+            const newest = [...rows].sort((a, b) => (a.occurred_at < b.occurred_at ? 1 : -1));
+            const total = rows.reduce((sum, sale) => sum + Number(sale.amount), 0);
+            let title: string;
+            let body: string;
             if (rows.length === 1) {
               const sale = rows[0];
-              msg = {
-                kind: "sale",
-                title: `${money(Number(sale.amount))} · ${short(sale.machine_name)}`,
-                body: `${sale.product_name ?? t.slot(sale.selection)} · ${when(sale.occurred_at)}`,
-                url: "/",
-                tag: `sale-${sale.id}`,
-              };
+              title = `${money(Number(sale.amount))} · ${short(sale.machine_name)}`;
+              body = `${sale.product_name ?? t.slot(sale.selection)} · ${when(sale.occurred_at)}`;
             } else {
               const perMachine = new Map<string, number>();
               for (const sale of rows) perMachine.set(short(sale.machine_name), (perMachine.get(short(sale.machine_name)) ?? 0) + 1);
               const most = [...perMachine].sort((a, b) => b[1] - a[1]);
-              msg = {
-                kind: "sale",
-                title: `${t.sales(rows.length)} · ${money(rows.reduce((total, sale) => total + Number(sale.amount), 0))}`,
-                body: most.slice(0, 3).map(([name, n]) => `${name} ${n}×`).join(" · ") + (most.length > 3 ? " …" : ""),
-                url: "/",
-                tag: `sale-${rows[0].id}`,
-              };
+              title = `${t.sales(rows.length)} · ${money(total)}`;
+              body = most.slice(0, 3).map(([name, n]) => `${name} ${n}×`).join(" · ") + (most.length > 3 ? " …" : "");
             }
-            await send(p.sales, msg, { quiet });
+            await send(
+              topic.sales,
+              {
+                kind: "sale",
+                title,
+                body,
+                url: "/",
+                detail: {
+                  type: "sales",
+                  rows: newest.slice(0, SALES_LISTED).map((sale) => ({
+                    when: when(sale.occurred_at),
+                    machine: short(sale.machine_name),
+                    product: sale.product_name ?? t.slot(sale.selection),
+                    amount: Number(sale.amount),
+                  })),
+                  more: Math.max(0, rows.length - SALES_LISTED),
+                },
+              },
+              { quiet },
+            );
           }
         }
       }
 
       // 4. Errors: a terminal offline, Payter failing, payments failing in a row.
-      if (p.errors.length) {
+      if (topic.errors.length) {
         for (const machine of await machines()) {
           const status = terminal(machine, nowMs);
           const known = episode("offline", machine.machine_id);
           if (status === "offline" && !known && nowMs - Date.parse(machine.last_disconnected_at!) < FRESH_MS) {
             await send(
-              p.errors,
+              topic.errors,
               {
                 kind: "offline",
                 key: machine.machine_id,
                 title: t.offlineTitle(short(machine.machine_name)),
                 body: t.offlineBody(when(machine.last_disconnected_at!)),
                 url: p.business_id ? "/" : `/machines/${machine.machine_id}`,
-                tag: `terminal-${machine.machine_id}`,
               },
               { quiet, open: true },
             );
           } else if (status === "online" && known) {
             await resolve(known);
             await send(
-              p.errors,
+              topic.errors,
               {
                 kind: "online",
                 key: machine.machine_id,
                 title: t.onlineTitle(short(machine.machine_name)),
                 body: t.onlineBody(when(machine.last_disconnected_at ?? known.created_at), when(machine.last_connected_at!)),
                 url: p.business_id ? "/" : `/machines/${machine.machine_id}`,
-                tag: `terminal-${machine.machine_id}`,
               },
               { quiet },
             );
@@ -566,20 +698,19 @@ Deno.serve(async (req) => {
             const known = episode("sync", account.key);
             if (failing && !known) {
               await send(
-                p.errors,
+                topic.errors,
                 {
                   kind: "sync",
                   key: account.key,
                   title: t.syncTitle,
                   body: t.syncBody(when(account.syncedAt ?? (failure!.started_at as string)), account.label),
                   url: "/settings",
-                  tag: `payter-${account.key}`,
                 },
                 { quiet, open: true },
               );
             } else if (!failing && known && account.syncedAt && account.syncedAt > known.created_at) {
               await resolve(known);
-              await send(p.errors, { kind: "sync_ok", key: account.key, title: t.syncOkTitle, body: t.syncOkBody, url: "/", tag: `payter-${account.key}` }, { quiet });
+              await send(topic.errors, { kind: "sync_ok", key: account.key, title: t.syncOkTitle, body: t.syncOkBody, url: "/" }, { quiet });
             }
           }
         }
@@ -597,14 +728,13 @@ Deno.serve(async (req) => {
             .limit(1);
           if (told?.length) continue;
           await send(
-            p.errors,
+            topic.errors,
             {
               kind: "failed",
               key: row.machine_id,
               title: t.failedTitle(row.failed, short(row.machine_name)),
               body: t.failedBody,
               url: p.business_id ? "/" : `/machines/${row.machine_id}`,
-              tag: `failed-${row.machine_id}`,
             },
             { quiet },
           );
@@ -612,19 +742,18 @@ Deno.serve(async (req) => {
       }
 
       // 5. A machine almost empty: every five minutes is soon enough.
-      if (p.low_stock.length && local.minute % 5 === 0) {
+      if (topic.low.length && local.minute % 5 === 0) {
         for (const fill of await fills()) {
           const known = episode("low", fill.machine_id);
           if (fill.percent < p.low_percent && !known) {
             await send(
-              p.low_stock,
+              topic.low,
               {
                 kind: "low",
                 key: fill.machine_id,
                 title: t.lowTitle(short(fill.machine_name)),
                 body: t.lowBody(pct(fill.percent), pct(p.low_percent)),
                 url: p.business_id ? "/" : `/refill/machines/${fill.machine_id}`,
-                tag: `low-${fill.machine_id}`,
               },
               { quiet, open: true },
             );
@@ -636,28 +765,71 @@ Deno.serve(async (req) => {
       return results;
     }
 
+    /** "Stuur een test": the day's overview, now, on every channel chosen (email when none is). */
     async function test() {
-      const chosen = [...new Set([...p.daily, ...p.weekly, ...p.sales, ...p.errors, ...p.low_stock])] as Channel[];
-      const msg = await overview("test");
-      const { outcome } = await deliver(ctx, p, chosen.length ? chosen : ["push"], msg, false, brand);
-      await log(p, msg, outcome, false);
+      const chosen = [...new Set([p.daily, p.weekly, p.sales, p.errors, p.low_stock].flatMap(channels))];
+      const msg = { ...(await overview("day")), kind: "test" };
+      const subject = `${t.test}: ${msg.title}`;
+      const { outcome } = await deliver(chosen.length ? chosen : ["email"], msg, false, subject);
+      await log(p, { ...msg, title: subject }, outcome, false);
       return outcome;
     }
 
-    return { run, test };
+    /** "Bekijk de e-mail": the day's overview as it would arrive; nothing sent, nothing logged. */
+    async function preview() {
+      const msg = await overview("day");
+      return { subject: msg.title, html: renderEmail(msg, { brand, t, locale, money, appUrl, subject: msg.title }) };
+    }
+
+    return { run, test, preview };
   }
 
-  if (input.test) {
+  const one = input.test ?? input.preview;
+  if (one) {
     const { data } = await db
       .from("notification_prefs")
       .select("*")
-      .eq("user_id", input.test.user_id ?? "")
-      .eq("org_id", input.test.org_id ?? "")
+      .eq("user_id", one.user_id ?? "")
+      .eq("org_id", one.org_id ?? "")
       .maybeSingle();
+    // Someone who never saved gets the defaults: the evening overview by email.
+    const p = (data ?? {
+      user_id: one.user_id,
+      org_id: one.org_id,
+      business_id: null,
+      locale: "nl",
+      email: null,
+      phone: null,
+      daily: ["email"],
+      weekly: [],
+      sales: [],
+      errors: ["email"],
+      low_stock: [],
+      daily_hour: 20,
+      low_percent: 25,
+      quiet: false,
+      quiet_from: 22,
+      quiet_to: 7,
+      sales_seen_at: null,
+      daily_sent_on: null,
+      weekly_sent_on: null,
+    }) as Prefs;
+    if (input.preview) {
+      if (!data) {
+        // Without a row the scope is unknown: the person's own membership says whose machines these are.
+        const { data: member } = await db
+          .from("memberships")
+          .select("business_id")
+          .eq("user_id", one.user_id ?? "")
+          .eq("org_id", one.org_id ?? "")
+          .maybeSingle();
+        if (!member) return Response.json({ error: "not a member" }, { status: 404 });
+        p.business_id = (member.business_id as string | null) ?? null;
+      }
+      return Response.json(await person(await context([p]), p).preview());
+    }
     if (!data) return Response.json({ error: "no preferences" }, { status: 404 });
-    const p = data as Prefs;
-    const sent = await person(await context([p]), p).test();
-    return Response.json({ sent });
+    return Response.json({ sent: await person(await context([p]), p).test() });
   }
 
   // One run at a time: a slow run must not send the same message twice.

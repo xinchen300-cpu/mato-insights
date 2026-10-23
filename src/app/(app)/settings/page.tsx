@@ -147,7 +147,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
         {notifications && (
           <Section title={m.prefs.notifications} hint={m.prefs.notificationsHint}>
-            <NotificationSettings settings={notifications} shop={!operator} pushKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY} />
+            <NotificationSettings settings={notifications} shop={!operator} />
           </Section>
         )}
 

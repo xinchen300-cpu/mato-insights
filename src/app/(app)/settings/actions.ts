@@ -5,7 +5,7 @@ import { featureAllowed } from "@/lib/billing";
 import { checkPayterLogin, payterTerminalSerials } from "@/lib/payter-login";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { denyFillerAccess, getCurrentBusinessId, getCurrentOrgId, getSessionUser, requireOperator, requireSignedIn } from "@/lib/org";
-import { saveNotificationSettings, sendTestNotification } from "@/lib/data";
+import { getEmailPreview, saveNotificationSettings, sendTestNotification } from "@/lib/data";
 import { getI18n } from "@/i18n/server";
 import type { CleanPrefs } from "@/lib/notify-prefs";
 
@@ -224,4 +224,11 @@ export async function testNotifications() {
   const result = await sendTestNotification();
   revalidatePath("/settings");
   return result;
+}
+
+/** "Bekijk de e-mail": the overview as it would arrive, nothing sent. */
+export async function previewEmail() {
+  await requireSignedIn();
+  await denyFillerAccess();
+  return getEmailPreview();
 }
