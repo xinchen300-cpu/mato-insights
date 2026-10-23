@@ -1,6 +1,9 @@
 import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { denyFillerAccess, getScope, getSessionUser, isFiller, isOperator, requireOperator, requireRefillAccess, type Role } from "@/lib/org";
+import { denyFillerAccess, getScope, getSessionUser, isFiller, isOperator, requireOperator, requireRefillAccess, requireSignedIn, type Role } from "@/lib/org";
+import { cleanPrefs, NOTIFY_CHANNELS, NOTIFY_DEFAULTS, NOTIFY_TOPICS, type CleanPrefs, type NotifyChannel, type NotifyPrefs } from "@/lib/notify-prefs";
+import { SUPABASE_URL } from "@/lib/supabase/config";
+import { isLocale, type Locale } from "@/i18n/config";
 import { displayName } from "@/lib/people";
 import { cleanRoundSettings, type RoundSettings } from "@/lib/round-settings";
 import { lineTake, onlyMine, roundOrder, roundTimings, slotKey, stopChanges, type Average, type FlowLine, type RoundTimings, type ShopView, type StopRecord } from "@/lib/refill-flow";
@@ -1193,8 +1196,165 @@ export async function hasRefillCabinet(orgId: string): Promise<boolean> {
   return data?.refill_cabinet === true;
 }
 
+/** A message vendly-alerts sent, with how each channel fared ("sent", "quiet", "no_provider", …). */
+export type SentNotification = { id: string; kind: string; title: string; body: string; sent: Partial<Record<NotifyChannel, string>>; at: string };
+
+export type NotificationSettings = {
+  prefs: NotifyPrefs;
+  /** Whether this person saved choices of their own; before that the defaults are what they get. */
+  chosen: boolean;
+  loginEmail: string | null;
+  /** Their devices that take push messages, in this organisation. */
+  devices: number;
+  /** Which channels MATO Info can send on now: mail and sms need a provider's keys. */
+  ready: Record<NotifyChannel, boolean>;
+  recent: SentNotification[];
+};
+
+/** The keys a channel needs before anything goes out on it (read by supabase/functions/vendly-alerts). */
+const CHANNEL_KEYS: Record<NotifyChannel, string[]> = {
+  push: ["vapid_public", "vapid_private"],
+  email: ["resend_api_key", "mail_from"],
+  sms: ["twilio_sid", "twilio_token", "twilio_from"],
+};
+
+/**
+ * Instellingen → Meldingen (23-10-2026): what this person asked to hear about and the last messages sent to them.
+ * Only ever one's own, in the organisation one is in now; a filler has none.
+ */
+export async function getNotificationSettings(): Promise<NotificationSettings> {
+  const user = await requireSignedIn();
+  await denyFillerAccess();
+  const { orgId } = await getScope();
+  if (!orgId) throw new Error("Not found");
+  const admin = createAdminClient();
+  const [{ data: row }, { data: recent }, { count }, { data: keys }] = await Promise.all([
+    admin.from("notification_prefs").select("*").eq("user_id", user.id).eq("org_id", orgId).maybeSingle(),
+    admin
+      .from("notification_log")
+      .select("id, kind, title, body, sent, created_at")
+      .eq("user_id", user.id)
+      .eq("org_id", orgId)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    admin.from("push_subscriptions").select("endpoint", { count: "exact", head: true }).eq("user_id", user.id).eq("org_id", orgId),
+    // Only whether a key is there; its value never leaves the database here.
+    admin.from("app_keys").select("name").in("name", Object.values(CHANNEL_KEYS).flat()),
+  ]);
+  const present = new Set((keys ?? []).map((k) => k.name as string));
+  const ready = Object.fromEntries(
+    NOTIFY_CHANNELS.map((channel) => [channel, CHANNEL_KEYS[channel].every((name) => present.has(name))]),
+  ) as Record<NotifyChannel, boolean>;
+  const prefs: NotifyPrefs = row
+    ? {
+        email: (row.email as string | null) ?? null,
+        phone: (row.phone as string | null) ?? null,
+        topics: Object.fromEntries(NOTIFY_TOPICS.map((topic) => [topic, (row[topic] as NotifyChannel[] | null) ?? []])) as NotifyPrefs["topics"],
+        dailyHour: Number(row.daily_hour),
+        lowPercent: Number(row.low_percent),
+        quiet: Boolean(row.quiet),
+        quietFrom: Number(row.quiet_from),
+        quietTo: Number(row.quiet_to),
+      }
+    : NOTIFY_DEFAULTS;
+  return {
+    prefs,
+    chosen: Boolean(row),
+    loginEmail: user.email ?? null,
+    devices: count ?? 0,
+    ready,
+    recent: (recent ?? []).map((r) => ({
+      id: r.id as string,
+      kind: r.kind as string,
+      title: r.title as string,
+      body: r.body as string,
+      sent: (r.sent ?? {}) as SentNotification["sent"],
+      at: r.created_at as string,
+    })),
+  };
+}
+
+/**
+ * Stores one's own choices, in the organisation (and business) one is in now, never anyone else's. Every sale
+ * counts from the moment it is switched on, never from the past.
+ */
+export async function saveNotificationSettings(input: unknown, locale: Locale): Promise<CleanPrefs> {
+  const user = await requireSignedIn();
+  await denyFillerAccess();
+  const { orgId, businessId } = await getScope();
+  if (!orgId) throw new Error("Not found");
+  const clean = cleanPrefs(input);
+  if (!clean.ok) return clean;
+  const { prefs } = clean;
+  const admin = createAdminClient();
+  const { data: before } = await admin.from("notification_prefs").select("sales").eq("user_id", user.id).eq("org_id", orgId).maybeSingle();
+  const now = new Date().toISOString();
+  const { error } = await admin.from("notification_prefs").upsert(
+    {
+      user_id: user.id,
+      org_id: orgId,
+      business_id: businessId,
+      locale: isLocale(locale) ? locale : "nl",
+      email: prefs.email,
+      phone: prefs.phone,
+      ...prefs.topics,
+      daily_hour: prefs.dailyHour,
+      low_percent: prefs.lowPercent,
+      quiet: prefs.quiet,
+      quiet_from: prefs.quietFrom,
+      quiet_to: prefs.quietTo,
+      updated_at: now,
+      ...(prefs.topics.sales.length > 0 && !((before?.sales as string[] | null) ?? []).length ? { sales_seen_at: now } : {}),
+    },
+    { onConflict: "user_id,org_id" },
+  );
+  if (error) throw new Error(error.message);
+  return clean;
+}
+
+/** The language messages are written in follows the app's: kept along when someone switches it. */
+export async function rememberNotificationLocale(locale: Locale): Promise<void> {
+  const user = await getSessionUser();
+  if (!user || !isLocale(locale)) return;
+  await createAdminClient().from("notification_prefs").update({ locale }).eq("user_id", user.id);
+}
+
+/**
+ * "Stuur een test": one message at once on every channel this person chose, through the same sender as the real
+ * ones. Not more often than every 30 seconds: a text message costs money.
+ */
+export async function sendTestNotification(): Promise<{ ok: true; sent: SentNotification["sent"] } | { ok: false; reason: "wait" | "failed" }> {
+  const user = await requireSignedIn();
+  await denyFillerAccess();
+  const { orgId } = await getScope();
+  if (!orgId) throw new Error("Not found");
+  const admin = createAdminClient();
+  const [{ data: recent }, { data: secret }] = await Promise.all([
+    admin
+      .from("notification_log")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("org_id", orgId)
+      .eq("kind", "test")
+      .gt("created_at", new Date(Date.now() - 30_000).toISOString())
+      .limit(1),
+    admin.from("app_keys").select("value").eq("name", "notify_secret").maybeSingle(),
+  ]);
+  if (recent?.length) return { ok: false, reason: "wait" };
+  if (!secret?.value) return { ok: false, reason: "failed" };
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/vendly-alerts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-notify-secret": secret.value as string },
+    body: JSON.stringify({ test: { user_id: user.id, org_id: orgId } }),
+    cache: "no-store",
+  }).catch(() => null);
+  if (!response?.ok) return { ok: false, reason: "failed" };
+  const { sent } = (await response.json()) as { sent: SentNotification["sent"] };
+  return { ok: true, sent };
+}
+
 /** `adjusted`: stock added through Voorraad aanpassen rather than on a round (21-10-2026). */
-export type RefillVisit = { machineId: string; at: string; pieces: number; by: string | null; adjusted: boolean };
+export type RefillVisit ={ machineId: string; at: string; pieces: number; by: string | null; adjusted: boolean };
 
 /**
  * Every time a machine was filled between two moments: when, how many pieces
