@@ -40,7 +40,7 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   overzicht zonder meldingen, de camera onder Net verkocht, de statistieken per maand en automaat, en een ronde die
   pas telt als hij af is, het groene vinkje na Voorraad aanpassen en het donkere thema, zie hieronder); sinds de avond van 21-10
   @ 2da6284 ook de export voor de boekhouding, Alles samen op de vullijst, Profiel, de kaart en de eigen merknaam (zie
-  "Export, vullijst, profiel en kaart"); sinds 22-10 @ a448514 de vullijst per automaat met Automaat hervuld en Terug; sinds de middag van 22-10 @ d0008cf het snellere laden op de gsm (zie "Snelheid op de gsm"); sinds 22-10 @ 0394c8a het volledig scherm van de camera dat het hele scherm vult (zonder de cameratak `cloud/camera-photo-speed`, die nog niet live is); sinds 22-10 @ 607fe6d de app-cache v4 (zie "De app-cache"); sinds 22-10 @ 0fb11a6 meer Payter-accounts per organisatie (zie "Payter"); sinds 22-10 @ 25ffe19 de Payter-hulpteksten zonder "vak met het huisje". Sinds 23-10 @ 1e69266 de code voor de automaat op de vulpagina, nergens aangezet (zie "De automaat op de vulpagina"); sinds 23-10 @ 5fee39d de eigen weergave en meldingen in Instellingen, alleen voor het demo-account (zie "Instellingen: eigen weergave en meldingen"; @ e3232d7 zegt een test die niemand bereikte per kanaal waarom; @ 3ab8d33 zonder push, e-mail eerst, met HTML-mails en "Bekijk de e-mail"; @ 61c90f2 alleen e-mail, geen sms, een schakelaar per onderwerp). Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
+  "Export, vullijst, profiel en kaart"); sinds 22-10 @ a448514 de vullijst per automaat met Automaat hervuld en Terug; sinds de middag van 22-10 @ d0008cf het snellere laden op de gsm (zie "Snelheid op de gsm"); sinds 22-10 @ 0394c8a het volledig scherm van de camera dat het hele scherm vult (zonder de cameratak `cloud/camera-photo-speed`, die nog niet live is); sinds 22-10 @ 607fe6d de app-cache v4 (zie "De app-cache"); sinds 22-10 @ 0fb11a6 meer Payter-accounts per organisatie (zie "Payter"); sinds 22-10 @ 25ffe19 de Payter-hulpteksten zonder "vak met het huisje". Sinds 23-10 @ 1e69266 de code voor de automaat op de vulpagina, nergens aangezet (zie "De automaat op de vulpagina"); sinds 23-10 @ 5fee39d de eigen weergave en meldingen in Instellingen, alleen voor het demo-account (zie "Instellingen: eigen weergave en meldingen"; @ e3232d7 zegt een test die niemand bereikte per kanaal waarom; @ 3ab8d33 zonder push, e-mail eerst, met HTML-mails en "Bekijk de e-mail"; @ 61c90f2 alleen e-mail, geen sms, een schakelaar per onderwerp; sinds 24-10 @ 3cb38d6 Profiel met Mijn automaten (MATO B1), Abonnement en Team, zie "Profiel: mijn automaten"). Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
 
@@ -615,6 +615,35 @@ en `normalizePhone` zijn weg uit `notify-prefs.ts`, de pagina, data.ts en `vendl
 `phone` = null en `quiet` = false; de kolommen `phone`, `quiet`, `quiet_from`, `quiet_to` blijven (toevoegend) maar niemand leest ze.
 Een sms die nog in een rij staat, gaat nergens heen (`channels()`); bij het demo-account is hij weggehaald, net als het nummer.
 De kanalen blijven een lijst per onderwerp (`text[]`), zodat een ander kanaal later terug kan zonder de databank te veranderen.
+
+## Profiel: mijn automaten, abonnement en team (24-10-2026, live alleen voor het demo-account)
+Xin: "remove the bedragen verbergen en light mode off the top menu but keep it in the setings tab, also in settings … remove
+bijvullen en laatst verstuurd. at profiel … remove cijfers, but add Team there and also abonnement there instead at settings
+tab, also add my automaat and say what kind of automaat they have and also they can click on it to see key feautures", met de
+folder van de MATO B1 als voorbeeld. Alles achter dezelfde `organizations.personal_settings` als de eigen instellingen:
+- **Bovenbalk en zijbalk** zonder maan/zon en zonder oogje (`toggles` in `app-shell.tsx`; een vuller houdt ze, die heeft geen
+  Instellingen). Weergave in Instellingen heeft ze allebei. "Bedragen verbergen" overleeft een herlaadbeurt via het script in
+  `layout.tsx`, niet via de knop. `hasPersonalSettings()` in `org.ts` leest de kolom samen met `brand_name` in één read die
+  5 minuten per organisatie onthouden wordt (`orgLook`): aan- of uitzetten staat er dus pas binnen 5 minuten overal.
+- **Instellingen** zonder Bijvullen (kostprijs, houdbaarheid, sjablonen), zonder Laatst verstuurd (ook niet meer geladen) en
+  zonder Abonnement en Team. Een link naar `/settings#abonnement` en de terugkeer van Mollie (`?betaald=1`) gaan naar
+  `/profile#abonnement` (`MovedToProfile`; `addPaymentDetails` stuurt Mollie meteen naar Profiel).
+- **Profiel** zonder In cijfers; met **Mijn automaten** (elke automaat met zijn model of soort; niet voor een vuller),
+  **Abonnement** en **Team** (de uitbater; `AccountPanels` in `settings/account-panels.tsx`, dezelfde panelen als in
+  Instellingen; de team-acties verversen nu ook `/profile`).
+- **Model per automaat:** `machines.model` (toevoegend; nu `mato-b1` of null). De catalogus staat in `src/lib/machine-models.ts`
+  (zonder imports: naam, soort, maten, foto's), de woorden in `machineModels` van elk messages-bestand, de foto's uit de folder in
+  `public/models/mato-b1/` (de automaat los als webp met transparantie, plus lift, led, koeling, indeling en capaciteit). Het
+  demo-account: Diksmuide Markt, Oostende Zeedijk en Roeselare Sportpark zijn een B1; Brugge Station en Kortrijk Campus
+  (spiraal) hebben geen model. Kiezen bij de instellingen van de automaat (`#machine-model`, alleen met de schakelaar; een model
+  zet de soort als die leeg is). Een nieuw model = een sleutel in `MACHINE_MODELS`/`MODEL_SHEETS`, zijn teksten in de drie talen
+  en zijn foto's (`test:flow` controleert dat elke foto bestaat). De standaardfoto `/machines/default.webp` is de MATO C1, maar
+  daar is geen folder van: die staat er nog niet in.
+- **`/profile/machines/[id]`** (`getMachineAbout`, met `requireMachineAccess`): bovenaan de automaat zoals op de folder, dan
+  "Je automaat" (adres, indeling en hoeveel erin past uit `slots` alleen voor de uitbater, betaalterminal), Kernfuncties
+  (liftsysteem, ledverlichting, 1°–20°, op maat ingedeeld), Capaciteit (7 rijen × 7 vakken), Specificaties (vier groepen) en
+  info@matoautomaat.be. Zonder model: "Model nog niet bekend" en een knop naar de instellingen van de automaat.
+- Getest op test en live met het demo-account (telefoon en computer, licht en donker; model opslaan als leeg en terug op B1).
 
 ## Snelheid op de gsm (22-10-2026)
 Xin: "the mobile version is slow and not responsive". Gemeten op live (demo-account, gsm 4× trager, 4G): elke pagina laadde
