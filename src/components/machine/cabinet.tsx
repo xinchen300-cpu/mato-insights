@@ -1,6 +1,7 @@
 "use client";
 
 import { Nfc } from "lucide-react";
+import { VendlyWordmark } from "@/components/brand/vendly-mark";
 import { SLOT_GROW, type FrontSlot } from "@/components/machine/front-view";
 import { useI18n } from "@/i18n/client";
 import { fillLevel, levelColor } from "@/lib/stock";
@@ -40,9 +41,10 @@ export function CabinetView({
   return (
     <div className="dark cabinet grid grid-cols-[minmax(0,1fr)_38px] grid-rows-[1fr_auto] gap-x-1.5 rounded-[22px] p-2 text-foreground sm:grid-cols-[minmax(0,1fr)_84px] sm:gap-x-2.5 sm:p-3">
       <div className="cabinet-glass rounded-[14px]">
-        {/* Room on the left for the light strip; the shelves scroll behind the glass, the cabinet stays put. */}
+        {/* Room on the left for the light strip. To look, a shelf fits the glass, names wrapped; to count, the slots
+            widen for the minus and plus and a long shelf scrolls behind the glass while the cabinet stays put. */}
         <div className="overflow-x-auto py-3 pl-4 pr-2 sm:py-4 sm:pl-6 sm:pr-4">
-          <div className="flex min-w-fit flex-col gap-3 sm:gap-4">
+          <div className={cn("flex flex-col gap-3 sm:gap-4", roomy && "min-w-fit")}>
             {rows.map((row, rowIndex) => (
               <div key={rowIndex} className="flex">
                 {row.map((slot, index) => (
@@ -71,8 +73,9 @@ export function CabinetView({
             </span>
           )}
         </div>
-        <div className="hidden h-16 w-full place-items-center rounded-md bg-background ring-1 ring-inset ring-foreground/10 sm:grid">
-          <span className="text-[13px] font-extrabold tracking-[0.06em] text-foreground/80">{mark}</span>
+        {/* The screen above the keys shows the app's own logo, as the machine's shows its maker's. */}
+        <div className="hidden h-16 w-full place-items-center rounded-md bg-background px-1.5 ring-1 ring-inset ring-foreground/10 sm:grid">
+          <VendlyWordmark name={m.brand.name} className="h-auto w-full text-foreground" />
         </div>
         <div className="cabinet-lcd tabular grid h-5 w-full place-items-center rounded-[3px] font-mono text-[9px] font-semibold sm:h-7 sm:text-[13px]">
           {percent !== null ? `${percent}%` : ""}
@@ -127,7 +130,7 @@ function Bay({
   return (
     <div
       style={{ flexGrow: SLOT_GROW[slot.size], flexBasis: 0 }}
-      className={cn("flex flex-col", roomy ? "min-w-[76px]" : "min-w-[44px] sm:min-w-[60px]")}
+      className={cn("flex min-w-0 flex-col", roomy && "min-w-[76px]")}
     >
       <div
         className={cn(
@@ -139,7 +142,7 @@ function Bay({
           // eslint-disable-next-line @next/next/no-img-element
           <img src={slot.photoUrl} alt="" className="max-h-8 max-w-full object-contain drop-shadow-[0_4px_6px_rgb(0_0_0/0.6)] sm:max-h-11" />
         ) : (
-          <span className="line-clamp-2 text-center text-[9.5px] font-medium leading-tight text-foreground/85 sm:text-[11px]">
+          <span className="line-clamp-2 hyphens-auto text-center text-[9.5px] font-medium leading-tight text-foreground/85 [overflow-wrap:anywhere] sm:text-[11px]">
             {slot.productName}
           </span>
         )}
