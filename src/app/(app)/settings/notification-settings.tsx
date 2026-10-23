@@ -53,6 +53,8 @@ export function NotificationSettings({ settings, shop, pushKey }: { settings: Se
   const [chosen, setChosen] = useState(settings.chosen);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [test, setTest] = useState<"done" | "wait" | "failed" | null>(null);
+  // How each channel fared in the last test: a test that reached nobody says why, never just "sent".
+  const [tested, setTested] = useState<SentNotification["sent"] | null>(null);
   const [check, setCheck] = useState(false);
   useEffect(() => {
     if (!check) return;
@@ -109,6 +111,7 @@ export function NotificationSettings({ settings, shop, pushKey }: { settings: Se
       if (dirty && !(await store())) return;
       const result = await testNotifications();
       setTest(result.ok ? "done" : result.reason);
+      setTested(result.ok ? result.sent : null);
       router.refresh();
     });
   }
@@ -312,16 +315,46 @@ export function NotificationSettings({ settings, shop, pushKey }: { settings: Se
             {problemText[problem]}
           </p>
         )}
-        {test && (
-          <p role="status" className={cn("px-1 text-[14px]", test === "done" ? "text-positive" : "text-negative")}>
-            {test === "done" ? m.prefs.testDone : test === "wait" ? m.prefs.testWait : m.prefs.testFailed}
-          </p>
+        {test === "done" && tested ? (
+          <TestOutcome sent={tested} channelName={channelName} />
+        ) : (
+          test && (
+            <p role="status" className="px-1 text-[14px] text-negative">
+              {test === "wait" ? m.prefs.testWait : m.prefs.testFailed}
+            </p>
+          )
         )}
       </div>
 
       <Recent recent={settings.recent} channelName={channelName} when={(iso) => f.dateTime(iso)} />
 
       {check && <SavedCheck text={m.prefs.savedCheck} onClose={() => setCheck(false)} />}
+    </div>
+  );
+}
+
+/** What a test did: by which channels it went, and for each one that could not, why and what to do. */
+function TestOutcome({ sent, channelName }: { sent: SentNotification["sent"]; channelName: Record<NotifyChannel, string> }) {
+  const { m } = useI18n();
+  const arrived = NOTIFY_CHANNELS.filter((channel) => sent[channel] === "sent");
+  const reasons = NOTIFY_CHANNELS.filter((channel) => sent[channel] && sent[channel] !== "sent").map((channel) => {
+    const status = sent[channel];
+    if (status === "no_device") return m.prefs.reasonNoDevice;
+    if (status === "no_address") return m.prefs.reasonNoAddress;
+    if (status === "no_number") return m.prefs.reasonNoNumber;
+    if (status === "no_provider") return fmt(m.prefs.reasonNoProvider, { channel: channelName[channel] });
+    return fmt(m.prefs.reasonFailed, { channel: channelName[channel] });
+  });
+  return (
+    <div role="status" className="flex flex-col gap-1 px-1 text-[14px] leading-snug">
+      <p className={cn("font-medium", arrived.length ? "text-positive" : "text-negative")}>
+        {arrived.length ? fmt(m.prefs.testArrived, { channels: arrived.map((channel) => channelName[channel]).join(", ") }) : m.prefs.testNothing}
+      </p>
+      {reasons.map((reason) => (
+        <p key={reason} className="text-muted-foreground">
+          {reason}
+        </p>
+      ))}
     </div>
   );
 }

@@ -24,6 +24,8 @@ export function NotifyToggle({ publicKey, known }: { publicKey: string; known?: 
   const { m } = useI18n();
   const router = useRouter();
   const [state, setState] = useState<"unknown" | "off" | "on" | "blocked" | "unsupported" | "ios">("unknown");
+  // A turn-on that went wrong says so, instead of quietly showing the button again.
+  const [failed, setFailed] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -55,6 +57,7 @@ export function NotifyToggle({ publicKey, known }: { publicKey: string; known?: 
   }, []);
 
   function turnOn() {
+    setFailed(false);
     startTransition(async () => {
       try {
         const permission = await Notification.requestPermission();
@@ -76,6 +79,7 @@ export function NotifyToggle({ publicKey, known }: { publicKey: string; known?: 
         router.refresh();
       } catch {
         setState("off");
+        setFailed(true);
       }
     });
   }
@@ -121,10 +125,12 @@ export function NotifyToggle({ publicKey, known }: { publicKey: string; known?: 
             "min-w-0",
             state === "on"
               ? "text-[15px] font-semibold tracking-[-0.01em]"
-              : "text-[14px] leading-snug text-muted-foreground",
+              : failed
+                ? "text-[14px] leading-snug text-negative"
+                : "text-[14px] leading-snug text-muted-foreground",
           )}
         >
-          {state === "on" ? m.settings.notifyOnHere : m.settings.notifyOffHere}
+          {state === "on" ? m.settings.notifyOnHere : failed ? m.settings.notifyFailed : m.settings.notifyOffHere}
         </p>
       </div>
       <div className="shrink-0 pl-[54px] sm:pl-0">
