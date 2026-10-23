@@ -144,29 +144,45 @@ async function resolveScope(): Promise<Scope> {
  * The name the app goes by for this organisation, where it has one of its own (Xin, 21-10-2026: the demo
  * account says "MATO"); null is MATO Info. Never fails a page: no session or no answer is the default.
  */
-export const getOrgBrand = cache(async (): Promise<string | null> => {
+export const getOrgBrand = cache(async (): Promise<string | null> => (await orgLook()).name);
+
+/**
+ * Whether this organisation has one's own settings in Instellingen and Profiel (organizations.personal_settings,
+ * 23-10-2026): then the top menu leaves the theme and hiding amounts to Instellingen (Xin, 24-10-2026). Display only;
+ * what is saved checks the column itself (data.ts).
+ */
+export const hasPersonalSettings = cache(async (): Promise<boolean> => (await orgLook()).personal);
+
+/** What every page asks about the organisation: its own brand and whether personal settings are on. Never fails a page. */
+const orgLook = cache(async (): Promise<Look> => {
   try {
     const orgId = (await getScope()).orgId;
-    if (!orgId) return null;
-    // Every page asks (the layout's titles and texts); a brand changes by hand, if ever.
-    const known = brands.get(orgId);
-    if (known && Date.now() - known.at < BRAND_TTL_MS) return known.name;
-    const { data } = await createAdminClient().from("organizations").select("brand_name").eq("id", orgId).maybeSingle();
-    const name = (typeof data?.brand_name === "string" ? data.brand_name.trim() : "") || null;
-    brands.set(orgId, { name, at: Date.now() });
-    return name;
+    if (!orgId) return PLAIN;
+    // Every page asks (the layout's titles and texts, the top menu); both change by hand, if ever.
+    const known = looks.get(orgId);
+    if (known && Date.now() - known.at < LOOK_TTL_MS) return known;
+    const { data } = await createAdminClient().from("organizations").select("brand_name, personal_settings").eq("id", orgId).maybeSingle();
+    const look = {
+      name: (typeof data?.brand_name === "string" ? data.brand_name.trim() : "") || null,
+      personal: data?.personal_settings === true,
+      at: Date.now(),
+    };
+    looks.set(orgId, look);
+    return look;
   } catch {
-    return null;
+    return PLAIN;
   }
 });
 
 /**
- * Brand names kept a few minutes per organisation, in this server process: one
- * round trip less before every page (22-10-2026, mobile speed). Not a secret:
- * only the name the app goes by, and only after the scope check above.
+ * Kept a few minutes per organisation, in this server process: one round trip
+ * less before every page (22-10-2026, mobile speed). Not a secret: only the
+ * name the app goes by and which settings it shows, after the scope check above.
  */
-const BRAND_TTL_MS = 5 * 60_000;
-const brands = new Map<string, { name: string | null; at: number }>();
+const LOOK_TTL_MS = 5 * 60_000;
+type Look = { name: string | null; personal: boolean; at: number };
+const PLAIN: Look = { name: null, personal: false, at: 0 };
+const looks = new Map<string, Look>();
 
 export async function getCurrentOrgId(): Promise<string | null> {
   return (await getScope()).orgId;

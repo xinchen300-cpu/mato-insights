@@ -31,7 +31,7 @@ type Problem = "email" | "emailMissing";
  * it is sent. Nothing is stored before "save"; a test saves first, so it shows what was chosen.
  */
 export function NotificationSettings({ settings, shop }: { settings: Settings; shop: boolean }) {
-  const { m, f, locale } = useI18n();
+  const { m, locale } = useI18n();
   const router = useRouter();
   const [busy, startTransition] = useTransition();
   // Before anything was chosen, mail goes to the address one signs in with.
@@ -232,8 +232,6 @@ export function NotificationSettings({ settings, shop }: { settings: Settings; s
         )}
       </div>
 
-      <Recent recent={settings.recent} channelName={channelName} when={(iso) => f.dateTime(iso)} />
-
       {check && <SavedCheck text={m.prefs.savedCheck} onClose={() => setCheck(false)} />}
 
       <Dialog open={preview !== null && preview !== "loading"} onOpenChange={(open) => !open && setPreview(null)}>
@@ -313,66 +311,6 @@ function Field({
         <p className="text-[13px] leading-snug text-muted-foreground">{hint}</p>
         {notReady && <p className="text-[13px] leading-snug text-gold-ink">{notReady}</p>}
       </div>
-    </div>
-  );
-}
-
-const KIND_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
-  daily: CalendarDays,
-  weekly: CalendarRange,
-  sale: ShoppingBag,
-  low: PackageOpen,
-  test: Send,
-};
-
-/** The last messages, and per channel how each went: the honest answer to "did it work?". */
-function Recent({
-  recent,
-  channelName,
-  when,
-}: {
-  recent: SentNotification[];
-  channelName: Record<NotifyChannel, string>;
-  when: (iso: string) => string;
-}) {
-  const { m } = useI18n();
-  const status: Record<string, string> = {
-    sent: m.prefs.statusSent,
-    no_address: m.prefs.statusNoAddress,
-    no_provider: m.prefs.statusNoProvider,
-    failed: m.prefs.statusFailed,
-  };
-  return (
-    <div className="flex flex-col gap-2">
-      <p className="px-1 text-[15px] font-semibold tracking-[-0.01em]">{m.prefs.recent}</p>
-      {recent.length === 0 ? (
-        <p className="surface-card px-4 py-3 text-[14px] text-muted-foreground">{m.prefs.recentEmpty}</p>
-      ) : (
-        <ul className="surface-card flex flex-col p-2">
-          {recent.map((item) => {
-            const Icon = KIND_ICON[item.kind] ?? AlertTriangle;
-            return (
-              <li key={item.id} className="flex gap-3.5 rounded-xl px-3 py-3">
-                <Avatar>
-                  <Icon />
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[14.5px] font-semibold tracking-[-0.01em]">{item.title}</p>
-                  <p className="mt-0.5 text-[13px] leading-snug text-muted-foreground">{item.body}</p>
-                  <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[12.5px]">
-                    <span className="text-muted-foreground">{when(item.at)}</span>
-                    {NOTIFY_CHANNELS.filter((channel) => item.sent[channel]).map((channel) => (
-                      <span key={channel} className={item.sent[channel] === "sent" ? "text-positive" : "text-muted-foreground"}>
-                        {channelName[channel]}: {status[item.sent[channel]!] ?? item.sent[channel]}
-                      </span>
-                    ))}
-                  </p>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
     </div>
   );
 }

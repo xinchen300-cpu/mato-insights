@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n/client";
 import { cn } from "@/lib/utils";
+import { MACHINE_MODELS, MODEL_SHEETS, asMachineModel } from "@/lib/machine-models";
 import { MACHINE_TYPES, type Business, type Machine, type MachineType } from "@/lib/types";
 import { updateMachineDetails } from "../actions";
 
@@ -22,6 +23,7 @@ export function MachineDetailsForm({
   businesses,
   operator,
   rentsToBusinesses,
+  models = false,
 }: {
   machine: Machine;
   businesses: Business[];
@@ -29,11 +31,14 @@ export function MachineDetailsForm({
   operator: boolean;
   /** An automatenshop says which business a machine is for; a zaak's machines are simply its own. */
   rentsToBusinesses: boolean;
+  /** Which MATO model it is, for Profiel → Mijn automaten (24-10-2026); only where one's own settings are on. */
+  models?: boolean;
 }) {
   const { m } = useI18n();
   const router = useRouter();
   const [name, setName] = useState(machine.name);
   const [type, setType] = useState<MachineType | "">(machine.type ?? "");
+  const [model, setModel] = useState<string>(asMachineModel(machine.model) ?? "");
   const [businessId, setBusinessId] = useState(machine.business_id ?? "");
   const [sharedBusinessId, setSharedBusinessId] = useState(machine.shared_business_id ?? "");
   const [dataSince, setDataSince] = useState(machine.data_since ?? "");
@@ -55,6 +60,8 @@ export function MachineDetailsForm({
         await updateMachineDetails(machine.id, {
           name,
           type: type || null,
+          // Sent only where it is asked, so nothing stored is wiped elsewhere.
+          ...(models ? { model: model || null } : {}),
           // A zaak sends nothing about businesses, so nothing stored is wiped.
           ...(rentsToBusinesses
             ? {
@@ -169,6 +176,30 @@ export function MachineDetailsForm({
           ))}
         </select>
       </div>
+      {models && (
+        <div className="grid gap-2 sm:col-span-2">
+          <Label htmlFor="machine-model">{m.machineModels.modelLabel}</Label>
+          <select
+            id="machine-model"
+            value={model}
+            onChange={(e) => {
+              const picked = asMachineModel(e.target.value);
+              setModel(picked ?? "");
+              // A model says what kind of machine it is, when that is not set yet.
+              if (picked && !type) setType(MODEL_SHEETS[picked].type);
+            }}
+            className={selectClass}
+          >
+            <option value="">{m.machineModels.modelNone}</option>
+            {MACHINE_MODELS.map((key) => (
+              <option key={key} value={key}>
+                {MODEL_SHEETS[key].name} · {m.machineModels[key].kind}
+              </option>
+            ))}
+          </select>
+          <p className={hintClass}>{m.machineModels.modelHint}</p>
+        </div>
+      )}
       <div className="grid gap-2 sm:col-span-2">
         <Label htmlFor="machine-data-since">{m.machines.dataSince}</Label>
         <Input

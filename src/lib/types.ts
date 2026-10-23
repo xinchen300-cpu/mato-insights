@@ -57,6 +57,8 @@ export type Machine = {
   refill_manual: boolean;
   /** Where it stands, for navigating there from a round. */
   address: string | null;
+  /** Which MATO model it is (src/lib/machine-models.ts, "mato-b1"), or null when not known. */
+  model: string | null;
 };
 
 export type SlotStock = {

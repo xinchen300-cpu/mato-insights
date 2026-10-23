@@ -6,11 +6,16 @@ import { SignOutForm } from "@/components/shell/sign-out";
 import { intlLocale } from "@/i18n/config";
 import { DISPLAY_TIME_ZONE, fmt, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
+import type { Messages } from "@/i18n/messages/en";
 import { cleanLook } from "@/lib/avatar";
+import { MachinePhoto } from "@/components/machine/machine-photo";
 import { getAccountFacts, getBusiness, getMachines, getMyRounds, getProducts, getStatsReport } from "@/lib/data";
 import { fillerStats } from "@/lib/filler-stats";
-import { getScope, isFiller, isOperator, requireSignedIn } from "@/lib/org";
+import { MODEL_SHEETS, asMachineModel } from "@/lib/machine-models";
+import { getScope, hasPersonalSettings, isFiller, isOperator, requireSignedIn } from "@/lib/org";
 import { displayName } from "@/lib/people";
+import type { Machine } from "@/lib/types";
+import { AccountPanels } from "../settings/account-panels";
 import { ProfileCard } from "./profile-card";
 
 export async function generateMetadata() {
@@ -21,25 +26,29 @@ export async function generateMetadata() {
 /**
  * Profiel (Xin, 21-10-2026: "a category with profile, with an avatar you can edit, and some information about this
  * account"): one's avatar and name, what the account is and since when, and a few figures fit for whoever looks: money
- * for the operator and a business, pieces and a level for whoever fills.
+ * for the operator and a business, pieces and a level for whoever fills. Where one's own settings are on (24-10-2026,
+ * Xin: "at profiel i want you to remove cijfers, but add Team there and also abonnement there … also add my automaat"):
+ * no figures, but one's machines with their model, and the operator's subscription and team.
  */
-export default async function ProfilePage() {
+export default async function ProfilePage({ searchParams }: { searchParams: Promise<{ betaald?: string }> }) {
   const user = await requireSignedIn();
   const { m, f, locale } = await getI18n();
   const { orgId, businessId, role } = await getScope();
-  const [filler, operator] = await Promise.all([isFiller(), isOperator()]);
+  const [filler, operator, personal] = await Promise.all([isFiller(), isOperator(), hasPersonalSettings()]);
   const fills = filler || operator;
+  // The figures are only read where they are shown.
+  const figures = !personal;
 
   const [facts, business, machines, products, month, rounds] = orgId
     ? await Promise.all([
         getAccountFacts(orgId),
         businessId ? getBusiness(orgId, businessId) : Promise.resolve(null),
         getMachines(orgId),
-        filler ? Promise.resolve(null) : getProducts(orgId),
-        filler
+        filler || !figures ? Promise.resolve(null) : getProducts(orgId),
+        filler || !figures
           ? Promise.resolve(null)
           : getStatsReport(orgId, { period: "month", from: null, to: null, businesses: null, machines: null, products: null }),
-        fills ? getMyRounds(orgId).catch(() => []) : Promise.resolve([]),
+        fills && figures ? getMyRounds(orgId).catch(() => []) : Promise.resolve([]),
       ])
     : [null, null, [], null, null, []];
   const stats = rounds.length ? fillerStats(rounds, DISPLAY_TIME_ZONE) : null;
@@ -86,56 +95,81 @@ export default async function ProfilePage() {
           </RowList>
         </Section>
 
-        <Section title={m.profile.inNumbers}>
-          <RowList>
-            {month && (
+        {/* One's machines and what model each is; a tap shows what it can do (24-10-2026). */}
+        {personal && !filler && machines.length > 0 && (
+          <Section title={m.machineModels.section} hint={m.machineModels.sectionHint}>
+            <RowList>
+              {machines.map((machine) => (
+                <li key={machine.id}>
+                  <ListRow
+                    href={`/profile/machines/${machine.id}`}
+                    leading={<MachineThumb machine={machine} />}
+                    title={machine.name}
+                    subtitle={kindOf(machine, m)}
+                    chevron
+                  />
+                </li>
+              ))}
+            </RowList>
+          </Section>
+        )}
+
+        {personal && operator && orgId && (
+          <AccountPanels orgId={orgId} youId={user.id} returnedFromPayment={(await searchParams).betaald === "1"} />
+        )}
+
+        {figures && (
+          <Section title={m.profile.inNumbers}>
+            <RowList>
+              {month && (
+                <li>
+                  <ListRow
+                    title={m.profile.thisMonth}
+                    value={f.euro(month.totals.revenue)}
+                    valueSub={
+                      <span className="tabular text-muted-foreground">
+                        {month.totals.units === 1 ? m.common.salesOne : fmt(m.common.salesOther, { count: f.number(month.totals.units) })}
+                      </span>
+                    }
+                  />
+                </li>
+              )}
               <li>
-                <ListRow
-                  title={m.profile.thisMonth}
-                  value={f.euro(month.totals.revenue)}
-                  valueSub={
-                    <span className="tabular text-muted-foreground">
-                      {month.totals.units === 1 ? m.common.salesOne : fmt(m.common.salesOther, { count: f.number(month.totals.units) })}
-                    </span>
-                  }
-                />
+                <ListRow title={m.profile.machines} value={<span className="tabular">{f.number(machines.length)}</span>} />
               </li>
-            )}
-            <li>
-              <ListRow title={m.profile.machines} value={<span className="tabular">{f.number(machines.length)}</span>} />
-            </li>
-            {products && (
-              <li>
-                <ListRow title={m.profile.products} value={<span className="tabular">{f.number(products.length)}</span>} />
-              </li>
-            )}
-            {facts?.teamSize != null && (
-              <li>
-                <ListRow
-                  href="/settings"
-                  title={m.profile.team}
-                  value={<span className="tabular">{f.number(facts.teamSize)}</span>}
-                  chevron
-                />
-              </li>
-            )}
-            {fills && (
-              <li>
-                <ListRow
-                  href="/refill/me"
-                  title={m.profile.figures}
-                  subtitle={
-                    stats ? (
-                      <span className="tabular">{fmt(m.profile.level, { level: stats.level.level, items: f.number(stats.items) })}</span>
-                    ) : undefined
-                  }
-                  value={stats ? <span className="tabular">{plural(stats.rounds, m.fillers.roundsOne, m.fillers.rounds)}</span> : undefined}
-                  chevron
-                />
-              </li>
-            )}
-          </RowList>
-        </Section>
+              {products && (
+                <li>
+                  <ListRow title={m.profile.products} value={<span className="tabular">{f.number(products.length)}</span>} />
+                </li>
+              )}
+              {facts?.teamSize != null && (
+                <li>
+                  <ListRow
+                    href="/settings"
+                    title={m.profile.team}
+                    value={<span className="tabular">{f.number(facts.teamSize)}</span>}
+                    chevron
+                  />
+                </li>
+              )}
+              {fills && (
+                <li>
+                  <ListRow
+                    href="/refill/me"
+                    title={m.profile.figures}
+                    subtitle={
+                      stats ? (
+                        <span className="tabular">{fmt(m.profile.level, { level: stats.level.level, items: f.number(stats.items) })}</span>
+                      ) : undefined
+                    }
+                    value={stats ? <span className="tabular">{plural(stats.rounds, m.fillers.roundsOne, m.fillers.rounds)}</span> : undefined}
+                    chevron
+                  />
+                </li>
+              )}
+            </RowList>
+          </Section>
+        )}
 
         <div className="flex flex-wrap gap-2">
           {!filler && (
@@ -153,5 +187,24 @@ export default async function ProfilePage() {
         </div>
       </div>
     </>
+  );
+}
+
+/** "MATO B1 · Gekoelde liftautomaat", or the kind of machine, or that it is not set. */
+function kindOf(machine: Machine, m: Messages): string {
+  const model = asMachineModel(machine.model);
+  if (model) return `${MODEL_SHEETS[model].name} · ${m.machineModels[model].kind}`;
+  return machine.type ? m.machines.types[machine.type] : m.machineModels.notSet;
+}
+
+/** The model as on its folder, else the machine's own photo or the default machine. */
+function MachineThumb({ machine }: { machine: Machine }) {
+  const model = asMachineModel(machine.model);
+  if (!model) return <MachinePhoto path={machine.photo_path} className="size-12 shrink-0 rounded-xl" />;
+  return (
+    <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-[linear-gradient(160deg,var(--photo-from),var(--photo-to))]">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={MODEL_SHEETS[model].image} alt="" className="h-10 w-auto" />
+    </span>
   );
 }

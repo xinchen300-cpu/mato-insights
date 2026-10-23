@@ -66,6 +66,7 @@ function sample() {
     terminal_flags: [],
     refill_manual: mc.fill === null,
     address: null,
+    model: null,
   }));
   const stock = fleet.flatMap((mc) =>
     mc.fill === null

@@ -26,6 +26,7 @@ import { ShelfLifePresets } from "./shelf-life-presets";
 import { SubscriptionPanel } from "./subscription-panel";
 import { TeamPanel } from "./team-panel";
 import { AccountKind } from "./account-kind";
+import { MovedToProfile } from "./moved-to-profile";
 
 export async function generateMetadata() {
   const { m } = await getI18n();
@@ -151,7 +152,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </Section>
         )}
 
-        {billing && (
+        {/* Where one's own settings are on, Abonnement and Team are in Profiel (Xin, 24-10-2026). */}
+        {personal && <MovedToProfile />}
+
+        {billing && !personal && (
           <SubscriptionPanel
             planId={billing.plan?.id ?? null}
             status={billing.status}
@@ -164,7 +168,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           />
         )}
 
-        {team && (
+        {team && !personal && (
           <TeamPanel members={team.members} invites={team.invites} youId={user?.id ?? null} signupUrl={signupUrl} />
         )}
 
@@ -288,8 +292,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </Section>
         )}
 
-        {/* The refill settings, each one row with its value; tap to change it. */}
-        {operator && (
+        {/* The refill settings, each one row with its value; tap to change it. Not where one's own settings are on
+            (Xin, 24-10-2026: "in settings, i want you to remove bijvullen"). */}
+        {operator && !personal && (
           <Section title={m.nav.refill}>
             <div className="surface-card flex flex-col p-2">
               <Fold

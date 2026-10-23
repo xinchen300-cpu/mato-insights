@@ -13,6 +13,7 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { displayName } from "@/lib/people";
+import { asMachineModel } from "@/lib/machine-models";
 import { MACHINE_TYPES, SLOT_SIZES, type LayoutRowSpec, type MachineType, type Product, type SlotSize } from "@/lib/types";
 import { camerasEnabled, listCameras, type UnifiCamera } from "@/lib/unifi";
 import { imageFrom, removeImage, uploadImage } from "@/lib/upload";
@@ -55,6 +56,8 @@ export async function updateMachineDetails(
     refillManual?: boolean;
     /** Where it stands, for navigating there; left out by a form from before the field, and then kept. */
     address?: string;
+    /** Which MATO model (src/lib/machine-models.ts); left out where the form does not ask it, and then kept. */
+    model?: string | null;
   },
 ) {
   const orgId = await requireOrgId();
@@ -64,6 +67,7 @@ export async function updateMachineDetails(
   const name = input.name.trim().slice(0, 80);
   if (!name) throw new Error("Name is required");
   if (input.type && !MACHINE_TYPES.includes(input.type)) throw new Error("Invalid type");
+  if (input.model && !asMachineModel(input.model)) throw new Error("Invalid model");
 
   // A shop may rename its own machine and nothing else. Who it belongs to, its
   // kind, the day its figures start and the drive there are the operator's,
@@ -114,6 +118,7 @@ export async function updateMachineDetails(
       km_round_trip: input.kmRoundTrip,
       ...(input.refillManual !== undefined ? { refill_manual: input.refillManual === true } : {}),
       ...(input.address !== undefined ? { address: cleanAddress(input.address) } : {}),
+      ...(input.model !== undefined ? { model: asMachineModel(input.model) } : {}),
     })
     .eq("id", machineId)
     .eq("org_id", orgId);
