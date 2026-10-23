@@ -269,6 +269,14 @@ async function syncLogin(supabase: SupabaseClient, login: Login, withTerminals: 
     return { status: "success", transactionsSynced };
   } catch (err) {
     const thrown = err instanceof Error ? err.message : String(err);
+    // Payter can drop a session long before it says it expires (all of them at 01:00 on 23-10-2026, 14 hours without
+    // sales). A refused session is forgotten, so the next run logs in again instead of retrying it until it expires.
+    if (/\(401\)/.test(thrown)) {
+      await supabase
+        .from(login.table)
+        .update({ cached_token: null, token_expires_at: null })
+        .eq(login.key, login.id);
+    }
     // A further login's failure carries its account code, so Settings can show it on that account's row.
     const message = login.domain ? `${login.domain}: ${thrown}` : thrown;
     await supabase.from("sync_logs").insert({

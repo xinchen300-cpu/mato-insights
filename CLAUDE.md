@@ -128,7 +128,11 @@ vak. De hulpteksten (`domainHint`, `payterFailed`, `payterWhere`, `payterHow`) z
 terminals erin; hun betaalcontract (MNP-ELA, merchant van `MATO_AUTOMAAT`) bleef. Dat is de extra login van Mato Vending
 (`321cb752-…`); de automaten heten "Istanbul Comines" (`APO20262000997`) en "Diksmuide Faes" (`APO20260100649`), met de hand
 toegevoegd (`excluded` = false). **Hun verkopen van vóór de verhuizing zitten niet in `MATO-INFO`** (Transactions telde er 0):
-die blijven in `MATO_AUTOMAAT`, dat de API niet bereikt. Inhalen kan alleen uit een export van mypayter.com.
+die blijven in `MATO_AUTOMAAT`, dat de API niet bereikt. Inhalen kan alleen uit een export van mypayter.com. Xin noemde
+ze later "Zoete Zonde" en "Koffie Automaat"; de eerste verkopen kwamen binnen op 23-10 (betalen werkt na de verhuizing).
+**Payter liet op 23-10-2026 om 01:00 alle sessies vallen** (tokens die tot 20:15 geldig moesten zijn gaven 401): 14 uur geen
+verkoop binnen, ook niet voor Chens. Sinds `payter-sync` v10 vergeet de sync een sessie die Payter met 401 weigert, en logt hij
+de volgende run (15 s later) opnieuw in. Opnieuw inloggen lukte meteen; de nacht kwam in één run binnen.
 
 ## Gits: Televend-verkoop met de hand, tot Payter er is
 Gits Chens Garden (`9e523217-1488-4e3a-a02e-9f7ad642489e`, Nieuwplaats 11 Hooglede) betaalt nog via
