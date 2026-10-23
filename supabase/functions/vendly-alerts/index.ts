@@ -1,14 +1,13 @@
 // Instellingen → Meldingen (23-10-2026, Xin: "put notifications on and send them on email or sms and also filter what
 // they notifications about such as one time per day a overview or every sale or if error"; the same day "remove push
-// but focus more on email"). Runs every minute (pg_cron) and tells each person what they asked for, on the channels
-// they chose per topic: email (Resend: resend_api_key and mail_from in app_keys) and sms (Twilio: twilio_sid,
-// twilio_token and twilio_from). Without those keys a channel is skipped and the log says why: nothing pretends to be
-// sent. An email is a full page (the day's money per machine, what sold most, what needs doing); an sms is one line.
+// but focus more on email", then "i dont wnat to activate sms"). Runs every minute (pg_cron) and tells each person by
+// email what they asked for (Resend: resend_api_key and mail_from in app_keys). Without those keys nothing goes out and
+// the log says why: nothing pretends to be sent. An email is a full page (the day's money per machine, what sold most,
+// what needs doing). The columns phone and quiet* of notification_prefs stay, unread.
 //
 // One problem is one message: a terminal offline, Payter failing and a machine almost empty each open an episode in
-// notification_log and close it when it is over (offline and Payter then say so). A message that reached nobody
-// (quiet hours, for sms) opens nothing, so it is told after them if the problem is still there. Sales during quiet
-// hours are skipped, never told in a heap the next morning.
+// notification_log and close it when it is over (offline and Payter then say so). A message that reached nobody opens
+// nothing, so it is told again on the next run if the problem is still there.
 //
 // POST {"test": {"user_id", "org_id"}} sends the day's overview at once, as a test, for "Stuur een test" in Instellingen.
 // POST {"preview": {"user_id", "org_id"}} only returns that email ({subject, html}), for "Bekijk de e-mail".
@@ -32,7 +31,7 @@ const SALES_LISTED = 25;
 /** MATO gold, as `--primary` in the app. */
 const GOLD = "#b5862a";
 
-type Channel = "email" | "sms";
+type Channel = "email";
 type Locale = "nl" | "fr" | "en";
 type Prefs = {
   user_id: string;
@@ -40,7 +39,6 @@ type Prefs = {
   business_id: string | null;
   locale: Locale;
   email: string | null;
-  phone: string | null;
   daily: string[];
   weekly: string[];
   sales: string[];
@@ -48,9 +46,6 @@ type Prefs = {
   low_stock: string[];
   daily_hour: number;
   low_percent: number;
-  quiet: boolean;
-  quiet_from: number;
-  quiet_to: number;
   sales_seen_at: string | null;
   daily_sent_on: string | null;
   weekly_sent_on: string | null;
@@ -250,14 +245,9 @@ function terminal(machine: ScopeMachine, now: number): "online" | "offline" | "u
   return disconnected > connected && now - disconnected > GRACE_MS ? "offline" : "online";
 }
 
-function inQuiet(p: Prefs, hour: number): boolean {
-  if (!p.quiet || p.quiet_from === p.quiet_to) return false;
-  return p.quiet_from < p.quiet_to ? hour >= p.quiet_from && hour < p.quiet_to : hour >= p.quiet_from || hour < p.quiet_to;
-}
-
-/** Only the channels there are now: a push chosen before 23-10-2026 goes nowhere. */
+/** Only the channels there are now: a push or sms chosen before goes nowhere. */
 function channels(list: string[] | null): Channel[] {
-  return (["email", "sms"] as const).filter((channel) => (list ?? []).includes(channel));
+  return (["email"] as const).filter((channel) => (list ?? []).includes(channel));
 }
 
 const escape = (text: string) =>
@@ -368,7 +358,6 @@ Deno.serve(async (req) => {
     preview?: { user_id?: string; org_id?: string };
   };
   const emailReady = Boolean(key("resend_api_key") && key("mail_from"));
-  const smsReady = Boolean(key("twilio_sid") && key("twilio_token") && key("twilio_from"));
   const appUrl = (key("app_url") || "https://vendly-six-gold.vercel.app").replace(/\/$/, "");
 
   const now = new Date();
@@ -428,11 +417,10 @@ Deno.serve(async (req) => {
     };
 
     /** Sends one message on the chosen channels; says per channel how it went. */
-    async function deliver(chosen: Channel[], msg: Message, quiet: boolean, subject = msg.title) {
+    async function deliver(chosen: Channel[], msg: Message, subject = msg.title) {
       const outcome: Outcome = {};
       for (const channel of new Set(chosen)) {
         if (channel === "email") {
-          // Mail waits in the inbox: quiet hours do not hold it back.
           if (!p.email) outcome.email = "no_address";
           else if (!emailReady) outcome.email = "no_provider";
           else {
@@ -450,22 +438,6 @@ Deno.serve(async (req) => {
               }),
             }).catch(() => null);
             outcome.email = response?.ok ? "sent" : "failed";
-          }
-        } else if (channel === "sms") {
-          if (quiet) outcome.sms = "quiet";
-          else if (!p.phone) outcome.sms = "no_number";
-          else if (!smsReady) outcome.sms = "no_provider";
-          else {
-            const sid = key("twilio_sid");
-            const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
-              method: "POST",
-              headers: {
-                Authorization: `Basic ${btoa(`${sid}:${key("twilio_token")}`)}`,
-                "Content-Type": "application/x-www-form-urlencoded",
-              },
-              body: new URLSearchParams({ To: p.phone, From: key("twilio_from"), Body: `${brand}: ${subject}. ${msg.body}`.slice(0, 320) }),
-            }).catch(() => null);
-            outcome.sms = response?.ok ? "sent" : "failed";
           }
         }
       }
@@ -504,7 +476,7 @@ Deno.serve(async (req) => {
       const revenue = perMachine.reduce((sum, m) => sum + m.revenue, 0);
       const units = perMachine.reduce((sum, m) => sum + m.units, 0);
 
-      // The line an sms carries, and the hidden first line of the email.
+      // The hidden first line of the email, and its plain-text part.
       const parts: string[] = [];
       if (units > 0) {
         parts.push(`${money(revenue)} · ${t.sales(units)}`);
@@ -537,10 +509,9 @@ Deno.serve(async (req) => {
     }
 
     async function run() {
-      const quiet = inQuiet(p, local.hour);
       const results: Record<string, unknown>[] = [];
-      const send = async (chosen: Channel[], msg: Message, options: { quiet: boolean; open?: boolean; always?: boolean }) => {
-        const { outcome, delivered } = await deliver(chosen, msg, options.quiet);
+      const send = async (chosen: Channel[], msg: Message, options: { open?: boolean; always?: boolean } = {}) => {
+        const { outcome, delivered } = await deliver(chosen, msg);
         if (delivered || options.always) await log(p, msg, outcome, Boolean(options.open));
         results.push({ kind: msg.kind, title: msg.title, outcome });
         return delivered;
@@ -564,16 +535,16 @@ Deno.serve(async (req) => {
         low: channels(p.low_stock),
       };
 
-      // 1. The day's overview at the hour they chose (quiet hours do not apply: they picked it), once a day.
+      // 1. The day's overview at the hour they chose, once a day.
       if (topic.daily.length && local.hour === p.daily_hour && p.daily_sent_on !== local.day) {
         await update({ daily_sent_on: local.day });
-        await send(topic.daily, await overview("day"), { quiet: false, always: true });
+        await send(topic.daily, await overview("day"), { always: true });
       }
 
       // 2. Last week, on Monday at the same hour.
       if (topic.weekly.length && local.weekday === "Mon" && local.hour === p.daily_hour && p.weekly_sent_on !== local.day) {
         await update({ weekly_sent_on: local.day });
-        await send(topic.weekly, await overview("week"), { quiet: false, always: true });
+        await send(topic.weekly, await overview("week"), { always: true });
       }
 
       // 3. Every sale, as it arrives: one message per run, however many came in.
@@ -625,7 +596,6 @@ Deno.serve(async (req) => {
                   more: Math.max(0, rows.length - SALES_LISTED),
                 },
               },
-              { quiet },
             );
           }
         }
@@ -646,7 +616,7 @@ Deno.serve(async (req) => {
                 body: t.offlineBody(when(machine.last_disconnected_at!)),
                 url: p.business_id ? "/" : `/machines/${machine.machine_id}`,
               },
-              { quiet, open: true },
+              { open: true },
             );
           } else if (status === "online" && known) {
             await resolve(known);
@@ -659,7 +629,6 @@ Deno.serve(async (req) => {
                 body: t.onlineBody(when(machine.last_disconnected_at ?? known.created_at), when(machine.last_connected_at!)),
                 url: p.business_id ? "/" : `/machines/${machine.machine_id}`,
               },
-              { quiet },
             );
           }
         }
@@ -706,11 +675,11 @@ Deno.serve(async (req) => {
                   body: t.syncBody(when(account.syncedAt ?? (failure!.started_at as string)), account.label),
                   url: "/settings",
                 },
-                { quiet, open: true },
+                { open: true },
               );
             } else if (!failing && known && account.syncedAt && account.syncedAt > known.created_at) {
               await resolve(known);
-              await send(topic.errors, { kind: "sync_ok", key: account.key, title: t.syncOkTitle, body: t.syncOkBody, url: "/" }, { quiet });
+              await send(topic.errors, { kind: "sync_ok", key: account.key, title: t.syncOkTitle, body: t.syncOkBody, url: "/" });
             }
           }
         }
@@ -736,7 +705,6 @@ Deno.serve(async (req) => {
               body: t.failedBody,
               url: p.business_id ? "/" : `/machines/${row.machine_id}`,
             },
-            { quiet },
           );
         }
       }
@@ -755,7 +723,7 @@ Deno.serve(async (req) => {
                 body: t.lowBody(pct(fill.percent), pct(p.low_percent)),
                 url: p.business_id ? "/" : `/refill/machines/${fill.machine_id}`,
               },
-              { quiet, open: true },
+              { open: true },
             );
           } else if (known && fill.percent >= p.low_percent + LOW_MARGIN) {
             await resolve(known);
@@ -770,7 +738,7 @@ Deno.serve(async (req) => {
       const chosen = [...new Set([p.daily, p.weekly, p.sales, p.errors, p.low_stock].flatMap(channels))];
       const msg = { ...(await overview("day")), kind: "test" };
       const subject = `${t.test}: ${msg.title}`;
-      const { outcome } = await deliver(chosen.length ? chosen : ["email"], msg, false, subject);
+      const { outcome } = await deliver(chosen.length ? chosen : ["email"], msg, subject);
       await log(p, { ...msg, title: subject }, outcome, false);
       return outcome;
     }
@@ -799,7 +767,6 @@ Deno.serve(async (req) => {
       business_id: null,
       locale: "nl",
       email: null,
-      phone: null,
       daily: ["email"],
       weekly: [],
       sales: [],
@@ -807,9 +774,6 @@ Deno.serve(async (req) => {
       low_stock: [],
       daily_hour: 20,
       low_percent: 25,
-      quiet: false,
-      quiet_from: 22,
-      quiet_to: 7,
       sales_seen_at: null,
       daily_sent_on: null,
       weekly_sent_on: null,

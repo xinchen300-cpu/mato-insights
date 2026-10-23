@@ -586,20 +586,19 @@ import { stopChanges } from "../src/lib/refill-flow.ts";
 }
 
 // Instellingen → Meldingen (23-10-2026): what is stored is only what the sender understands.
-import { channelsInUse, cleanPrefs, normalizeEmail, normalizePhone, NOTIFY_DEFAULTS } from "../src/lib/notify-prefs.ts";
+import { channelsInUse, cleanPrefs, normalizeEmail, NOTIFY_DEFAULTS } from "../src/lib/notify-prefs.ts";
 {
-  ok("phone: a Belgian mobile as typed", normalizePhone("0470 12 34 56") === "+32470123456" && normalizePhone("0032 470/12.34.56") === "+32470123456");
-  ok("phone: international stays, empty is none, nonsense is refused", normalizePhone("+31 6 12345678") === "+31612345678" && normalizePhone("  ") === null && normalizePhone("12ab") === false);
   ok("email: trimmed and lower case, nonsense refused", normalizeEmail(" Xin@Example.BE ") === "xin@example.be" && normalizeEmail("") === null && normalizeEmail("xin@") === false);
-  const base = { ...NOTIFY_DEFAULTS, email: "a@b.be", phone: "" };
+  const base = { ...NOTIFY_DEFAULTS, email: "a@b.be" };
   const clean = cleanPrefs({ ...base, topics: { daily: ["push", "email", "fax"], sales: "email", errors: ["email"] } });
   ok("prefs: unknown channels (push too) and topics dropped", clean.ok && clean.prefs.topics.daily.join() === "email" && clean.prefs.topics.sales.length === 0 && clean.prefs.topics.weekly.length === 0);
-  const smsOnly = cleanPrefs({ ...base, topics: { errors: ["sms"] } });
-  ok("prefs: sms needs a number", !smsOnly.ok && smsOnly.reason === "phoneMissing");
+  // Xin, 23-10-2026: "i dont wnat to activate sms". A phone that still sends it gets it dropped, no number asked.
+  const smsOnly = cleanPrefs({ ...base, phone: "", topics: { errors: ["sms"] } });
+  ok("prefs: sms is dropped, never asks for a number", smsOnly.ok && smsOnly.prefs.topics.errors.length === 0 && !("phone" in smsOnly.prefs));
   const mailOnly = cleanPrefs({ ...base, email: "", topics: { daily: ["email"] } });
   ok("prefs: mail needs an address", !mailOnly.ok && mailOnly.reason === "emailMissing");
-  const odd = cleanPrefs({ ...base, dailyHour: 25, quietFrom: -1, quietTo: 6.5, lowPercent: 33, quiet: "yes" });
-  ok("prefs: hours and limit fall back, quiet only when true", odd.ok && odd.prefs.dailyHour === 20 && odd.prefs.quietFrom === 22 && odd.prefs.quietTo === 7 && odd.prefs.lowPercent === 25 && odd.prefs.quiet === false);
-  ok("prefs: channels in use", channelsInUse({ daily: ["email"], weekly: [], sales: [], errors: ["sms"], low_stock: [] }).join() === "email,sms");
+  const odd = cleanPrefs({ ...base, dailyHour: 25, lowPercent: 33, quiet: true });
+  ok("prefs: hour and limit fall back, no quiet hours kept", odd.ok && odd.prefs.dailyHour === 20 && odd.prefs.lowPercent === 25 && !("quiet" in odd.prefs));
+  ok("prefs: channels in use", channelsInUse({ daily: ["email"], weekly: [], sales: [], errors: [], low_stock: [] }).join() === "email");
   ok("prefs: nothing usable is still a valid, quiet choice", cleanPrefs(null).ok);
 }

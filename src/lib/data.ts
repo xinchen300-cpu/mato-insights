@@ -1198,7 +1198,7 @@ export async function hasRefillCabinet(orgId: string): Promise<boolean> {
   return data?.refill_cabinet === true;
 }
 
-/** A message vendly-alerts sent, with how each channel fared ("sent", "quiet", "no_provider", …). */
+/** A message vendly-alerts sent, with how each channel fared ("sent", "no_provider", …). */
 export type SentNotification = { id: string; kind: string; title: string; body: string; sent: Partial<Record<NotifyChannel, string>>; at: string };
 
 export type NotificationSettings = {
@@ -1206,7 +1206,7 @@ export type NotificationSettings = {
   /** Whether this person saved choices of their own; before that the defaults are what they get. */
   chosen: boolean;
   loginEmail: string | null;
-  /** Which channels MATO Info can send on now: mail and sms need a provider's keys. */
+  /** Which channels MATO Info can send on now: mail needs a provider's keys. */
   ready: Record<NotifyChannel, boolean>;
   recent: SentNotification[];
 };
@@ -1214,7 +1214,6 @@ export type NotificationSettings = {
 /** The keys a channel needs before anything goes out on it (read by supabase/functions/vendly-alerts). */
 const CHANNEL_KEYS: Record<NotifyChannel, string[]> = {
   email: ["resend_api_key", "mail_from"],
-  sms: ["twilio_sid", "twilio_token", "twilio_from"],
 };
 
 /**
@@ -1256,16 +1255,12 @@ export async function getNotificationSettings(): Promise<NotificationSettings | 
   const prefs: NotifyPrefs = row
     ? {
         email: (row.email as string | null) ?? null,
-        phone: (row.phone as string | null) ?? null,
-        // Only the channels there are now: a push chosen before 23-10-2026 is no longer one.
+        // Only the channels there are now: a push or sms chosen before is no longer one.
         topics: Object.fromEntries(
           NOTIFY_TOPICS.map((topic) => [topic, NOTIFY_CHANNELS.filter((channel) => ((row[topic] as string[] | null) ?? []).includes(channel))]),
         ) as NotifyPrefs["topics"],
         dailyHour: Number(row.daily_hour),
         lowPercent: Number(row.low_percent),
-        quiet: Boolean(row.quiet),
-        quietFrom: Number(row.quiet_from),
-        quietTo: Number(row.quiet_to),
       }
     : NOTIFY_DEFAULTS;
   return {
@@ -1306,13 +1301,12 @@ export async function saveNotificationSettings(input: unknown, locale: Locale): 
       business_id: businessId,
       locale: isLocale(locale) ? locale : "nl",
       email: prefs.email,
-      phone: prefs.phone,
+      // No sms (Xin, 23-10-2026: "i dont wnat to activate sms"): no number kept, and quiet hours were only for sms.
+      phone: null,
       ...prefs.topics,
       daily_hour: prefs.dailyHour,
       low_percent: prefs.lowPercent,
-      quiet: prefs.quiet,
-      quiet_from: prefs.quietFrom,
-      quiet_to: prefs.quietTo,
+      quiet: false,
       updated_at: now,
       ...(prefs.topics.sales.length > 0 && !((before?.sales as string[] | null) ?? []).length ? { sales_seen_at: now } : {}),
     },

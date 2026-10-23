@@ -557,11 +557,12 @@ wat van de zaak is (Abonnement, Team, Payter, …):
   taal; de taalknop bovenaan de pagina is weg), Thema Licht/Donker/**Automatisch** (`setThemeChoice`/`readThemeChoice` in
   `theme-toggle.tsx`: Automatisch wist `mato:theme`, dan volgt het script in `layout.tsx` de gsm weer; event `mato:theme`),
   **Bedragen verbergen** (`setHideNumbers`/`useHiddenNumbers` in `hide-numbers.tsx`, volgt het attribuut, dus knop en rij lopen gelijk).
-- **Meldingen** (`settings/notification-settings.tsx`): pushmeldingen op dit toestel (de oude `NotifyToggle`), e-mailadres (standaard
-  het login-adres) en gsm-nummer (`normalizePhone`: "0470 12 34 56" → `+32470123456`); per onderwerp **Push / E-mail / Sms**:
-  Dagoverzicht (uur naar keuze; vóór 12 u gisteren, vanaf 12 u de dag tot dan), Weekoverzicht (maandag, zelfde uur), Elke verkoop,
-  Fouten en storingen, Automaat bijna leeg (onder 10–50 %); **Stille uren** (geen push/sms, e-mail en de overzichten wel); **Stuur
-  een test** (slaat eerst op, hooguit om de 30 s); **Laatst verstuurd** met per kanaal hoe het ging. Opslaan geeft het grote groene vinkje.
+- **Meldingen** (`settings/notification-settings.tsx`; nu alleen e-mail, zie "Geen sms" hieronder): e-mailadres (standaard het
+  login-adres) met "Bekijk de e-mail"; per onderwerp een **schakelaar aan/uit**: Dagoverzicht (uur naar keuze; vóór 12 u gisteren,
+  vanaf 12 u de dag tot dan), Weekoverzicht (maandag, zelfde uur), Elke verkoop, Fouten en storingen, Automaat bijna leeg (onder
+  10–50 %); het uur en de grens staan eronder zolang het aan staat. **Stuur een test** (slaat eerst op, hooguit om de 30 s; zegt
+  "Verstuurd naar <adres>"); **Laatst verstuurd** met hoe het ging. Opslaan geeft het grote groene vinkje. (Eerst ook push, sms, een
+  gsm-nummer en stille uren: allemaal weg op 23-10.)
 - **Account → Wachtwoord** (`settings/password-form.tsx`): zelfde regels als na een reset (8 tekens, geen gelekt wachtwoord, niet het huidige).
 - Opslag: **`notification_prefs`** (per persoon per organisatie, `user_id, org_id`; kanalen per onderwerp als `text[]`; RLS aan, alleen
   de servicerol, toevoegend) en **`notification_log`** (elk bericht + `sent` per kanaal; ook de open "episodes" met `resolved_at` null).
@@ -570,16 +571,16 @@ wat van de zaak is (Abonnement, Team, Payter, …):
   opslaan in data.ts (`getNotificationSettings`, `saveNotificationSettings`, `sendTestNotification`, altijd alleen het eigen account).
   De taal van de berichten volgt de app (`setLocale` → `rememberNotificationLocale`).
 - **Versturen: edge-functie `vendly-alerts`** (pg_cron `vendly-alerts-every-minute`, met `notify_secret`; één run tegelijk via
-  `alert_lease`). Teksten in nl/fr/en in de functie zelf. Push werkt meteen (VAPID). **E-mail en sms gaan pas weg met sleutels in
-  `app_keys`**: `resend_api_key` + `mail_from` (Resend, zoals `vendly-billing`) en `twilio_sid` + `twilio_token` + `twilio_from`; tot dan
-  zegt Instellingen "Staat nog niet aan" en het logboek `no_provider`. Wat telt als fout: een terminal offline (na 10 min, alleen
+  `alert_lease`). Teksten in nl/fr/en in de functie zelf. **E-mail gaat pas weg met sleutels in `app_keys`**: `resend_api_key` +
+  `mail_from` (Resend, zoals `vendly-billing`; staan er sinds 23-10); zonder zegt Instellingen "Staat nog niet aan" en het logboek
+  `no_provider`. Wat telt als fout: een terminal offline (na 10 min, alleen
   als het minder dan 24 u geleden begon), Payter die 15 min niet lukt (eigen login en elke extra login), 3 mislukte of geweigerde
   betalingen op één automaat binnen het uur (daarna 3 u stil voor die automaat). Offline en Payter melden ook als het weer werkt.
   Bijna leeg: om de 5 minuten, één keer per automaat tot hij weer 10 punten boven de grens zit. Elke verkoop: per run één bericht
   (Televends dagregels van Gits niet). SQL-helpers met dezelfde afscherming als Net verkocht (een zaak alleen haar eigen vakken):
   `alert_scope`, `alert_new_sales`, `alert_failed_payments`, `alert_period_summary`, `alert_machine_fill` (gesettelde voorraad).
-  `vendly-notify` (de oude avondmelding) slaat wie eigen keuzes heeft over. Titel van een sms: `brand_name` of anders "Vendly"
-  (een zaak "MATO Info"); push en e-mail hebben de gebeurtenis als titel.
+  `vendly-notify` (de oude avondmelding) slaat wie eigen keuzes heeft over. De afzendernaam is `brand_name` of anders "Vendly" (een
+  zaak "MATO Info"); het onderwerp is de gebeurtenis.
 - Getest op de testsite met het demo-account (opslaan, weigeren zonder nummer/adres, test, thema, talen, wachtwoord geweigerd als
   het huidige) en in `vendly-alerts` zelf: dagoverzicht ("695,20 € · 167 ventes · meilleur : Kortrijk Campus"), elke verkoop ("35
   verkopen · € 178,70" voor 3 uur), bijna leeg (4 automaten onder een testgrens van 80 %). Echte push kon hier niet (headless Chromium
@@ -608,6 +609,12 @@ matoautomaat.be (Resend-id `a4e22db0-…`, regio eu-west-1), DNS bij GoDaddy doo
 'Bearer ' || (select value from app_keys where name = 'resend_api_key'))`. **Let op: dezelfde sleutels zetten `vendly-billing` aan**
 (dagelijks 07:00 UTC): Chens Garden krijgt zo op 4-12-2026 de mail "Je proef van Vendly loopt af op 11 december" (zonder Mollie de
 versie "Hoe je daarna verdergaat, laten we je persoonlijk weten"). Ongewenst? Dan de proefdatum of `billing_email` aanpassen.
+
+**Geen sms (23-10-2026, Xin: "i dont wnat to activate sms").** `NOTIFY_CHANNELS` = alleen `"email"`; het gsm-nummer, de stille uren
+en `normalizePhone` zijn weg uit `notify-prefs.ts`, de pagina, data.ts en `vendly-alerts` (v3, geen Twilio meer). Opslaan zet
+`phone` = null en `quiet` = false; de kolommen `phone`, `quiet`, `quiet_from`, `quiet_to` blijven (toevoegend) maar niemand leest ze.
+Een sms die nog in een rij staat, gaat nergens heen (`channels()`); bij het demo-account is hij weggehaald, net als het nummer.
+De kanalen blijven een lijst per onderwerp (`text[]`), zodat een ander kanaal later terug kan zonder de databank te veranderen.
 
 ## Snelheid op de gsm (22-10-2026)
 Xin: "the mobile version is slow and not responsive". Gemeten op live (demo-account, gsm 4× trager, 4G): elke pagina laadde
