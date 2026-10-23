@@ -127,6 +127,18 @@
   --photo-to: #ece6da;
   --brand-ink: #2a2520;
   --shimmer: #f8f8fa;
+
+  /* The machine on the refill page (Xin, 23-10-2026: "like this automaat"): black in both themes, as the real one. */
+  --cabinet: #141416;
+  --cabinet-edge: #2c2c31;
+  --cabinet-glass: #0a0b0d;
+  --cabinet-rail: #303136;
+  --cabinet-rail-top: #5c5d64;
+  --cabinet-label: #f4f4f5;
+  --cabinet-label-ink: #111113;
+  --cabinet-led: #eef4ff;
+  --cabinet-lcd: #1d3b8f;
+  --cabinet-lcd-ink: #d6e4ff;
   color-scheme: light;
 }
 
@@ -646,6 +658,72 @@
   .bar-grow {
     transition: none;
   }
+}
+
+/* The machine on the refill page (23-10-2026): a black cabinet, the glass with its light strip and a soft
+   reflection, every shelf's edge with white number labels, the drawer below. */
+.cabinet {
+  background: linear-gradient(180deg, var(--cabinet-edge), var(--cabinet) 5%, var(--cabinet) 95%, var(--cabinet-edge));
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.06),
+    0 22px 44px -20px rgb(0 0 0 / 0.6),
+    0 2px 6px rgb(0 0 0 / 0.25);
+}
+.cabinet-glass {
+  position: relative;
+  min-width: 0;
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgb(255 255 255 / 0.07), transparent 60%),
+    var(--cabinet-glass);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.09),
+    inset 0 12px 26px rgb(0 0 0 / 0.65);
+}
+.cabinet-glass::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--cabinet-led);
+  box-shadow:
+    0 0 6px 1px var(--cabinet-led),
+    0 0 18px 3px rgb(238 244 255 / 0.3);
+  pointer-events: none;
+  z-index: 1;
+}
+.cabinet-glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg, transparent 28%, rgb(255 255 255 / 0.05) 36%, transparent 50%);
+  pointer-events: none;
+}
+.cabinet-bay {
+  background: linear-gradient(180deg, transparent, rgb(255 255 255 / 0.04));
+}
+.cabinet-rail {
+  background: linear-gradient(180deg, var(--cabinet-rail-top), var(--cabinet-rail) 30%, var(--cabinet-rail));
+  box-shadow: 0 4px 8px rgb(0 0 0 / 0.5);
+}
+.cabinet-label {
+  background: var(--cabinet-label);
+  color: var(--cabinet-label-ink);
+}
+.cabinet-lcd {
+  background: var(--cabinet-lcd);
+  color: var(--cabinet-lcd-ink);
+  box-shadow: inset 0 0 8px rgb(0 0 0 / 0.45);
+  text-shadow: 0 0 6px var(--cabinet-lcd-ink);
+}
+.cabinet-drawer {
+  background: linear-gradient(180deg, var(--cabinet-glass), var(--cabinet));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    inset 0 0 0 1px rgb(255 255 255 / 0.06);
 }
 
 /* The machines on a map (Bijvullen, 21-10-2026). Leaflet's own layers count
