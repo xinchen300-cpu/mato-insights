@@ -419,6 +419,31 @@ geeft; "Niet nu" onthoudt `gsm-hint-dismissed` in localStorage); onderaan elke p
 (`components/gsm-help.tsx`). App-iconen uit het logo: `src/app/apple-icon.png` en `public/app-icon-192/512.png` in het
 manifest. Nieuwe wachtwoorden op 20-10 voor Ledoux en Sferio (alleen de hash staat op Vercel).
 
+## De klantsites in MATO Info (23-10-2026)
+Xin: "add the three client sites the data, the layout, the transaction and put them on the mato info site". De automaten
+Brood, SFERIO en ChocaBake van Mato Vending krijgen in MATO Info de indeling, producten en tellingen van Ledoux, Sferio en
+ChocaBake. **Eén richting:** de klantsites blijven de bron; wat er in MATO Info aan die vakken verandert, overschrijft de
+volgende sync (product) of telling (voorraad). `client_sites_sync()` (pg_cron `client-sites-sync-every-minute`, elke minuut;
+bestaat uit `client_site_slot_rows()`, `client_sites_sync_slot(…)` per vak en `client_sites_sync_counts()`):
+- **Vak:** rij = tientallen, `depth` = `capacity`; ontbreekt het, dan erbij (`size` small). Ledoux 51–55 in Brood en 1–15 in
+  SFERIO, Sferio 21–45 in SFERIO, ChocaBake 1–39.
+- **Product** op naam: Sferio en ChocaBake met de zaak van de automaat, Ledoux zonder zaak (ze huurt in twee automaten van twee
+  zaken). Prijs = wat klanten in dat vak het vaakst betaalden (Ledoux: binnen haar prijslijst), anders haar eerste prijs.
+- **Wat het vak bevat** (`selection_assignments`): de eerste keer vanaf het begin op de klantsite (`created_at`; Sferio
+  `counts_from`; Ledoux pas na de laatste verkoop aan een prijs die niet de hare is, zoals haar site telt), daarna vanaf het
+  moment van de wijziging. Een verwijderd vak sluit (`client_site_slots.removed_at`); het vak blijft in de indeling.
+- **Elke telling** (`*_stock_counts`) wordt een `correction` op het moment van tellen, `filled_by` = "Ledoux"/"Sferio"/"ChocaBake",
+  `delta` tegen wat er toen lag (eerste telling 0); zo staat een hervulling in Bijvullingen als "via aanpassen".
+  `client_site_counts` onthoudt wat al over is.
+- **Bewust niet:** `slots.business_id` en `shared_business_id` blijven zoals ze waren. De facturatie (`fact_attributed_sales`,
+  `fact_*`, een andere app op dezelfde databank) leest eigenaarschap per vak; Ledoux en Sferio herkent ze zelf uit de
+  klanttabellen. Ledoux is dus geen zaak in MATO Info; haar verkoop telt bij de zaak van de automaat.
+- Geteld na de eerste sync: per klantsite tellen MATO Info en de site dezelfde verkopen (ChocaBake 2125 / € 8 889,90, Ledoux
+  24 / € 429,34, Sferio 9 / € 130,80). ChocaBake's oudere indeling in MATO Info is vervangen (gesloten op 01-01-2026); tien
+  ongebruikte ChocaBake-producten gearchiveerd. Alles van ervoor staat in `client_sites_backup` (RLS aan, alleen de servicerol).
+- De Supabase-MCP blijft hangen op elke opdracht met een delete erin (wacht op een bevestiging): grote functies daarom in
+  delen, en een vak "weg" is `removed_at`, geen delete.
+
 ## Sferio (aparte site, zelfde databank)
 https://sferio.matoautomaat.be (Vercel-project `sferio`; sferio.vercel.app stuurt door) is hetzelfde voor Nadia Serlez (Sferio, woondecoratie),
 die vakken huurt in dezelfde Sferio-automaat. Ook geen git-repo. Haar verkoop telt per vak, zonder prijs, zolang
