@@ -530,17 +530,17 @@ vinkjes (ook na herladen; onder de knop dan "x van y stuks aangevinkt"). Getest 
 ## De automaat op de vulpagina (23-10-2026, live alleen voor de MATO Sales Test Account)
 Xin, met een foto van een zwarte MATO-automaat: "in stead of a blank refill layout … a layout like this automaat, that it makes
 you feel like you are refilling an automaat". Op `/refill/machines/[id]` (Alus via Automaten, de uitbater via Bijvullen) staat
-Voorraad per vak nu in **`CabinetView`** (`src/components/machine/cabinet.tsx`, via `StockAdjust` zonder `embedded`; de
-automaatpagina zelf houdt `FrontView`): een zwarte kast, het glas met lichtstrip en weerspiegeling, per rij een schap met witte
-nummerlabels, per vak de stuks als blokjes in de kleur van het vulniveau (één per plaats tot 12, daarboven een balk), rechts
-het merk (`m.brand.name`, dus "MATO" voor de demo), het logo op een schermpje (vanaf `sm`), een blauw schermpje met hoe vol, het
-toetsenbord, de kaartlezer met een lampje = de echte terminalstatus, het muntbakje, en onderaan de lade (`m.machines.cabinetPull`:
-TREKKEN / TIRER / PULL). Zwart in beide thema's (tokens `--cabinet*` in `:root`, klassen `.cabinet*` in `globals.css`); binnenin
-de klasse `dark`, zodat de − en + van Aantallen aanpassen op het glas leesbaar zijn. Kijken: een schap past op een gsm (namen
-breken af); aanpassen: vakken van 76 px, het schap scrollt achter het glas, de kast blijft staan.
+Voorraad per vak dan in **`CabinetView`** (`src/components/machine/cabinet.tsx`, via `StockAdjust cabinet` zonder `embedded`;
+de automaatpagina zelf houdt `FrontView`): een zwart kader, het glas met lichtstrip en weerspiegeling, per rij een schap met witte
+nummerlabels, per vak de stuks als blokjes in de kleur van het vulniveau (één per plaats tot 12, daarboven een balk). Zwart in
+beide thema's (tokens `--cabinet*` in `:root`, klassen `.cabinet*` in `globals.css`); binnenin de klasse `dark`, zodat de − en +
+van Aantallen aanpassen op het glas leesbaar zijn. Kijken: een schap past op een gsm (namen breken af); aanpassen: vakken van
+76 px, het schap scrollt achter het glas, het kader blijft staan. **Weg op dezelfde dag** (Xin: "not practical for a person to
+refill, but the layout does look good. you can remove the trekken part and also the menu on the right"): de kolom rechts (merk,
+schermpje, toetsen, kaartlezer) en de lade TREKKEN; het glas krijgt de hele breedte.
 **Alleen waar `organizations.refill_cabinet` aan staat** (toevoegend, standaard uit; Xin: "put it live for mato test
 account"): nu enkel de MATO Sales Test Account, niet de andere demo's (Bakkerij De Graanschuur, Lotus Garden), niet Chens of
-Alus. `hasRefillCabinet` in data.ts, `StockAdjust cabinet`. Voor iedereen = die kolom aanzetten, of de voorwaarde weghalen.
+Alus. `hasRefillCabinet` in data.ts. Voor iedereen = die kolom aanzetten, of de voorwaarde weghalen.
 
 ## Snelheid op de gsm (22-10-2026)
 Xin: "the mobile version is slow and not responsive". Gemeten op live (demo-account, gsm 4× trager, 4G): elke pagina laadde
