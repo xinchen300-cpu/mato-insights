@@ -40,7 +40,7 @@ Next.js (App Router) + Supabase + Tailwind/shadcn + Recharts op team `mato1`, Su
   overzicht zonder meldingen, de camera onder Net verkocht, de statistieken per maand en automaat, en een ronde die
   pas telt als hij af is, het groene vinkje na Voorraad aanpassen en het donkere thema, zie hieronder); sinds de avond van 21-10
   @ 2da6284 ook de export voor de boekhouding, Alles samen op de vullijst, Profiel, de kaart en de eigen merknaam (zie
-  "Export, vullijst, profiel en kaart"); sinds 22-10 @ a448514 de vullijst per automaat met Automaat hervuld en Terug; sinds de middag van 22-10 @ d0008cf het snellere laden op de gsm (zie "Snelheid op de gsm"); sinds 22-10 @ 0394c8a het volledig scherm van de camera dat het hele scherm vult (zonder de cameratak `cloud/camera-photo-speed`, die nog niet live is); sinds 22-10 @ 607fe6d de app-cache v4 (zie "De app-cache"); sinds 22-10 @ 0fb11a6 meer Payter-accounts per organisatie (zie "Payter"); sinds 22-10 @ 25ffe19 de Payter-hulpteksten zonder "vak met het huisje". Sinds 23-10 @ 1e69266 de code voor de automaat op de vulpagina, nergens aangezet (zie "De automaat op de vulpagina"). Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
+  "Export, vullijst, profiel en kaart"); sinds 22-10 @ a448514 de vullijst per automaat met Automaat hervuld en Terug; sinds de middag van 22-10 @ d0008cf het snellere laden op de gsm (zie "Snelheid op de gsm"); sinds 22-10 @ 0394c8a het volledig scherm van de camera dat het hele scherm vult (zonder de cameratak `cloud/camera-photo-speed`, die nog niet live is); sinds 22-10 @ 607fe6d de app-cache v4 (zie "De app-cache"); sinds 22-10 @ 0fb11a6 meer Payter-accounts per organisatie (zie "Payter"); sinds 22-10 @ 25ffe19 de Payter-hulpteksten zonder "vak met het huisje". Sinds 23-10 @ 1e69266 de code voor de automaat op de vulpagina, nergens aangezet (zie "De automaat op de vulpagina"); sinds 23-10 @ 5fee39d de eigen weergave en meldingen in Instellingen, alleen voor het demo-account (zie "Instellingen: eigen weergave en meldingen"). Live heeft geen beveiligingsheaders in `next.config.ts`, de testtak wel. Uitgerold uit een schone export. `productie` op Xins Mac moet daar nog naartoe; de testsite draait
   `cloud/alus-round-avatar`. Wachtwoordvelden gebruiken `PasswordInput` (`src/components/ui/password-input.tsx`):
   login, nieuw wachtwoord en account maken. De drie klantsites hebben hetzelfde oogje in hun login.
 
@@ -545,11 +545,14 @@ Alus. `hasRefillCabinet` in data.ts. Voor iedereen = die kolom aanzetten, of de 
 voor geen enkele organisatie nog aan, dus iedereen ziet weer de witte `FrontView`. De code bleef (live @ 1e69266) en doet niets
 zolang de kolom uit staat.
 
-## Instellingen: eigen weergave en meldingen (23-10-2026, testsite, nog niet live)
+## Instellingen: eigen weergave en meldingen (23-10-2026, live alleen voor het demo-account)
 Xin: "add a settings page … change language change theme, put notifications on and send them on email or sms and also
-filter what they notifications about such as one time per day a overview or every sale or if error". Gebouwd voor iedereen
-(niet alleen het demo-account), op `cloud/alus-round-avatar` en de testsite. `/settings` begint nu met wat van de persoon zelf is,
-dan pas wat van de zaak is (Abonnement, Team, Payter, …):
+filter what they notifications about such as one time per day a overview or every sale or if error", daarna "Only put it live
+for mato sales test site". **Alleen waar `organizations.personal_settings` aan staat** (toevoegend, standaard uit; nu enkel de
+MATO Sales Test Account, op live én test): `getNotificationSettings` geeft elders null en dan blijft `/settings` zoals het was (taalknoppen
+EN/NL/FR onder de titel, "Meldingen op dit toestel" verderop, geen profielrij, geen wachtwoord); opslaan en de test weigeren zonder
+de schakelaar. Voor iedereen = die kolom aanzetten. Waar hij aanstaat begint `/settings` met wat van de persoon zelf is, dan pas
+wat van de zaak is (Abonnement, Team, Payter, …):
 - **Profielrij** naar `/profile`. **Weergave** (`settings/appearance.tsx`): Taal (Nederlands/Français/English, elk in zijn eigen
   taal; de taalknop bovenaan de pagina is weg), Thema Licht/Donker/**Automatisch** (`setThemeChoice`/`readThemeChoice` in
   `theme-toggle.tsx`: Automatisch wist `mato:theme`, dan volgt het script in `layout.tsx` de gsm weer; event `mato:theme`),
