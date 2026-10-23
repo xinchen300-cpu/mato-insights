@@ -650,7 +650,7 @@ export async function getMonthlyReport(
 
 // One literal: Supabase types the result by parsing this string.
 const MACHINE_COLUMNS =
-  "id, name, type, payter_serial_number, business_id, shared_business_id, data_since, km_round_trip, photo_path, last_connected_at, last_disconnected_at, terminal_model, terminal_network, terminal_flags, refill_manual, address, businesses!machines_business_id_fkey(name, logo_path)";
+  "id, name, type, payter_serial_number, business_id, shared_business_id, data_since, km_round_trip, photo_path, last_connected_at, last_disconnected_at, terminal_model, terminal_network, terminal_flags, refill_manual, address, model, businesses!machines_business_id_fkey(name, logo_path)";
 
 /**
  * Every machine in scope. Asked once per page, however many loaders want it
@@ -688,6 +688,35 @@ export async function getMachine(orgId: string, id: string): Promise<Machine | n
   return machine;
 }
 
+export type MachineAbout = {
+  machine: Machine;
+  /** How it is laid out now, for the operator: slots, rows and how many items fit. Null for a shop or without a layout. */
+  layout: { slots: number; rows: number; fits: number } | null;
+};
+
+/**
+ * One machine for Profiel → Mijn automaten (24-10-2026, Xin: "say what kind of automaat they have and also they can
+ * click on it to see key features"). A shop sees its machine but not the layout: on a shared machine half of it is
+ * someone else's.
+ */
+export async function getMachineAbout(machineId: string): Promise<MachineAbout> {
+  const { orgId } = await getScope();
+  if (!orgId) throw new Error("Not found");
+  await requireMachineAccess(orgId, machineId);
+  const machine = await getMachine(orgId, machineId);
+  if (!machine) throw new Error("Not found");
+  if (!(await isOperator())) return { machine, layout: null };
+  const { data, error } = await createAdminClient().from("slots").select("row_id, depth").eq("org_id", orgId).eq("machine_id", machineId);
+  if (error) throw new Error(error.message);
+  const slots = data ?? [];
+  return {
+    machine,
+    layout: slots.length
+      ? { slots: slots.length, rows: new Set(slots.map((slot) => slot.row_id)).size, fits: slots.reduce((sum, slot) => sum + (slot.depth ?? 0), 0) }
+      : null,
+  };
+}
+
 type MachineRow = {
   id: string;
   name: string;
@@ -705,6 +734,7 @@ type MachineRow = {
   terminal_flags: string[] | null;
   refill_manual: boolean | null;
   address: string | null;
+  model: string | null;
   businesses: { name: string; logo_path: string | null } | { name: string; logo_path: string | null }[] | null;
 };
 
@@ -729,6 +759,7 @@ function toMachine(row: MachineRow): Machine {
     terminal_flags: row.terminal_flags ?? [],
     refill_manual: row.refill_manual === true,
     address: row.address ?? null,
+    model: row.model ?? null,
   };
 }
 
@@ -1206,7 +1237,6 @@ export type NotificationSettings = {
   loginEmail: string | null;
   /** Which channels MATO Info can send on now: mail needs a provider's keys. */
   ready: Record<NotifyChannel, boolean>;
-  recent: SentNotification[];
 };
 
 /** The keys a channel needs before anything goes out on it (read by supabase/functions/vendly-alerts). */
@@ -1224,7 +1254,8 @@ async function personalSettingsOn(orgId: string): Promise<boolean> {
 }
 
 /**
- * Instellingen → Meldingen (23-10-2026): what this person asked to hear about and the last messages sent to them.
+ * Instellingen → Meldingen (23-10-2026): what this person asked to hear about (the list of what was sent went on
+ * 24-10-2026, Xin: "remove … laatst verstuurd").
  * Only ever one's own, in the organisation one is in now; a filler has none. Null where it is not switched on.
  */
 export async function getNotificationSettings(): Promise<NotificationSettings | null> {
@@ -1234,15 +1265,8 @@ export async function getNotificationSettings(): Promise<NotificationSettings | 
   if (!orgId) throw new Error("Not found");
   if (!(await personalSettingsOn(orgId))) return null;
   const admin = createAdminClient();
-  const [{ data: row }, { data: recent }, { data: keys }] = await Promise.all([
+  const [{ data: row }, { data: keys }] = await Promise.all([
     admin.from("notification_prefs").select("*").eq("user_id", user.id).eq("org_id", orgId).maybeSingle(),
-    admin
-      .from("notification_log")
-      .select("id, kind, title, body, sent, created_at")
-      .eq("user_id", user.id)
-      .eq("org_id", orgId)
-      .order("created_at", { ascending: false })
-      .limit(5),
     // Only whether a key is there; its value never leaves the database here.
     admin.from("app_keys").select("name").in("name", Object.values(CHANNEL_KEYS).flat()),
   ]);
@@ -1266,14 +1290,6 @@ export async function getNotificationSettings(): Promise<NotificationSettings | 
     chosen: Boolean(row),
     loginEmail: user.email ?? null,
     ready,
-    recent: (recent ?? []).map((r) => ({
-      id: r.id as string,
-      kind: r.kind as string,
-      title: r.title as string,
-      body: r.body as string,
-      sent: (r.sent ?? {}) as SentNotification["sent"],
-      at: r.created_at as string,
-    })),
   };
 }
 

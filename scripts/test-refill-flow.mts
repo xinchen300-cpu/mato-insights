@@ -490,3 +490,15 @@ import { channelsInUse, cleanPrefs, normalizeEmail, NOTIFY_DEFAULTS } from "../s
   ok("prefs: channels in use", channelsInUse({ daily: ["email"], weekly: [], sales: [], errors: [], low_stock: [] }).join() === "email");
   ok("prefs: nothing usable is still a valid, quiet choice", cleanPrefs(null).ok);
 }
+
+// Profiel → Mijn automaten (24-10-2026): a model key is ours or "not set", and every picture of a model is really there.
+import { existsSync } from "node:fs";
+import { MACHINE_MODELS, MODEL_FEATURES, MODEL_SHEETS, asMachineModel } from "../src/lib/machine-models.ts";
+{
+  ok("models: a known key stays, anything else is not set", asMachineModel("mato-b1") === "mato-b1" && asMachineModel("mato-x9") === null && asMachineModel(null) === null);
+  const pictures = MACHINE_MODELS.flatMap((key) => {
+    const sheet = MODEL_SHEETS[key];
+    return [sheet.image, sheet.capacityImage, ...MODEL_FEATURES.map((feature) => sheet.features[feature])];
+  });
+  ok("models: every picture is in public/", pictures.every((path) => existsSync(new URL(`../public${path}`, import.meta.url))));
+}

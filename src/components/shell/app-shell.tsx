@@ -5,7 +5,7 @@ import { FillerAvatar } from "@/components/filler/avatar";
 import { cleanLook } from "@/lib/avatar";
 import { displayName } from "@/lib/people";
 import { getI18n } from "@/i18n/server";
-import { isFiller } from "@/lib/org";
+import { hasPersonalSettings, isFiller } from "@/lib/org";
 import { createClient } from "@/lib/supabase/server";
 import { fillerLocales } from "@/i18n/config";
 import { HideNumbers } from "./hide-numbers";
@@ -23,7 +23,10 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
     data: { user },
   } = await (await createClient()).auth.getUser();
   // A filler sees the machines and the refill work only: no overview, no settings, no figures to hide.
-  const filler = await isFiller();
+  const [filler, personal] = await Promise.all([isFiller(), hasPersonalSettings()]);
+  // Light or dark and hiding amounts sit in Instellingen → Weergave where that is on (Xin, 24-10-2026: "remove the
+  // bedragen verbergen en light mode off the top menu but keep it in the settings tab"). A filler has no Instellingen.
+  const toggles = filler || !personal;
   const home = filler ? "/refill" : "/";
   // Profiel (21-10-2026): one's own avatar, or the first letter of one's name, opens it.
   const look = user ? cleanLook(user.user_metadata?.avatar) : null;
@@ -45,7 +48,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <div className="mt-auto flex flex-col gap-1">
           {/* Light or dark, for everyone (Xin, 21-10-2026). */}
-          <ThemeToggle variant="row" />
+          {toggles && <ThemeToggle variant="row" />}
           {/* A filler picks Dutch or French here; the owner does so in the settings. */}
           {filler && (
             <div className="px-3 pb-2">
@@ -54,7 +57,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
           )}
           {!filler && (
             <>
-              <HideNumbers variant="row" />
+              {toggles && <HideNumbers variant="row" />}
               <Link href="/settings" className={railRow}>
                 <Settings className="size-[18px] shrink-0" strokeWidth={1.9} aria-hidden="true" />
                 {m.nav.settings}
@@ -86,10 +89,10 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
           <div className="ml-auto flex items-center gap-1">
             {filler && <LanguageToggle only={fillerLocales} />}
-            <ThemeToggle />
+            {toggles && <ThemeToggle />}
             {!filler && (
               <>
-                <HideNumbers />
+                {toggles && <HideNumbers />}
                 <Link
                   href="/settings"
                   aria-label={m.nav.settings}

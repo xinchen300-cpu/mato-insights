@@ -29,7 +29,7 @@ import {
 } from "@/lib/data";
 import { toFrontRows } from "@/lib/layout";
 import { mediaUrl } from "@/lib/media";
-import { denyFiller, isOperator, requireOrgId } from "@/lib/org";
+import { denyFiller, hasPersonalSettings, isOperator, requireOrgId } from "@/lib/org";
 import { filledOnOpenRound } from "@/lib/refill-start";
 import { compareMoneySince } from "@/lib/stats";
 import { fillLevel, levelColor } from "@/lib/stock";
@@ -387,7 +387,13 @@ export default async function MachinePage({ params }: { params: Promise<{ id: st
             <div className="flex flex-col gap-8 border-t border-border px-5 pb-6 pt-5 sm:px-6">
               <MachinePhotoForm machineId={machine.id} photoPath={machine.photo_path} />
               {cameraReady && <MachineCameraForm machineId={machine.id} linked={cameras} />}
-              <MachineDetailsForm machine={machine} businesses={operator ? businesses : []} operator={operator} rentsToBusinesses={rents} />
+              <MachineDetailsForm
+                machine={machine}
+                businesses={operator ? businesses : []}
+                operator={operator}
+                rentsToBusinesses={rents}
+                models={await hasPersonalSettings()}
+              />
             </div>
           </details>
         )}
