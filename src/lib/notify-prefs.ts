@@ -4,7 +4,8 @@
 
 export const NOTIFY_TOPICS = ["daily", "weekly", "sales", "errors", "low_stock"] as const;
 export type NotifyTopic = (typeof NOTIFY_TOPICS)[number];
-export const NOTIFY_CHANNELS = ["push", "email", "sms"] as const;
+// Email first, sms beside it; push is gone from here (Xin, 23-10-2026: "remove push but focus more on email").
+export const NOTIFY_CHANNELS = ["email", "sms"] as const;
 export type NotifyChannel = (typeof NOTIFY_CHANNELS)[number];
 /** How empty a machine may get before "almost empty" says so. */
 export const LOW_PERCENTS = [10, 20, 25, 30, 40, 50] as const;
@@ -21,11 +22,11 @@ export type NotifyPrefs = {
   quietTo: number;
 };
 
-/** Before anyone chose: the evening overview and errors on their phone, as the evening line did. */
+/** Before anyone chose: the evening overview and errors by email. */
 export const NOTIFY_DEFAULTS: NotifyPrefs = {
   email: null,
   phone: null,
-  topics: { daily: ["push"], weekly: [], sales: [], errors: ["push"], low_stock: [] },
+  topics: { daily: ["email"], weekly: [], sales: [], errors: ["email"], low_stock: [] },
   dailyHour: 20,
   lowPercent: 25,
   quiet: false,
