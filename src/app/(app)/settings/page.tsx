@@ -19,7 +19,9 @@ import { deleteTemplate } from "./actions";
 import { CostForm } from "./cost-form";
 import { Appearance } from "./appearance";
 import { NotificationSettings } from "./notification-settings";
+import { NotifyToggle } from "./notify-toggle";
 import { PasswordForm } from "./password-form";
+import { LanguageToggle } from "@/components/shell/language-toggle";
 import { ShelfLifePresets } from "./shelf-life-presets";
 import { SubscriptionPanel } from "./subscription-panel";
 import { TeamPanel } from "./team-panel";
@@ -67,7 +69,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           operator ? getTeam(orgId) : Promise.resolve(null),
           // Further Payter accounts of this business (22-10-2026), each synced on its own.
           admin.from("payter_extra_logins").select("id, domain, serials, last_synced_at").eq("org_id", orgId).order("created_at"),
-          // One's own notifications (23-10-2026): what to hear about, and how.
+          // One's own notifications (23-10-2026): what to hear about, and how. Null where not switched on.
           getNotificationSettings(),
         ])
       : [{ data: null }, { data: null }, { data: null }, [], [], [], [], null, null, { data: null }, null];
@@ -109,13 +111,17 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const showCustomers = operator && Boolean(vendor?.is_vendor);
   const onlyBusiness = businesses.length === 1 ? businesses[0] : null;
 
+  // One's own display and notifications first (23-10-2026), only where switched on: elsewhere the page as it was,
+  // the language in the header and push on this device further down.
+  const personal = Boolean(notifications);
+
   return (
     <div className="max-w-2xl">
-      <PageHeader title={m.settings.title} />
+      <PageHeader title={m.settings.title} actions={personal ? undefined : <LanguageToggle />} />
 
       {/* What you need most often first, what you rarely change last: one's own settings, then the business's. */}
       <div className="flex flex-col gap-9 sm:gap-10">
-        {user && (
+        {personal && user && (
           <RowList>
             <li>
               <ListRow
@@ -133,9 +139,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </RowList>
         )}
 
-        <Section title={m.prefs.display}>
-          <Appearance />
-        </Section>
+        {personal && (
+          <Section title={m.prefs.display}>
+            <Appearance />
+          </Section>
+        )}
 
         {notifications && (
           <Section title={m.prefs.notifications} hint={m.prefs.notificationsHint}>
@@ -263,6 +271,18 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 <div className="px-3 pb-4 pt-2">
                   <PayterForm submitLabel={m.settings.connect} />
                 </div>
+              )}
+            </div>
+          </Section>
+        )}
+
+        {!personal && (
+          <Section title={m.settings.notifyTitle} hint={m.settings.notifyHint}>
+            <div className="surface-card p-2">
+              {process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ? (
+                <NotifyToggle publicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY} />
+              ) : (
+                <p className="px-3 py-3 text-[14px] text-muted-foreground">{m.settings.notifyUnsupported}</p>
               )}
             </div>
           </Section>
@@ -397,13 +417,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </Section>
         )}
 
-        <Section title={m.prefs.account}>
-          <div className="surface-card flex flex-col p-2">
-            <Fold icon={<LockKeyhole />} title={m.prefs.password} value={m.prefs.passwordHint}>
-              <PasswordForm />
-            </Fold>
-          </div>
-        </Section>
+        {personal && (
+          <Section title={m.prefs.account}>
+            <div className="surface-card flex flex-col p-2">
+              <Fold icon={<LockKeyhole />} title={m.prefs.password} value={m.prefs.passwordHint}>
+                <PasswordForm />
+              </Fold>
+            </div>
+          </Section>
+        )}
       </div>
     </div>
   );

@@ -20,7 +20,7 @@ function toBytes(base64: string) {
  * Turns this browser into a device Vendly may reach. Nothing is sent from
  * here; it only hands over the address the browser vends.
  */
-export function NotifyToggle({ publicKey, known }: { publicKey: string; known: number }) {
+export function NotifyToggle({ publicKey, known }: { publicKey: string; known?: number }) {
   const { m } = useI18n();
   const router = useRouter();
   const [state, setState] = useState<"unknown" | "off" | "on" | "blocked" | "unsupported" | "ios">("unknown");
