@@ -1549,7 +1549,6 @@ export const nl: Messages = {
     notificationsHint: "Waarover je iets wil horen, en hoe. Je eigen keuze, alleen voor jou.",
     where: "Waar naartoe",
     pushHere: "Pushmeldingen",
-    devicesNone: "Nog geen toestel krijgt pushmeldingen van jou.",
     devicesOne: "1 toestel krijgt je pushmeldingen.",
     devices: "{n} toestellen krijgen je pushmeldingen.",
     email: "E-mail",

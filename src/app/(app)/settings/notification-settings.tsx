@@ -172,13 +172,12 @@ export function NotificationSettings({ settings, shop, pushKey }: { settings: Se
         ) : (
           <p className="px-3 py-3 text-[14px] text-muted-foreground">{m.settings.notifyUnsupported}</p>
         )}
-        <p className="px-3 pb-2 text-[13px] text-muted-foreground sm:pl-[66px]">
-          {settings.devices === 0
-            ? m.prefs.devicesNone
-            : settings.devices === 1
-              ? m.prefs.devicesOne
-              : fmt(m.prefs.devices, { n: settings.devices })}
-        </p>
+        {/* All of one's devices, this one or others; with none, the line above already says so. */}
+        {settings.devices > 0 && (
+          <p className="pb-2 pl-[66px] pr-3 text-[13px] text-muted-foreground">
+            {settings.devices === 1 ? m.prefs.devicesOne : fmt(m.prefs.devices, { n: settings.devices })}
+          </p>
+        )}
         <Field
           id="notify-email"
           icon={<Mail />}

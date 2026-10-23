@@ -545,6 +545,41 @@ Alus. `hasRefillCabinet` in data.ts. Voor iedereen = die kolom aanzetten, of de 
 voor geen enkele organisatie nog aan, dus iedereen ziet weer de witte `FrontView`. De code bleef (live @ 1e69266) en doet niets
 zolang de kolom uit staat.
 
+## Instellingen: eigen weergave en meldingen (23-10-2026, testsite, nog niet live)
+Xin: "add a settings page … change language change theme, put notifications on and send them on email or sms and also
+filter what they notifications about such as one time per day a overview or every sale or if error". Gebouwd voor iedereen
+(niet alleen het demo-account), op `cloud/alus-round-avatar` en de testsite. `/settings` begint nu met wat van de persoon zelf is,
+dan pas wat van de zaak is (Abonnement, Team, Payter, …):
+- **Profielrij** naar `/profile`. **Weergave** (`settings/appearance.tsx`): Taal (Nederlands/Français/English, elk in zijn eigen
+  taal; de taalknop bovenaan de pagina is weg), Thema Licht/Donker/**Automatisch** (`setThemeChoice`/`readThemeChoice` in
+  `theme-toggle.tsx`: Automatisch wist `mato:theme`, dan volgt het script in `layout.tsx` de gsm weer; event `mato:theme`),
+  **Bedragen verbergen** (`setHideNumbers`/`useHiddenNumbers` in `hide-numbers.tsx`, volgt het attribuut, dus knop en rij lopen gelijk).
+- **Meldingen** (`settings/notification-settings.tsx`): pushmeldingen op dit toestel (de oude `NotifyToggle`), e-mailadres (standaard
+  het login-adres) en gsm-nummer (`normalizePhone`: "0470 12 34 56" → `+32470123456`); per onderwerp **Push / E-mail / Sms**:
+  Dagoverzicht (uur naar keuze; vóór 12 u gisteren, vanaf 12 u de dag tot dan), Weekoverzicht (maandag, zelfde uur), Elke verkoop,
+  Fouten en storingen, Automaat bijna leeg (onder 10–50 %); **Stille uren** (geen push/sms, e-mail en de overzichten wel); **Stuur
+  een test** (slaat eerst op, hooguit om de 30 s); **Laatst verstuurd** met per kanaal hoe het ging. Opslaan geeft het grote groene vinkje.
+- **Account → Wachtwoord** (`settings/password-form.tsx`): zelfde regels als na een reset (8 tekens, geen gelekt wachtwoord, niet het huidige).
+- Opslag: **`notification_prefs`** (per persoon per organisatie, `user_id, org_id`; kanalen per onderwerp als `text[]`; RLS aan, alleen
+  de servicerol, toevoegend) en **`notification_log`** (elk bericht + `sent` per kanaal; ook de open "episodes" met `resolved_at` null).
+  `push_subscriptions.user_id` (nieuw, toevoegend) zegt wiens toestel het is; `rememberDevice` vult het, en een toestel dat al aan stond
+  krijgt het bij het openen van Instellingen. Validatie in `src/lib/notify-prefs.ts` (zonder imports, getest in `test:flow`); laden en
+  opslaan in data.ts (`getNotificationSettings`, `saveNotificationSettings`, `sendTestNotification`, altijd alleen het eigen account).
+  De taal van de berichten volgt de app (`setLocale` → `rememberNotificationLocale`).
+- **Versturen: edge-functie `vendly-alerts`** (pg_cron `vendly-alerts-every-minute`, met `notify_secret`; één run tegelijk via
+  `alert_lease`). Teksten in nl/fr/en in de functie zelf. Push werkt meteen (VAPID). **E-mail en sms gaan pas weg met sleutels in
+  `app_keys`**: `resend_api_key` + `mail_from` (Resend, zoals `vendly-billing`) en `twilio_sid` + `twilio_token` + `twilio_from`; tot dan
+  zegt Instellingen "Staat nog niet aan" en het logboek `no_provider`. Wat telt als fout: een terminal offline (na 10 min, alleen
+  als het minder dan 24 u geleden begon), Payter die 15 min niet lukt (eigen login en elke extra login), 3 mislukte of geweigerde
+  betalingen op één automaat binnen het uur (daarna 3 u stil voor die automaat). Offline en Payter melden ook als het weer werkt.
+  Bijna leeg: om de 5 minuten, één keer per automaat tot hij weer 10 punten boven de grens zit. Elke verkoop: per run één bericht
+  (Televends dagregels van Gits niet). SQL-helpers met dezelfde afscherming als Net verkocht (een zaak alleen haar eigen vakken):
+  `alert_scope`, `alert_new_sales`, `alert_failed_payments`, `alert_period_summary`, `alert_machine_fill` (gesettelde voorraad).
+  `vendly-notify` (de oude avondmelding) slaat wie eigen keuzes heeft over. Titel van een sms: `brand_name` of anders "Vendly"
+  (een zaak "MATO Info"); push en e-mail hebben de gebeurtenis als titel.
+- Getest op de testsite met het demo-account (opslaan, weigeren zonder nummer/adres, test, thema, talen, wachtwoord geweigerd als
+  het huidige). Echte push kon hier niet (headless Chromium krijgt geen pushabonnement): dat test Xin op zijn gsm.
+
 ## Snelheid op de gsm (22-10-2026)
 Xin: "the mobile version is slow and not responsive". Gemeten op live (demo-account, gsm 4× trager, 4G): elke pagina laadde
 ±760 KB JavaScript, waarvan 204 KB de teksten van alle drie de talen; Statistieken hield de gsm 0,85 s bezig met recharts; het

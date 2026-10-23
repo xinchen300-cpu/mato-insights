@@ -1548,7 +1548,6 @@ export const en = {
     notificationsHint: "What you want to hear about, and how. Your own choice, just for you.",
     where: "Where to",
     pushHere: "Push messages",
-    devicesNone: "No device gets push messages from you yet.",
     devicesOne: "1 device gets your push messages.",
     devices: "{n} devices get your push messages.",
     email: "Email",
