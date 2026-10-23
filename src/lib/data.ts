@@ -1221,14 +1221,24 @@ const CHANNEL_KEYS: Record<NotifyChannel, string[]> = {
 };
 
 /**
- * Instellingen → Meldingen (23-10-2026): what this person asked to hear about and the last messages sent to them.
- * Only ever one's own, in the organisation one is in now; a filler has none.
+ * One's own display and notifications in Instellingen (23-10-2026) are only where switched on
+ * (`organizations.personal_settings`, Xin: "Only put it live for mato sales test site"); elsewhere the page stays as it was.
  */
-export async function getNotificationSettings(): Promise<NotificationSettings> {
+async function personalSettingsOn(orgId: string): Promise<boolean> {
+  const { data } = await createAdminClient().from("organizations").select("personal_settings").eq("id", orgId).maybeSingle();
+  return data?.personal_settings === true;
+}
+
+/**
+ * Instellingen → Meldingen (23-10-2026): what this person asked to hear about and the last messages sent to them.
+ * Only ever one's own, in the organisation one is in now; a filler has none. Null where it is not switched on.
+ */
+export async function getNotificationSettings(): Promise<NotificationSettings | null> {
   const user = await requireSignedIn();
   await denyFillerAccess();
   const { orgId } = await getScope();
   if (!orgId) throw new Error("Not found");
+  if (!(await personalSettingsOn(orgId))) return null;
   const admin = createAdminClient();
   const [{ data: row }, { data: recent }, { count }, { data: keys }] = await Promise.all([
     admin.from("notification_prefs").select("*").eq("user_id", user.id).eq("org_id", orgId).maybeSingle(),
@@ -1284,7 +1294,7 @@ export async function saveNotificationSettings(input: unknown, locale: Locale): 
   const user = await requireSignedIn();
   await denyFillerAccess();
   const { orgId, businessId } = await getScope();
-  if (!orgId) throw new Error("Not found");
+  if (!orgId || !(await personalSettingsOn(orgId))) throw new Error("Not found");
   const clean = cleanPrefs(input);
   if (!clean.ok) return clean;
   const { prefs } = clean;
@@ -1329,7 +1339,7 @@ export async function sendTestNotification(): Promise<{ ok: true; sent: SentNoti
   const user = await requireSignedIn();
   await denyFillerAccess();
   const { orgId } = await getScope();
-  if (!orgId) throw new Error("Not found");
+  if (!orgId || !(await personalSettingsOn(orgId))) throw new Error("Not found");
   const admin = createAdminClient();
   const [{ data: recent }, { data: secret }] = await Promise.all([
     admin
