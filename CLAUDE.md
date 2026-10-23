@@ -600,9 +600,14 @@ anders "Niets dringends.") en een knop naar de app; bij elke verkoop de verkopen
 `/settings`. **"Bekijk de e-mail"** (onder het e-mailadres) toont het dagoverzicht zoals het zou binnenkomen, in een venster met een
 `iframe srcDoc` (sandbox, links in een nieuw tabblad), gemaakt door dezelfde functie (`{"preview": …}`), er wordt niets verstuurd.
 "Stuur een test" stuurt dat dagoverzicht echt, met "Test:" voor het onderwerp. De oude pagina (alle andere accounts) houdt zijn
-pushknop en `vendly-notify` is onveranderd. Wat Xin nog moet doen om echt te mailen: een Resend-account, het domein
-matoautomaat.be daar toevoegen en de DNS-records bij GoDaddy zetten (DKIM `resend._domainkey`, SPF en MX op `send`; raakt de
-Outlook-mail niet), dan de API-sleutel en het afzenderadres (voorstel meldingen@matoautomaat.be) in `app_keys`.
+pushknop en `vendly-notify` is onveranderd. **Mailen staat aan sinds 23-10-2026:** Resend-account van Xin, domein
+matoautomaat.be (Resend-id `a4e22db0-…`, regio eu-west-1), DNS bij GoDaddy door Xin: TXT `resend._domainkey` (DKIM), CNAME
+`send` → `send.forge.rmta.net` en CNAME `rsend` → `rsend-euw1.forge.rmta.net` (raakt de Outlook-mail niet). In `app_keys`:
+`resend_api_key` (nooit in git of tekst) en `mail_from` = `meldingen@matoautomaat.be`; de afzender wordt `"MATO" <meldingen@…>`
+(merknaam ervoor). Status opvragen zonder de sleutel te tonen: `net.http_get('https://api.resend.com/domains/<id>', headers met
+'Bearer ' || (select value from app_keys where name = 'resend_api_key'))`. **Let op: dezelfde sleutels zetten `vendly-billing` aan**
+(dagelijks 07:00 UTC): Chens Garden krijgt zo op 4-12-2026 de mail "Je proef van Vendly loopt af op 11 december" (zonder Mollie de
+versie "Hoe je daarna verdergaat, laten we je persoonlijk weten"). Ongewenst? Dan de proefdatum of `billing_email` aanpassen.
 
 ## Snelheid op de gsm (22-10-2026)
 Xin: "the mobile version is slow and not responsive". Gemeten op live (demo-account, gsm 4× trager, 4G): elke pagina laadde
